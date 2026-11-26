@@ -266,7 +266,7 @@ mutual
 list of its items in ascending order. -/
 def Ty.erl : (t : Ty) → t.den0 → Erl
   | .int, n => .int n
-  | .str, s => .bin s
+  | .str, s => .bin s.1
   | .list t, xs => .list (xs.map (Ty.erl t))
   | .bag t, xs => .list (Erl.sort (xs.map (Ty.erl t)))
   | .tuple ts, x => .tuple (Ty.erls ts x)
@@ -278,7 +278,7 @@ def Ty.erl : (t : Ty) → t.den0 → Erl
   -- An id made fresh compares by when it was made (its step, then its index), before every id from outside, which
   -- compares by its name.
   | .id, .fresh s i => .tuple [.int s, .int i]
-  | .id, .named s => .bin s
+  | .id, .named s => .bin s.1
   -- A fresh-id source is a counter.
   | .dsl .fresh _, n => .int (show Nat from n)
   | .param _, _ | .fn .., _ | .dsl .., _ => .atom "nil"
@@ -507,10 +507,10 @@ mutual
 theorem Ty.erl_iff : (t : Ty) → t.ordered T = true → (x y : t.den0) →
     ((Ty.semWith Dsl.base t).2 x y = true ↔ t.erl T x = t.erl T y)
   | .int, _, x, y => (beq_iff_eq (α := Int) (a := x) (b := y)).trans ⟨congrArg Erl.int, Erl.int.inj⟩
-  | .str, _, x, y => (beq_iff_eq (α := String) (a := x) (b := y)).trans ⟨congrArg Erl.bin, Erl.bin.inj⟩
+  | .str, _, x, y => (beq_iff_eq (α := Str) (a := x) (b := y)).trans ⟨fun h => h ▸ rfl, fun h => Subtype.ext (Erl.bin.inj h)⟩
   | .date, _, x, y => (beq_iff_eq (α := Int) (a := x) (b := y)).trans ⟨congrArg Erl.int, Erl.int.inj⟩
   | .param _, _, x, y => by simp [Ty.semWith, Ty.erl]
-  | .id, _, x, y => by cases x <;> cases y <;> simp [Ty.semWith, Ty.erl]; omega
+  | .id, _, x, y => by cases x <;> cases y <;> simp [Ty.semWith, Ty.erl, Subtype.ext_iff]; omega
   | .list t, h, xs, ys => by
     show listBeq _ xs ys = true ↔ Erl.list _ = Erl.list _
     rw [Erl.list.injEq]

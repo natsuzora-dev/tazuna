@@ -60,7 +60,6 @@ def written : Field := ⟨"file", "the trace file written, under the directory g
 def why : Field := ⟨"why", "what the solver said"⟩
 def depth : Field := ⟨"depth", "the number of inputs of the run searched when the solver gave up"⟩
 def limit : Field := ⟨"limit", "what the encoding or the search has no room for"⟩
-def string : Field := ⟨"string", "the string literal"⟩
 def name : Field := ⟨"name", "the kind explained"⟩
 def means : Field := ⟨"means", "what a line of the kind means"⟩
 def exit : Field := ⟨"exit", "the exit code a line of the kind gives; a command exits with its worst line's"⟩
@@ -181,7 +180,6 @@ def UndecidedKind.explanation : UndecidedKind → Explanation
   | .timeout => ⟨docOf% UndecidedKind.timeout, [], questionFields ++ [depth, why]⟩
   | .limit => ⟨docOf% UndecidedKind.limit, [`Tazuna.Trace.replay_iff],
     questionFields ++ [scenario, trace, line, Field.limit] ++ pairFields⟩
-  | .unencodableString => ⟨docOf% UndecidedKind.unencodableString, [], questionFields ++ [string]⟩
   | .upToRenaming => ⟨docOf% UndecidedKind.upToRenaming, [`Tazuna.Smt.run_lines], questionFields ++ pairFields⟩
 
 namespace Kind

@@ -54,7 +54,6 @@ end
 
 theorem gap_limit (l : Limit) : (Refusal.limit l).gap = false := rfl
 theorem gap_unexpected (u : Unexpected) : (Refusal.unexpected u).gap = false := rfl
-theorem gap_string (s : String) : (Refusal.unencodableString s).gap = false := rfl
 
 section
 variable (L : Layout)
@@ -486,10 +485,7 @@ theorem encodePat_sound (hL : SortedLayout L) : {t : Ty} → {Δ : List Ty} → 
   | _, _, .wild, _, _ => trivial
   | _, _, .bind, _, h => ⟨h, trivial⟩
   | _, _, .int _, _, _ => trivial
-  | _, _, .str lit, _, _ => by
-    simp only [encodePat]; split
-    · trivial
-    · rfl
+  | _, _, .str lit, _, _ => trivial
   | _, _, @Pat.tuple ts _ ps, s, h => by
     simp only [encodePat]
     refine sound_bind (tupleD_sound hL h) fun d hd => sound_bind sound_need_limit fun fs hfs => ?_
@@ -1045,9 +1041,9 @@ def HandleOk (ds : List (String × DeclaredV)) (H : List HandleSite) (h : Handle
   h ∈ H ∧ h.name.isSome = true ∧ (h.kind.startsWith "external" = true → Declares ds h)
 
 theorem lit?_eq {G Γ : List Ty} {t : Ty} {e : Expr G Γ t} {n : String} (h : e.lit? = some n) :
-    ∃ ht : t = .str, ht ▸ e = .str n := by
+    ∃ (ht : t = .str) (s : Str), s.1 = n ∧ ht ▸ e = .str s := by
   cases e <;> simp [Expr.lit?] at h
-  subst h; exact ⟨rfl, rfl⟩
+  subst h; exact ⟨rfl, _, rfl, rfl⟩
 
 theorem ok_length {p : Prim} {args : List Ty} (h : p.ok args = true) : args.length = p.sig.tvars.length := by
   simp only [Prim.ok, Bool.and_eq_true, beq_iff_eq] at h; exact h.1.1
@@ -1067,14 +1063,12 @@ theorem handleCall_sound {G Γ ps : List Ty} {r : Ty} (gs : Encs G) (σ : Codes 
       simp only [handleOf, Option.some.injEq] at hh
       subst hh
       obtain ⟨n, hn⟩ := Option.isSome_iff_exists.1 hok.2.1
-      obtain ⟨ht, he⟩ := lit?_eq hn
+      obtain ⟨ht, n, rfl, he⟩ := lit?_eq hn
       have he' : e = Expr.str n := he
       subst he'
       have hlen := ok_length hp
       simp only [encode, encodes] at hargs ⊢
-      cases hin : inDomain n
-      · simp only [Bool.false_eq_true, ite_false]; rfl
-      simp only [hin, ite_true, primCode, bind, Except.bind, pure, Except.pure] at hargs ⊢
+      simp only [primCode, bind, Except.bind, pure, Except.pure] at hargs ⊢
       revert hargs
       generalize encodes L gs rest σ = X
       intro hargs
@@ -1088,14 +1082,12 @@ theorem handleCall_sound {G Γ ps : List Ty} {r : Ty} (gs : Encs G) (σ : Codes 
       simp only [handleOf, Option.some.injEq] at hh
       subst hh
       obtain ⟨n, hn⟩ := Option.isSome_iff_exists.1 hok.2.1
-      obtain ⟨ht, he⟩ := lit?_eq hn
+      obtain ⟨ht, n, rfl, he⟩ := lit?_eq hn
       have he' : e = Expr.str n := he
       subst he'
       have hlen := ok_length hp
       simp only [encode, encodes] at hargs ⊢
-      cases hin : inDomain n
-      · simp only [Bool.false_eq_true, ite_false]; rfl
-      simp only [hin, ite_true, primCode, bind, Except.bind, pure, Except.pure] at hargs ⊢
+      simp only [primCode, bind, Except.bind, pure, Except.pure] at hargs ⊢
       revert hargs
       generalize encodes L gs rest σ = X
       intro hargs
@@ -1109,14 +1101,12 @@ theorem handleCall_sound {G Γ ps : List Ty} {r : Ty} (gs : Encs G) (σ : Codes 
       simp only [handleOf, Option.some.injEq] at hh
       subst hh
       obtain ⟨n, hn⟩ := Option.isSome_iff_exists.1 hok.2.1
-      obtain ⟨ht, he⟩ := lit?_eq hn
+      obtain ⟨ht, n, rfl, he⟩ := lit?_eq hn
       have he' : e = Expr.str n := he
       subst he'
       have hlen := ok_length hp
       simp only [encode, encodes] at hargs ⊢
-      cases hin : inDomain n
-      · simp only [Bool.false_eq_true, ite_false]; rfl
-      simp only [hin, ite_true, primCode, bind, Except.bind, pure, Except.pure] at hargs ⊢
+      simp only [primCode, bind, Except.bind, pure, Except.pure] at hargs ⊢
       revert hargs
       generalize encodes L gs rest σ = X
       intro hargs
@@ -1130,14 +1120,12 @@ theorem handleCall_sound {G Γ ps : List Ty} {r : Ty} (gs : Encs G) (σ : Codes 
       simp only [handleOf, Option.some.injEq] at hh
       subst hh
       obtain ⟨n, hn⟩ := Option.isSome_iff_exists.1 hok.2.1
-      obtain ⟨ht, he⟩ := lit?_eq hn
+      obtain ⟨ht, n, rfl, he⟩ := lit?_eq hn
       have he' : e = Expr.str n := he
       subst he'
       have hlen := ok_length hp
       simp only [encode, encodes] at hargs ⊢
-      cases hin : inDomain n
-      · simp only [Bool.false_eq_true, ite_false]; rfl
-      simp only [hin, ite_true, primCode, bind, Except.bind, pure, Except.pure] at hargs ⊢
+      simp only [primCode, bind, Except.bind, pure, Except.pure] at hargs ⊢
       revert hargs
       generalize encodes L gs rest σ = X
       intro hargs
@@ -1374,10 +1362,7 @@ theorem encode_sound (hC : Covers L P ds) : {Γ : List Ty} → {t : Ty} → (e :
     (∀ x ∈ Expr.sends D e, x.Covered L P H) → GlobsOk L P ds H D gs e.globals →
     Sound (fun p => CodeOk L P ds H t p.1) (encode L gs e σ)
   | _, _, .int _, _, _, _, _, _, _, _ => avail_int
-  | _, _, .str s, _, _, _, _, _, _, _ => by
-    simp only [encode]; split
-    · exact avail_str
-    · rfl
+  | _, _, .str s, _, _, _, _, _, _, _ => avail_str
   | _, _, .var v, σ, hσ, _, _, _, _, _ => codeOk_var v σ hσ
   | _, _, .global v, _, _, _, _, _, _, hg =>
     have h := hg v (by simp [Expr.globals])

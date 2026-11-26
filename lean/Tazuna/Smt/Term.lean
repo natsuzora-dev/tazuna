@@ -1,4 +1,4 @@
-import Tazuna.Linter
+import Tazuna.Ir.Str
 import Std.Data.HashMap
 
 /-! The SMT-LIB terms tazuna sends to a solver, and what each means in a model (`Term.denote`). The solver is any that
@@ -314,12 +314,6 @@ end
 
 @[simp] theorem Term.denote_share (M : Model) (t : Term) : t.share.denote M = t.denote M := by
   unfold Term.share; split <;> simp [Term.denote]
-
-/-- The largest code point an SMT-LIB string holds. -/
-def maxChar : Nat := 0x2FFFF
-
-/-- Whether a string lies in SMT-LIB's string domain: every character at most U+2FFFF. -/
-def inDomain (s : String) : Bool := s.toList.all (·.toNat ≤ maxChar)
 
 /-! Evaluation with sharing. `Term.denote` follows the tree, so a term whose shared parts nest (an unrolled run's
 states, each read by the next step) costs time exponential in the nesting. `Term.evalC` gives each shared term its

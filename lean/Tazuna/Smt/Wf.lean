@@ -80,11 +80,13 @@ end
 
 mutual
 /-- The value has the shape of the type's sort, as every value of a well-sorted model does: slots for a bag or
-table or list, a declared constructor for an ADT. The items of free slots are left open: no value reads them. -/
+table or list, a declared constructor for an ADT, a string of SMT-LIB's domain (`inDomain`). The items of free slots are
+left open: no value reads them. -/
 def Sorted : Ty → Val → Prop
   | .int, w | .date, w | .dsl .fresh _, w => ∃ n, w = .int n
-  | .str, w => ∃ s, w = .str s
-  | .id, w => ∃ d n, L.find? .id = some (d, n) ∧ ((∃ m i, w = .ctor d 0 [.int m, .int i]) ∨ ∃ s, w = .ctor d 1 [.str s])
+  | .str, w => ∃ s, inDomain s ∧ w = .str s
+  | .id, w => ∃ d n, L.find? .id = some (d, n) ∧
+      ((∃ m i, w = .ctor d 0 [.int m, .int i]) ∨ ∃ s, inDomain s ∧ w = .ctor d 1 [.str s])
   | .adt 0 _ vs, w => vs = [[], []] ∧ ∃ b, w = .bool b
   | .adt (i + 1) a vs, w => ∃ d n, L.find? (.adt (i + 1) a vs) = some (d, n) ∧ SortedAlts d 0 vs w
   | .tuple ts, w => ∃ d n vals, L.find? (.tuple ts) = some (d, n) ∧ w = .ctor d 0 vals ∧ SortedVs ts vals
@@ -213,20 +215,20 @@ theorem wf_iff : (t : Ty) → (x : Term) → (c : Term) → wfT L t x = some c �
     (Holds M c ↔ (decodeV L t (x.denote M)).isSome = true)
   | .int, x, c, h, ⟨n, hn⟩ | .date, x, c, h, ⟨n, hn⟩ => by
     simp only [wfT, Option.some.injEq] at h; subst h; simp [Holds, tt, Term.denote, Val.toBool, hn, decodeV]; rfl
-  | .str, x, c, h, ⟨s, hs⟩ => by
-    simp only [wfT, Option.some.injEq] at h; subst h; simp [Holds, tt, Term.denote, Val.toBool, hs, decodeV]; rfl
+  | .str, x, c, h, ⟨s, hd, hs⟩ => by
+    simp only [wfT, Option.some.injEq] at h; subst h; simp [Holds, tt, Term.denote, Val.toBool, hs, decodeV, hd]; rfl
   | .dsl .fresh _, x, c, h, ⟨n, hn⟩ => by
     simp only [wfT, Option.some.injEq] at h; subst h
     simp only [Holds, Term.denote, hn, Val.toBool, Val.toInt, decodeV, decide_eq_true_eq]
     split <;> simp_all; rfl
   | .id, x, c, h, ⟨d, n, hf, hw⟩ => by
     simp only [wfT, hf, Option.map_some, Option.some.injEq] at h; subst h
-    rcases hw with ⟨m, i, hm⟩ | ⟨s, hs⟩
+    rcases hw with ⟨m, i, hm⟩ | ⟨s, hd, hs⟩
     · simp only [Holds, Term.denote, hm, Val.toBool, Val.toInt, decodeV, hf, decodeId, beq_self_eq_true,
         Bool.and_self, Bool.not_true, ite_true, Bool.false_or, decide_eq_true_eq, and_self, List.getElem?_cons_zero,
         Option.getD_some]
       by_cases h0 : 0 ≤ m <;> simp [h0] <;> rfl
-    · simp [Holds, Term.denote, hs, Val.toBool, decodeV, hf, decodeId]; rfl
+    · simp [Holds, Term.denote, hs, Val.toBool, decodeV, hf, decodeId, Str.of?, hd]; rfl
   | .adt 0 _ vs, x, c, h, ⟨hvs, b, hb⟩ => by
     subst hvs; simp only [wfT, boolVs?, Option.isSome_some, ite_true, Option.some.injEq] at h; subst h
     simp [Holds, tt, Term.denote, Val.toBool, hb, decodeV]
@@ -414,7 +416,11 @@ mutual
 /-- A value that decodes has the shape of its type's sort. -/
 theorem decode_sorted : (t : Ty) → (v : Val) → (x : t.den) → decodeV L t v = some x → Sorted L t v
   | .int, .int n, _, _ | .date, .int n, _, _ | .dsl .fresh _, .int n, _, _ => ⟨n, rfl⟩
-  | .str, .str s, _, _ => ⟨s, rfl⟩
+  | .str, .str s, x, h => by
+    simp only [decodeV] at h
+    split at h
+    · rename_i hd; exact ⟨s, hd, rfl⟩
+    · cases h
   | .id, .ctor d' k args, x, h => by
     simp only [decodeV] at h
     split at h
@@ -426,7 +432,7 @@ theorem decode_sorted : (t : Ty) → (v : Val) → (x : t.den) → decodeV L t v
         rw [decodeId_val d' h]
         cases x with
         | fresh m i => exact .inl ⟨m, i, rfl⟩
-        | named s => exact .inr ⟨s, rfl⟩
+        | named s => exact .inr ⟨s.1, s.2, rfl⟩
       · simp [hd] at h
     · cases h
   | .adt 0 _ [[], []], .bool b, _, _ => ⟨rfl, b, rfl⟩

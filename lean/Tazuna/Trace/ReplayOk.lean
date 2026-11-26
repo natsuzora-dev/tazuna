@@ -489,7 +489,7 @@ theorem Names.wire_good {ns : Names} (h : ns.Good) (n : Nat) :
 
 /-- What `Bind.outside` adds: each outside id among `xs` by its own name. -/
 theorem outside_mem : (xs : List IdV) → (b : Bind) → ∀ p ∈ (b.outside xs).ids,
-    p ∈ b.ids ∨ ∃ s, p = (.named s, s) ∧ IdV.named s ∈ xs
+    p ∈ b.ids ∨ ∃ s : Str, p = (.named s, s.1) ∧ IdV.named s ∈ xs
   | [], b, p, hp => .inl hp
   | x :: xs, b, p, hp => by
     simp only [Bind.outside, List.foldl_cons] at hp
@@ -506,8 +506,8 @@ theorem outside_mem : (xs : List IdV) → (b : Bind) → ∀ p ∈ (b.outside xs
     · exact .inr ⟨s, rfl, List.mem_cons_of_mem _ hs⟩
 
 /-- `Bind.outside` names each outside id among `xs` by its own name, unless the id or the name is bound. -/
-theorem outside_has : (xs : List IdV) → (b : Bind) → ∀ s, IdV.named s ∈ xs →
-    (IdV.named s, s) ∈ (b.outside xs).ids ∨ b.ids.any (·.1 == .named s) = true ∨ b.ids.any (·.2 == s) = true
+theorem outside_has : (xs : List IdV) → (b : Bind) → ∀ s : Str, IdV.named s ∈ xs →
+    (IdV.named s, s.1) ∈ (b.outside xs).ids ∨ b.ids.any (·.1 == .named s) = true ∨ b.ids.any (·.2 == s.1) = true
   | x :: xs, b, s, hs => by
     simp only [Bind.outside, List.foldl_cons]
     have keep := fun (b' : Bind) => (Bind.outside_sub b' xs).1
@@ -530,13 +530,13 @@ theorem outside_has : (xs : List IdV) → (b : Bind) → ∀ s, IdV.named s ∈ 
         dsimp only
         split
         · exact outside_has xs b s hs'
-        · rcases outside_has xs { b with ids := b.ids ++ [(.named t, t)] } s hs' with ih | ih | ih
+        · rcases outside_has xs { b with ids := b.ids ++ [(.named t, t.1)] } s hs' with ih | ih | ih
           · exact .inl ih
           · simp only [List.any_append, List.any_cons, List.any_nil, Bool.or_false, Bool.or_eq_true, beq_iff_eq,
               IdV.named.injEq] at ih
             exact .inr (.inl (by simpa using ih.resolve_right ht))
           · simp only [List.any_append, List.any_cons, List.any_nil, Bool.or_false, Bool.or_eq_true, beq_iff_eq] at ih
-            exact .inr (.inr (by simpa using ih.resolve_right ht))
+            exact .inr (.inr (by simpa using ih.resolve_right fun e => ht (Subtype.ext e)))
 
 end Names
 
@@ -985,9 +985,9 @@ theorem id?_of_bind {ns : Names} (hg : ns.Good) {xs : List IdV}
       subst hs
       simp only [Bind.id?, Bind.idOf, Names.bindOf]
       rw [find_none fun y hy => by
-        have : ns.taken s = true := List.any_eq_true.2 ⟨_, hy, by simp⟩
+        have : ns.taken s'.1 = true := List.any_eq_true.2 ⟨_, hy, by simp⟩
         rw [ht] at this; cases this]
-      rfl
+      simp [Str.of?_val]
     | fresh a b =>
       obtain ⟨m, hm'⟩ := hk _ hx nofun
       have : ns.ids.any (·.1 == IdV.fresh a b) = true := List.any_eq_true.2 ⟨_, hm', by simp⟩
@@ -1334,7 +1334,7 @@ theorem input_reads (chk : Smt.Checked P E T v) (ho : Ordered T v) {A : List Str
     · exact on.sub.ids _ (s1.ids _ hp)
     · obtain ⟨n, hn⟩ := Names.bind_names hsim.good.ok hcx' _ ((hids _).2 hs')
       rw [← hna] at hn
-      have : n = s' := g1.ok.named s' n hn
+      have : n = s'.1 := g1.ok.named s' n hn
       subst this
       exact on.sub.ids _ hn
   · intro p hp

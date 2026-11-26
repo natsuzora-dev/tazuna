@@ -29,7 +29,7 @@ theorem slotsVal_inj {d dt : Nat} {sv sv' : List (Bool × List Val)} (h : slotsV
       rw [h.1.1, h.1.2]
 
 theorem idVal_inj {d : Nat} {x y : IdV} (h : idVal d x = idVal d y) : x = y := by
-  cases x <;> cases y <;> simp_all [idVal, Int.natCast_inj]
+  cases x <;> cases y <;> simp_all [idVal, Int.natCast_inj, Subtype.ext_iff]
 
 theorem IdV.rel_refl (x : IdV) : IdV.Rel PBij.refl x x := by
   cases x with
@@ -53,7 +53,12 @@ mutual
 /-- Two values as a step holds them with one code relate with every id renamed to itself: they are the same value,
 bags and tables read as multisets. A type that is not data has no code, so no value of it relates to one. -/
 theorem relD_same : (t : Ty) → {x y : t.den0} → {z : Val} → RelD L t x z → RelD L t y z → Ty.rel0 PBij.refl t x y
-  | .int, _, _, _, hx, hy | .str, _, _, _, hx, hy | .date, _, _, _, hx, hy => by
+  | .int, _, _, _, hx, hy | .date, _, _, _, hx, hy => by
+    simp only [RelD] at hx hy
+    rw [hx] at hy
+    cases hy
+    rfl
+  | .str, ⟨_, _⟩, ⟨_, _⟩, _, hx, hy => by
     simp only [RelD] at hx hy
     rw [hx] at hy
     cases hy

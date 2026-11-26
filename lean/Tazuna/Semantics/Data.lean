@@ -39,7 +39,7 @@ def listBeq {α : Type} (f : α → α → Bool) : List α → List α → Bool
 which a trace and a scenario know by its name. The two never meet, so no fresh id equals an outside one. -/
 inductive IdV where
   | fresh (step : Nat) (index : Int)
-  | named (name : String)
+  | named (name : Str)
 deriving DecidableEq, Repr, Inhabited
 
 /-- A carrier type with Gleam's `==` on it. -/
@@ -60,7 +60,7 @@ mutual
 key type, so the carrier of a table needs that equality. -/
 def Ty.semWith (D : Dsl → List Ty → Sem) : Ty → Sem
   | .int => ⟨Int, fun x y => @BEq.beq Int _ x y⟩
-  | .str => ⟨String, fun x y => @BEq.beq String _ x y⟩
+  | .str => ⟨Str, fun x y => @BEq.beq Str _ x y⟩
   | .list t => ⟨List (Ty.semWith D t).1, listBeq (Ty.semWith D t).2⟩
   | .tuple ts => Ty.semsWith D ts
   -- Functions never meet `==`, since `==` needs a comparable type.

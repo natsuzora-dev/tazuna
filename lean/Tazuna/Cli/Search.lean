@@ -134,15 +134,10 @@ def inputBounds (T : List TypeDecl) (L : Layout) (v : ServiceV) : List Json :=
   let held := Ty.collectionsOf (inputTys v)
   boundsOf T L v fun t => held.any fun u => (Ty.same t u).isSome
 
-/-- The kind and fields of the line of a refusal that is the spec's: undecided, with its reason. -/
-def refusalLine (T : List TypeDecl) : SpecRefusal → Kind × List (String × Json)
-  | .unencodableString s => (.undecided .unencodableString, [("string", Json.str s)])
-  | .limit l => (.undecided .limit, [("limit", Json.str (l.text T))])
-
 /-- A builder's refusal as a line where it is the spec's; else an engine bug, a case the loaded program's types rule
 out. -/
 def refusedLine (T : List TypeDecl) : Refused → Except String (Kind × List (String × Json))
-  | .spec r => .ok (refusalLine T r)
+  | .spec l => .ok (.undecided .limit, [("limit", Json.str (l.text T))])
   | .unexpected u => .error s!"the encoding met a case the loaded program's types rule out: {reprStr u}"
 
 /-- The options of `prove` and `generate`: the prefix `--only` keeps lines by, how many solvers run at once, and the

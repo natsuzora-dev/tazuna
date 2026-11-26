@@ -62,13 +62,13 @@ mutual
 theorem sorted_exists (hd : L.datatypes? = some dts) : (t : Ty) → (L.srt? t).isSome = true → t.isData = true →
     ∃ w, Sorted L t w
   | .int, _, _ | .date, _, _ => ⟨.int 0, 0, rfl⟩
-  | .str, _, _ => ⟨.str "", "", rfl⟩
+  | .str, _, _ => ⟨.str "", "", rfl, rfl⟩
   | .dsl k a, _, hx => by
     obtain rfl := sorted_dsl_data hx
     exact ⟨.int 0, 0, rfl⟩
   | .id, hs, _ => by
     obtain ⟨⟨d, n⟩, hf⟩ := srt_found hs (by simp) (by simp) (by simp) (by simp) (by simp)
-    exact ⟨.ctor d 1 [.str ""], d, n, hf, .inr ⟨"", rfl⟩⟩
+    exact ⟨.ctor d 1 [.str ""], d, n, hf, .inr ⟨"", rfl, rfl⟩⟩
   | .adt 0 a vs, hs, _ => by
     simp only [Layout.srt?] at hs
     split at hs

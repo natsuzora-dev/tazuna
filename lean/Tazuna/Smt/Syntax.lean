@@ -235,7 +235,7 @@ mutual
 /-- Whether the printer writes the term as itself: every string literal lies in the SMT-LIB string domain, and no
 shared term is in it (a script prints those as references to its definitions). -/
 def Term.inDomain : Term → Bool
-  | .str s => Smt.inDomain s
+  | .str s => Tazuna.inDomain s
   | .var _ | .int _ | .bool _ | .ref _ => true
   | .shared .. => false
   | .not a | .len a | .is _ _ a | .sel _ _ _ a => a.inDomain

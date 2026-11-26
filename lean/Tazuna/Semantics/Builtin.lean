@@ -118,7 +118,7 @@ def Ty.toOption {t : Ty} : (Ty.option t).den → Option t.den
 set_option linter.tazuna.silentDefault false in
 /-- The value of a built-in at the type arguments `args`, which meet its demands. -/
 def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.inst args).den
-  | .length, _, _ => fun (s, ()) => Gleam.length s
+  | .length, _, _ => fun (s, ()) => Gleam.length s.1
   | .bagFromList, _, _ => fun (xs, ()) => xs
   | .bagInsert, _, _ => fun (xs, x, ()) => x :: xs
   | .bagSize, _, _ => fun (xs, ()) => (xs.length : Int)
@@ -165,7 +165,7 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
     let E := (Ty.param 1).inst args
     let C := (Ty.param 2).inst args
     let declares : List DeclaredV := declares
-    { name, records := R, event := E, caller := C,
+    { name := name.1, records := R, event := E, caller := C,
       init := Prim.dn d (.param 0) rfl init, apply,
       subscribes, machines, reactions,
       declares,
@@ -185,13 +185,13 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
   | .command, args, h => let d := Prim.dataOf h rfl
     fun (name, callers, accepts, decide, ensures, ()) =>
     Subtype.mk (p := fun (x : CommandV _ _ _) => x.input = (Ty.param 3).inst args ∧ x.rejection = (Ty.param 4).inst args)
-    { name := name, input := (Ty.param 3).inst args, rejection := (Ty.param 4).inst args,
+    { name := name.1, input := (Ty.param 3).inst args, rejection := (Ty.param 4).inst args,
       callers := Prim.dn d (.list (.param 2)) rfl callers,
       accepts, decide, ensures } ⟨rfl, rfl⟩
   | .query, args, h => let d := Prim.dataOf h rfl
     fun (name, callers, accepts, resolve, ()) =>
     Subtype.mk (p := fun (x : QueryV _ _) => x.input = (Ty.param 2).inst args ∧ x.output = (Ty.param 3).inst args)
-    { name := name, input := (Ty.param 2).inst args, output := (Ty.param 3).inst args,
+    { name := name.1, input := (Ty.param 2).inst args, output := (Ty.param 3).inst args,
       callers := Prim.dn d (.list (.param 1)) rfl callers,
       accepts, resolve } ⟨rfl, rfl⟩
   | .declareCommand, args, _ => fun (x, ()) =>
@@ -204,14 +204,14 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
     .externalQuery name ((Ty.param 0).inst args) ((Ty.param 1).inst args) holds
   | .machine, args, h => let d := Prim.dataOf h rfl
     fun (name, instances, initial, on, after, effect, invariants, ()) =>
-    { name, key := (Ty.param 2).inst args, state := (Ty.param 3).inst args,
+    { name := name.1, key := (Ty.param 2).inst args, state := (Ty.param 3).inst args,
       instances, initial := Prim.dn d (.param 3) rfl initial, on, after,
       effect, invariants }
-  | .reaction, _, _ => fun (name, react, ()) => { name, react }
-  | .external, _, _ => fun (name, declares, ()) => ⟨name, declares⟩
-  | .externalCommand, _, _ => fun (name, ()) => name
-  | .externalQuery, _, _ => fun (name, ensures, ()) => (name, ensures)
-  | .source, _, _ => fun (name, ()) => name
+  | .reaction, _, _ => fun (name, react, ()) => { name := name.1, react }
+  | .external, _, _ => fun (name, declares, ()) => ⟨name.1, declares⟩
+  | .externalCommand, _, _ => fun (name, ()) => name.1
+  | .externalQuery, _, _ => fun (name, ensures, ()) => (name.1, ensures)
+  | .source, _, _ => fun (name, ()) => name.1
   | .requestCommand, args, h => let d := Prim.dataOf h rfl
     fun (name, input, onAnswer, ()) => .request
     { name, input := (Ty.param 1).inst args, output := (Ty.param 2).inst args,
@@ -237,8 +237,8 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
   | .bounds, _, _ => fun (creates, items, cascade, steps, ()) => { creates, items, cascade, steps }
   | .create, args, _ => fun (table, atMost, ()) =>
     { key := (Ty.param 1).inst args, value := (Ty.param 2).inst args, table, atMost }
-  | .response, _, _ => fun (name, after, then_, within, ()) => { name, after, then_, within }
-  | .scenario, _, _ => fun (name, steps, ()) => { name, steps }
+  | .response, _, _ => fun (name, after, then_, within, ()) => { name := name.1, after, then_, within }
+  | .scenario, _, _ => fun (name, steps, ()) => { name := name.1, steps }
   | .stepCommand, args, h => let d := Prim.dataOf h rfl
     fun (c, caller, input, ()) =>
     let c : CommandOf ((Ty.param 0).inst args) ((Ty.param 1).inst args) ((Ty.param 2).inst args)
@@ -292,37 +292,37 @@ private def pickFailure {a : Ty} : (Ty.result a .pickError).den → Option Bool
   | .inr (.inl (.inl (), ())) => .some false
   | .inr (.inl (.inr _, ())) => .some true
   | .inl _ => .none
-private def table : (Ty.table .int .str).den := ⟨[((1 : Int), "a"), ((2 : Int), "bb")], by simp [KeysUnique, Ty.semWith]⟩
+private def table : (Ty.table .int .str).den := ⟨[((1 : Int), (str! "a")), ((2 : Int), (str! "bb"))], by simp [KeysUnique, Ty.semWith]⟩
 
-example : Prim.length.den [] rfl ("e\u0301", ()) = (2 : Int) := rfl
+example : Prim.length.den [] rfl (str! "e\u0301", ()) = (2 : Int) := rfl
 example : Prim.bagFromList.den [.int] rfl (([1, 1, 2] : List Int), ()) = ([1, 1, 2] : List Int) := rfl
 example : Prim.bagInsert.den [.int] rfl (([1] : List Int), (1 : Int), ()) = ([1, 1] : List Int) := rfl
 example : Prim.bagSize.den [.int] rfl (([1, 1, 2] : List Int), ()) = (3 : Int) := rfl
 example : Prim.bagFilter.den [.int] rfl (([-1, 2, 3] : List Int), fun (x, ()) => pos x, ()) = ([2, 3] : List Int) := rfl
-example : Prim.bagMap.den [.int, .str] rfl (([1, 1] : List Int), fun (x, ()) => toString (I x), ()) = ["1", "1"] := rfl
+example : Prim.bagMap.den [.int, .int] rfl (([1, 2] : List Int), fun (x, ()) => I x * 10, ()) = ([10, 20] : List Int) := rfl
 example : Prim.bagCount.den [.int] rfl (([-1, 2, 3] : List Int), fun (x, ()) => pos x, ()) = (2 : Int) := rfl
 example : Prim.bagSum.den [.int] rfl (([1, 2, 3] : List Int), fun (x, ()) => I x * 10, ()) = (60 : Int) := rfl
 example : toBool (Prim.bagAny.den [.int] rfl (([-1, 2] : List Int), fun (x, ()) => pos x, ())) = true := rfl
 example : toBool (Prim.bagAll.den [.int] rfl (([-1, 2] : List Int), fun (x, ()) => pos x, ())) = false := rfl
 example : toBool (Prim.bagContains.den [.int] rfl (([1, 2] : List Int), (2 : Int), ())) = true := rfl
 -- One least key picks its item; an empty bag is Empty and a shared least key is Tie, whatever the order.
-example : isOk (Prim.bagMinBy.den [.str] rfl ((["bb", "a"] : List String), fun (s, ()) => (s.length : Int), ())) = .some "a" := rfl
-example : pickFailure (Prim.bagMinBy.den [.str] rfl (([] : List String), fun (s, ()) => (s.length : Int), ())) = .some false := rfl
-example : pickFailure (Prim.bagMinBy.den [.str] rfl ((["a", "b"] : List String), fun (s, ()) => (s.length : Int), ())) = .some true := rfl
-example : isOk (Prim.bagMaxBy.den [.str] rfl ((["bb", "a"] : List String), fun (s, ()) => (s.length : Int), ())) = .some "bb" := rfl
-example : (Prim.tableNew.den [.int, .str] rfl ()).1 = ([] : List (Int × String)) := rfl
+example : isOk (Prim.bagMinBy.den [.str] rfl (([(str! "bb"), (str! "a")] : List Str), fun (s, ()) => (s.1.length : Int), ())) = .some (str! "a") := rfl
+example : pickFailure (Prim.bagMinBy.den [.str] rfl (([] : List Str), fun (s, ()) => (s.1.length : Int), ())) = .some false := rfl
+example : pickFailure (Prim.bagMinBy.den [.str] rfl (([(str! "a"), (str! "b")] : List Str), fun (s, ()) => (s.1.length : Int), ())) = .some true := rfl
+example : isOk (Prim.bagMaxBy.den [.str] rfl (([(str! "bb"), (str! "a")] : List Str), fun (s, ()) => (s.1.length : Int), ())) = .some (str! "bb") := rfl
+example : (Prim.tableNew.den [.int, .str] rfl ()).1 = ([] : List (Int × Str)) := rfl
 -- A later pair replaces an earlier one's value.
-example : (Prim.tableFromList.den [.int, .str] rfl (([((1 : Int), "a", ()), ((1 : Int), "b", ())] : List (Int × String × Unit)), ())).1 = ([(1, "b")] : List (Int × String)) := rfl
-example : (Prim.tableInsert.den [.int, .str] rfl (table, (1 : Int), "c", ())).1 = ([(2, "bb"), (1, "c")] : List (Int × String)) := rfl
-example : (Prim.tableInsert.den [.int, .str] rfl (table, (3 : Int), "c", ())).1 = ([(1, "a"), (2, "bb"), (3, "c")] : List (Int × String)) := rfl
-example : (Prim.tableRemove.den [.int, .str] rfl (table, (1 : Int), ())).1 = ([(2, "bb")] : List (Int × String)) := rfl
-example : Prim.tableGet.den [.int, .str] rfl (table, (2 : Int), ()) = Ty.some (a := .str) "bb" := rfl
+example : (Prim.tableFromList.den [.int, .str] rfl (([((1 : Int), (str! "a"), ()), ((1 : Int), (str! "b"), ())] : List (Int × Str × Unit)), ())).1 = ([(1, (str! "b"))] : List (Int × Str)) := rfl
+example : (Prim.tableInsert.den [.int, .str] rfl (table, (1 : Int), (str! "c"), ())).1 = ([(2, (str! "bb")), (1, (str! "c"))] : List (Int × Str)) := rfl
+example : (Prim.tableInsert.den [.int, .str] rfl (table, (3 : Int), (str! "c"), ())).1 = ([(1, (str! "a")), (2, (str! "bb")), (3, (str! "c"))] : List (Int × Str)) := rfl
+example : (Prim.tableRemove.den [.int, .str] rfl (table, (1 : Int), ())).1 = ([(2, (str! "bb"))] : List (Int × Str)) := rfl
+example : Prim.tableGet.den [.int, .str] rfl (table, (2 : Int), ()) = Ty.some (a := .str) (str! "bb") := rfl
 example : Prim.tableGet.den [.int, .str] rfl (table, (3 : Int), ()) = Ty.none (a := .str) := rfl
 example : Prim.tableSize.den [.int, .str] rfl (table, ()) = (2 : Int) := rfl
 example : Prim.tableKeys.den [.int, .str] rfl (table, ()) = ([1, 2] : List Int) := rfl
-example : Prim.tableValues.den [.int, .str] rfl (table, ()) = ["a", "bb"] := rfl
-example : (Prim.tableFilter.den [.int, .str] rfl (table, fun (k, _, ()) => pos (I k - 1), ())).1 = ([(2, "bb")] : List (Int × String)) := rfl
-example : (Prim.tableMap.den [.int, .str, .int] rfl (table, fun (_, v, ()) => (v.length : Int), ())).1 =
+example : Prim.tableValues.den [.int, .str] rfl (table, ()) = [(str! "a"), (str! "bb")] := rfl
+example : (Prim.tableFilter.den [.int, .str] rfl (table, fun (k, _, ()) => pos (I k - 1), ())).1 = ([(2, (str! "bb"))] : List (Int × Str)) := rfl
+example : (Prim.tableMap.den [.int, .str, .int] rfl (table, fun (_, v, ()) => (v.1.length : Int), ())).1 =
   ([(1, 1), (2, 2)] : List (Int × Int)) := rfl
 example : Prim.tableCount.den [.int, .str] rfl (table, fun (k, _, ()) => pos k, ()) = (2 : Int) := rfl
 example : toBool (Prim.tableAny.den [.int, .str] rfl (table, fun (k, _, ()) => pos (I k - 1), ())) = true := rfl
@@ -330,15 +330,15 @@ example : toBool (Prim.tableAll.den [.int, .str] rfl (table, fun (k, _, ()) => p
 example : Prim.dateAddDays.den [] rfl ((100 : Int), (-3 : Int), ()) = (97 : Int) := rfl
 example : Prim.dateDaysBetween.den [] rfl ((100 : Int), (97 : Int), ()) = (-3 : Int) := rfl
 -- `use <- require(holds, r)` continues when it holds and rejects with r otherwise.
-example : isOk (Prim.require.den [.int, .str] rfl (ofBool true, "r", fun () => Ty.ok (e := .str) (1 : Int), ()))
+example : isOk (Prim.require.den [.int, .str] rfl (ofBool true, (str! "r"), fun () => Ty.ok (e := .str) (1 : Int), ()))
   = .some (1 : Int) := rfl
-example : Prim.require.den [.int, .str] rfl (ofBool false, "r", fun () => Ty.ok (e := .str) (1 : Int), ()) =
-  Ty.error (a := .int) (e := .str) "r" := rfl
+example : Prim.require.den [.int, .str] rfl (ofBool false, (str! "r"), fun () => Ty.ok (e := .str) (1 : Int), ()) =
+  Ty.error (a := .int) (e := .str) (str! "r") := rfl
 -- `use v <- ref(table, key, r)` continues with the key's value and rejects with r when the key is absent.
-example : isOk (Prim.tableLookup.den [.int, .str, .str, .str] rfl (table, (2 : Int), "r", fun (v, ()) => Ty.ok (e := .str) v, ()))
-  = .some "bb" := rfl
-example : Prim.tableLookup.den [.int, .str, .str, .str] rfl (table, (3 : Int), "r", fun (v, ()) => Ty.ok (e := .str) v, ()) =
-  Ty.error (a := .str) (e := .str) "r" := rfl
+example : isOk (Prim.tableLookup.den [.int, .str, .str, .str] rfl (table, (2 : Int), (str! "r"), fun (v, ()) => Ty.ok (e := .str) v, ()))
+  = .some (str! "bb") := rfl
+example : Prim.tableLookup.den [.int, .str, .str, .str] rfl (table, (3 : Int), (str! "r"), fun (v, ()) => Ty.ok (e := .str) v, ()) =
+  Ty.error (a := .str) (e := .str) (str! "r") := rfl
 
 end Examples
 

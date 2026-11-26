@@ -533,8 +533,8 @@ theorem foldInputs_ok (chk : Smt.Checked P E T v) : (xs : List (Input v)) → (w
     rw [hw]
     exact hr
 
-theorem contains_outside {l : List IdV} {s : String} (h : IdV.named s ∈ l) :
-    (l.filterMap fun | .named s => some s | .fresh .. => none).contains s = true :=
+theorem contains_outside {l : List IdV} {s : Str} (h : IdV.named s ∈ l) :
+    (l.filterMap fun | .named s => some s.1 | .fresh .. => none).contains s.1 = true :=
   List.elem_iff.2 (List.mem_filterMap.2 ⟨_, h, rfl⟩)
 
 /-- A run from the initial state that faults nowhere writes a trace: check's facts make every value it writes have a

@@ -1,4 +1,4 @@
-import Tazuna.Linter
+import Tazuna.Ir.Str
 
 /-! Types after elaboration, the declarations of the types a program defines, and the types Lean owns. -/
 

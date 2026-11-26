@@ -76,8 +76,6 @@ deriving Repr
 /-- Why an expression has no encoding: a limit of the fragment the spec reached, a gap in the layout, or a case the
 program's types rule out. -/
 inductive Refusal where
-  /-- A string literal holds a code point above U+2FFFF, outside SMT-LIB's strings. -/
-  | unencodableString (s : String)
   | limit (l : Limit)
   | layout (g : LayoutGap)
   | unexpected (u : Unexpected)
@@ -492,7 +490,7 @@ def encodePat {t : Ty} {Δ : List Ty} : Pat t Δ → Code t → Except Refusal (
   | .wild, _ => .ok (tt, ())
   | .bind, s => .ok (tt, (s, ()))
   | .int n, s => .ok (.eq s (.int n), ())
-  | .str lit, s => if inDomain lit then .ok (.eq s (.str lit), ()) else .error (.unencodableString lit)
+  | .str lit, s => .ok (.eq s (.str lit.1), ())
   | @Pat.tuple ts _ ps, s => do
     let d ← tupleD L ts
     let fs ← need (.limit (.function (.tuple ts)))
@@ -996,7 +994,7 @@ mutual
 /-- The code of an expression whose variables have the codes `σ`, with its condition. -/
 def encode {Γ : List Ty} {t : Ty} : Expr G Γ t → Codes Γ → Enc (Code t)
   | .int n, _ => .ok (.int n, tt)
-  | .str s, _ => if inDomain s then .ok (.str s, tt) else .error (.unencodableString s)
+  | .str s, _ => .ok (.str s.1, tt)
   | .var v, σ => .ok (v.code σ, tt)
   | .global v, _ => v.enc gs
   | @Expr.ctor _ _ i args vs v es, σ => do

@@ -141,7 +141,7 @@ variable {G : List Ty}
 
 /-- A string literal's text. -/
 def Expr.strLit? {Γ : List Ty} {t : Ty} : Expr G Γ t → Option String
-  | .str s => some s
+  | .str s => some s.1
   | _ => none
 
 /-- The first expression's text where it is a string literal. -/
@@ -172,7 +172,8 @@ def Expr.lamRuleNames {Γ : List Ty} {t : Ty} : Expr G Γ t → List (Option Str
 variable (D : Defs G) (g : Ty.dens G)
 
 theorem Expr.ruleName?_eval {Γ : List Ty} : {t : Ty} → (e : Expr G Γ t) → (h : t = .tuple [.str, .bool]) →
-    (s : String) → e.ruleName? = some s → (ρ : Ty.dens Γ) → (h ▸ e.eval D g ρ : (Ty.tuple [.str, .bool]).den).1 = s := by
+    (s : String) → e.ruleName? = some s → (ρ : Ty.dens Γ) →
+      (show Str from (h ▸ e.eval D g ρ : (Ty.tuple [.str, .bool]).den).1).1 = s := by
   intro t e h s hs ρ
   cases e with
   | tuple es =>
@@ -191,7 +192,7 @@ theorem Expr.ruleName?_eval {Γ : List Ty} : {t : Ty} → (e : Expr G Γ t) → 
   | _ => cases hs
 
 theorem Items.ruleNames_mem {Γ : List Ty} (ρ : Ty.dens Γ) (items : Items G Γ (.tuple [.str, .bool])) :
-    ∀ a ∈ Items.eval D g items ρ, some a.1 ∈ items.ruleNames ∨ none ∈ items.ruleNames := by
+    ∀ a ∈ Items.eval D g items ρ, some (show Str from a.1).1 ∈ items.ruleNames ∨ none ∈ items.ruleNames := by
   generalize hl : Items.eval D g items ρ = xs
   induction xs generalizing items with
   | nil => simp
@@ -221,7 +222,7 @@ theorem Expr.ruleNames_listed {Γ : List Ty} (ρ : Ty.dens Γ) : {t : Ty} → (e
     injection h with h1
     subst h1
     obtain ⟨⟨m, b, ⟨⟩⟩, ha, hf⟩ := List.mem_filterMap.1 hn
-    have hm : m = n := by
+    have hm : (show Str from m).1 = n := by
       simp only at hf
       split at hf
       · cases hf

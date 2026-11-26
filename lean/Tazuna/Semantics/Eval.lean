@@ -22,7 +22,7 @@ def BinOp.eval {a b c : Ty} : BinOp a b c → a.den → b.den → c.den
   | .ge, x, y => Ty.ofBool (intLe y x)
   | .and, x, y => Ty.ofBool (Ty.toBool x && Ty.toBool y)
   | .or, x, y => Ty.ofBool (Ty.toBool x || Ty.toBool y)
-  | .concat, x, y => @HAppend.hAppend String String String _ x y
+  | .concat, x, y => Str.append x y
   | @BinOp.eq t _, x, y => Ty.ofBool (t.deq x y)
   | @BinOp.ne t _, x, y => Ty.ofBool (!t.deq x y)
 

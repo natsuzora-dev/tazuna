@@ -73,7 +73,7 @@ value holding it has no wire form; a run's writer avoids every outside name of i
 them (`Names.bind_ok`). -/
 def Names.bindOne (ns : Names) (x : IdV) : Names :=
   if ns.ids.any (·.1 == x) then ns else match x with
-    | .named s => if ns.taken s then ns else { ns with ids := ns.ids ++ [(x, s)] }
+    | .named s => if ns.taken s.1 then ns else { ns with ids := ns.ids ++ [(x, s.1)] }
     | .fresh .. => { ns with ids := ns.ids ++ [(x, ns.freshName.1.1)], next := ns.freshName.2 }
 
 def Names.bind (ns : Names) (xs : List IdV) : Names := xs.foldl Names.bindOne ns
@@ -81,8 +81,8 @@ def Names.bind (ns : Names) (xs : List IdV) : Names := xs.foldl Names.bindOne ns
 /-- What the names keep: an id named by an avoided name is the outside id of that name, an outside id is named by its
 own name, and no two ids share a name. -/
 structure Names.Ok (ns : Names) : Prop where
-  avoided : ∀ p ∈ ns.ids, ns.avoid.contains p.2 = true → p.1 = .named p.2
-  named : ∀ s n, (IdV.named s, n) ∈ ns.ids → n = s
+  avoided : ∀ p ∈ ns.ids, ns.avoid.contains p.2 = true → ∃ s : Str, p.1 = .named s ∧ s.1 = p.2
+  named : ∀ s n, (IdV.named s, n) ∈ ns.ids → n = s.1
   nodup : (ns.ids.map (·.2)).Nodup
 
 theorem Names.ok_avoid (avoid : List String) : ({ avoid } : Names).Ok :=
@@ -120,7 +120,7 @@ theorem Names.bindOne_ok {ns : Names} (h : ns.Ok) (x : IdV) : (ns.bindOne x).Ok 
         refine ⟨⟨fun p hp ha => ?_, fun s' n hp => ?_, ?_⟩, rfl, keep _⟩
         · rcases List.mem_append.1 hp with hp | hp
           · exact h.avoided p hp ha
-          · simp at hp; subst hp; rfl
+          · simp at hp; subst hp; exact ⟨s, rfl, rfl⟩
         · rcases List.mem_append.1 hp with hp | hp
           · exact h.named s' n hp
           · simp at hp; obtain ⟨rfl, rfl⟩ := hp; rfl
@@ -146,7 +146,7 @@ theorem Names.bindOne_ok {ns : Names} (h : ns.Ok) (x : IdV) : (ns.bindOne x).Ok 
         obtain ⟨p, hp, rfl⟩ := List.mem_map.1 ha
         exact Names.not_taken hf.1 p hp
 
-theorem Names.bindOne_names {ns : Names} (h : ns.Ok) {x : IdV} (hx : ∀ s, x = .named s → ns.avoid.contains s = true) :
+theorem Names.bindOne_names {ns : Names} (h : ns.Ok) {x : IdV} (hx : ∀ s, x = .named s → ns.avoid.contains s.1 = true) :
     ((ns.bindOne x).name x).isSome := by
   unfold Names.bindOne
   split
@@ -155,11 +155,12 @@ theorem Names.bindOne_names {ns : Names} (h : ns.Ok) {x : IdV} (hx : ∀ s, x = 
     match x with
     | .named s =>
       dsimp only
-      have ht : ns.taken s = false := by
+      have ht : ns.taken s.1 = false := by
         simp only [Names.taken, List.any_eq_false, beq_iff_eq]
         intro p hp he
-        have hp' := h.avoided p hp (by rw [he]; exact hx s rfl)
-        rw [he] at hp'
+        obtain ⟨s', hp', hs'⟩ := h.avoided p hp (by rw [he]; exact hx s rfl)
+        have : s' = s := Subtype.ext (hs'.trans he)
+        subst this
         apply hn
         exact List.any_eq_true.2 ⟨p, hp, by simp [hp']⟩
       simp only [ht]
@@ -172,7 +173,7 @@ theorem Names.bindOne_names {ns : Names} (h : ns.Ok) {x : IdV} (hx : ∀ s, x = 
 are all avoided keeps `Names.Ok` and names each of them, every fresh id by a name no avoided name is (so by none the
 run's outside ids carry) and every outside id by its own name, no two alike; ids named before keep their names. -/
 theorem Names.bind_ok {ns : Names} (h : ns.Ok) :
-    (xs : List IdV) → (∀ s, .named s ∈ xs → ns.avoid.contains s = true) →
+    (xs : List IdV) → (∀ s, .named s ∈ xs → ns.avoid.contains s.1 = true) →
     (ns.bind xs).Ok ∧ (ns.bind xs).avoid = ns.avoid ∧ (∀ y n, ns.name y = some n → (ns.bind xs).name y = some n) ∧
       ∀ x ∈ xs, ((ns.bind xs).name x).isSome
   | [], _ => ⟨h, rfl, fun _ _ hy => hy, nofun⟩
@@ -374,7 +375,7 @@ theorem TraceFile.read_wires (tr : TraceFile) :
 show. -/
 def outsideNames (T : List TypeDecl) {v : ServiceV} (s : State v) (xs : List (Input v)) : List String :=
   (xs.flatMap (·.ids T) ++ (run T v s xs).2.flatMap (·.shownIds T)).filterMap fun
-    | .named s => some s
+    | .named s => some s.1
     | .fresh .. => none
 
 /-- The trace of a run of the inputs from the initial state: what generate writes, in the format of snapshots, or why

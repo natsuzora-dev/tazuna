@@ -22,10 +22,9 @@ structure Bind where
 /-- The id bound to the name, if one is. -/
 def Bind.idOf (b : Bind) (s : String) : Option IdV := (b.ids.find? (·.2 == s)).map (·.1)
 
--- An id the trace has not bound is a named id.
-set_option linter.tazuna.silentDefault false in
-/-- The id an in line names: the one bound to the name, or else the outside id of that name. -/
-def Bind.id? (b : Bind) (s : String) : Option IdV := some ((b.idOf s).getD (.named s))
+/-- The id an in line names: the one bound to the name, or else the outside id of that name, which is a string of
+tazuna's domain (`Str`). -/
+def Bind.id? (b : Bind) (s : String) : Option IdV := (b.idOf s).or ((Str.of? s).map .named)
 
 def Bind.wire? (b : Bind) (s : String) : Option Nat := (b.wires.find? (·.2 == s)).map (·.1)
 
@@ -33,7 +32,7 @@ def Bind.wire? (b : Bind) (s : String) : Option Nat := (b.wires.find? (·.2 == s
 trace writer names ids (`Names.bindOne`). -/
 def Bind.outside (b : Bind) (xs : List IdV) : Bind :=
   xs.foldl (fun b x => match x with
-    | .named s => if b.ids.any (·.1 == x) || b.ids.any (·.2 == s) then b else { b with ids := b.ids ++ [(x, s)] }
+    | .named s => if b.ids.any (·.1 == x) || b.ids.any (·.2 == s.1) then b else { b with ids := b.ids ++ [(x, s.1)] }
     | .fresh _ _ => b) b
 
 -- A key the binding leaves unbound has no name; `Reads` binds every key a window shows.
@@ -1149,8 +1148,8 @@ theorem bindOf_agrees : Agrees (bindOf β C) β C := by
       | id n => simp at h
     · rintro ⟨hk, h⟩; exact ⟨_, hk, by simp [h]⟩
 
-theorem agrees_add {b : Bind} {s : String} (ha : Agrees b β C) (hβ : β (.id (.named s)) = .id s) :
-    Agrees { b with ids := b.ids ++ [(.named s, s)] } β ⟨C.blocks ++ [([.id (.named s)], [.id s])]⟩ := by
+theorem agrees_add {b : Bind} {s : Str} (ha : Agrees b β C) (hβ : β (.id (.named s)) = .id s.1) :
+    Agrees { b with ids := b.ids ++ [(.named s, s.1)] } β ⟨C.blocks ++ [([.id (.named s)], [.id s.1])]⟩ := by
   refine ⟨fun y t => ?_, fun n t => ?_⟩
   · simp only [List.mem_append, List.mem_singleton, Prod.mk.injEq, keys, List.flatMap_append,
       List.flatMap_cons, List.flatMap_nil, List.append_nil]

@@ -111,7 +111,7 @@ mutual
 /-- The wire form of a value of type `t`, when it has one. `name` writes ids. -/
 def enc : (t : Ty) → t.den0 → Option Wire
   | .int, n => some (.num n)
-  | .str, s => some (.str s)
+  | .str, s => some (.str s.1)
   | .list t, xs => (xs.mapM (enc t)).map .arr
   | .bag t, xs => ((Ty.sortBy T t xs).mapM (enc t)).map .arr
   | .tuple ts, x => (encs ts x).map .arr
@@ -217,7 +217,7 @@ mutual
 /-- The value of type `t` a wire form writes, when it writes one. `lookup` reads ids. -/
 def dec : (t : Ty) → Wire → Option t.den0
   | .int, .num n => some n
-  | .str, .str s => some s
+  | .str, .str s => Str.of? s
   | .list t, .arr ws => ws.mapM (dec t)
   | .bag t, .arr ws => ws.mapM (dec t)
   | .tuple ts, .arr ws => decs ts ws

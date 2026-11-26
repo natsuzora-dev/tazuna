@@ -22,7 +22,7 @@ def toB : Ty.bool.den0 → Bool
   | .inr _ => false
 
 /-- The names of the rules that do not hold. -/
-def broken (xs : Ty.rules.den0) : List String := xs.filterMap fun (n, b, ()) => if toB b then none else some n
+def broken (xs : Ty.rules.den0) : List String := xs.filterMap fun (n, b, ()) => if toB b then none else some (n : Str).1
 
 /-- One live machine instance: its key, its state and the timer it waits for (the deadline and the state it enters). -/
 structure Instance {r e : Ty} (m : MachineV r e) where

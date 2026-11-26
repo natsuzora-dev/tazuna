@@ -55,7 +55,7 @@ inductive Pat : Ty → List Ty → Type
   | wild {t} : Pat t []
   | bind {t} : Pat t [t]
   | int (n : Int) : Pat .int []
-  | str (s : String) : Pat .str []
+  | str (s : Str) : Pat .str []
   | tuple {ts Δ} (ps : Pats ts Δ) : Pat (.tuple ts) Δ
   | ctor {i args vs Δ} (v : Fin vs.length) (ps : Pats (vs.get v) Δ) : Pat (.adt i args vs) Δ
   /-- `p as name`: the name binds after the variables of `p`. -/
@@ -149,7 +149,7 @@ mutual
 the locals `Γ`. Calls are positional: elaboration has placed every labelled argument. -/
 inductive Expr (G : List Ty) : List Ty → Ty → Type
   | int {Γ} (n : Int) : Expr G Γ .int
-  | str {Γ} (s : String) : Expr G Γ .str
+  | str {Γ} (s : Str) : Expr G Γ .str
   | var {Γ t} (v : Var Γ t) : Expr G Γ t
   | global {Γ t} (v : Var G t) : Expr G Γ t
   | ctor {Γ i args vs} (v : Fin vs.length) (es : Exprs G Γ (vs.get v)) : Expr G Γ (.adt i args vs)

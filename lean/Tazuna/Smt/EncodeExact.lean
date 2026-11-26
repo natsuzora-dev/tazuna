@@ -813,9 +813,7 @@ theorem encode_exact {Γ : List Ty} {t : Ty} : (e : Expr G Γ t) → (σ : Codes
       (Holds M c → FRel M L t (e.eval D g ρ) (Expr.fits L.count D g gf e ρ φ).2 s)
   | .int n, _, _, _, _, _, s, c, h => by cases h; exact ⟨⟨fun _ => trivial, fun _ => holds_tt⟩, fun _ => trivial⟩
   | .str lit, _, _, _, _, _, s, c, h => by
-    simp only [encode] at h; split at h
-    · cases h; exact ⟨⟨fun _ => trivial, fun _ => holds_tt⟩, fun _ => trivial⟩
-    · cases h
+    simp only [encode] at h; cases h; exact ⟨⟨fun _ => trivial, fun _ => holds_tt⟩, fun _ => trivial⟩
   | .var v, σ, ρ, φ, _, hφ, s, c, h => by
     cases h; exact ⟨⟨fun _ => trivial, fun _ => holds_tt⟩, fun _ => var_frel v ρ φ σ hφ⟩
   | .global v, _, _, _, _, _, s, c, h => hgf _ v s c h

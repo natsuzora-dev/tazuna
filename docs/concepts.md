@@ -26,7 +26,7 @@ That rule shapes the values a spec holds:
 - Numbers are integers. Hold an amount in its smallest unit, such as cents.
 - An `Instant` and a `Duration` are milliseconds.
 - A `Date` is a day with no calendar. A spec adds days and counts the days between two dates, and converts neither between instants and dates nor between time zones. Ask an external for a business day.
-- A `String` supports `==`, `<>`, and `tazuna.length`, which counts code points.
+- A `String` supports `==`, `<>`, and `tazuna.length`, which counts code points. Its code points stop at U+2FFFF, as SMT strings do. A literal above that is `Restricted.highCodePoint`, and a trace string above it makes the line `Trace.invalid`.
 
 ## The spec writes every order
 

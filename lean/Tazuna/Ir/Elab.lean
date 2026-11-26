@@ -28,6 +28,12 @@ abbrev E := Except (Option At × String)
 
 def fail {α} (pos : At) (msg : String) : E α := throw (some pos, msg)
 
+/-- A String token's value; the converter refuses one above U+2FFFF (`Restricted.highCodePoint`). -/
+def strLit (pos : At) (text : String) : E Str := do
+  let some s := Literal.parseStr text | fail pos s!"not a Gleam String literal: {text}"
+  let some s := Str.of? s | fail pos s!"a String literal above U+2FFFF: {text}"
+  pure s
+
 /-- A failure to load an IR. It is always a converter bug, so the engine reports it as an internal error. -/
 structure LoadError where
   file : Option String
@@ -214,7 +220,7 @@ partial def elabPat (t : Ty) : Surface.Pat → E ((Δ : Scope) × Pat t (ctx Δ)
       | some ⟨h⟩ => pure ⟨[], h ▸ .int n⟩
       | none => fail pos s!"Int pattern on {showTy T t}"
     | .str text =>
-      let some s := Literal.parseStr text | fail pos s!"not a Gleam String literal: {text}"
+      let s ← strLit pos text
       match Ty.same .str t with
       | some ⟨h⟩ => pure ⟨[], h ▸ .str s⟩
       | none => fail pos s!"String pattern on {showTy T t}"
@@ -420,7 +426,7 @@ partial def elabExpr (sc : Scope) : Surface.Expr → E ((t : Ty) × Expr G (ctx 
       let some n := Literal.parseInt text | fail pos s!"not a Gleam Int literal: {text}"
       pure ⟨.int, .int n⟩
     | .str text =>
-      let some s := Literal.parseStr text | fail pos s!"not a Gleam String literal: {text}"
+      let s ← strLit pos text
       pure ⟨.str, .str s⟩
     | .var n =>
       let some ⟨t, v⟩ := lookupVar sc n | fail pos s!"unbound variable {n}"

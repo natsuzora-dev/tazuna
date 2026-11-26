@@ -403,7 +403,7 @@ theorem tree_dec : (t : Ty) → t.comparable = true → (x : t.den0) → (w : Wi
     simp only [valTree, Option.some.injEq] at hx hw; subst hx hw
     simp only [Tree.map, Tree.same_atom] at hs
     cases Erl.bin.inj hs
-    exact ⟨_, rfl, rfl⟩
+    exact ⟨_, Str.of?_val x, rfl⟩
   | .date, _, x, w, te, tl, hx, hw, hs, _ => by
     cases w <;> simp only [wireTree, reduceCtorEq] at hw
     simp only [valTree, Option.some.injEq] at hx hw; subst hx hw
@@ -654,7 +654,12 @@ theorem dec_tree : (t : Ty) → (w : Wire) → (y : t.den0) → dec T lookup t w
   | .int, .num n, y, h => by
     cases Option.some.inj (show some n = some y from h); exact ⟨_, _, rfl, rfl, rfl⟩
   | .str, .str s, y, h => by
-    cases Option.some.inj (show some s = some y from h); exact ⟨_, _, rfl, rfl, rfl⟩
+    obtain ⟨y, hy⟩ := y
+    have h : Str.of? s = some ⟨y, hy⟩ := h
+    simp only [Str.of?] at h
+    split at h
+    · cases h; exact ⟨_, _, rfl, rfl, rfl⟩
+    · cases h
   | .date, .str s, y, h => by
     have h : parseDate? s = some y := h
     refine ⟨_, _, rfl, rfl, ?_⟩

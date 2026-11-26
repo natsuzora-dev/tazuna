@@ -167,7 +167,7 @@ Everything between them is proved or checked.
 - The Lean kernel checks every proof, and the Lean compiler builds the engine. Where compiled code uses a faster form, a root proves the two equal: `SExp.print_eq_printFast`, `Term.denote_eq_denoteFast`, `Term.beq_eq_beqFast`, and `Defs.add_eq_addFast`.
 - Lean's JSON printer and parser stand between wire values and a trace's text.
 - Z3. An unsat answer is trusted. A sat answer is not, because Lean decodes the model and recomputes the counterexample or replays the run. The answer cache, keyed by SHA-256 digests of the script and of the solver's version, holds answers you trust in the same way.
-- SMT-LIB. `Term.denote` states the standard's meaning of each term, and you trust that Z3 implements it. Division and remainder by 0 are free in the model, as the standard leaves them.
+- SMT-LIB. `Term.denote` states the standard's meaning of each term, and you trust that Z3 implements it. Division and remainder by 0 are free in the model, as the standard leaves them. Strings hold code points up to U+2FFFF, the standard's string domain. A Lean string value is a `Tazuna.Str`, which holds no other, and `Smt.Unsat` quantifies over models whose strings stay in that domain, so an unsat answer covers exactly the strings Z3 searched.
 
 ## Not guaranteed
 
@@ -175,6 +175,5 @@ Everything between them is proved or checked.
 - `Undecided.upToRenaming` says the two orders end the same once renamed. That rests on Lean's comparison of their terms under the renaming it found, and no theorem yet says such orders are the same as the oracle sees them. The line is undecided, so no verdict rests on it.
 - `Generate.unreached` does not mean unreachable. A longer run or more slots may reach the target.
 - The `bounds` list over-states lists. Every list type of the layout appears with its longest literal, though a list that only literals build cannot grow.
-- SMT-LIB strings hold code points up to U+2FFFF. A string literal above that is `Restricted.highCodePoint`. Lean's model of a string holds any code point, so an unsat answer about inputs whose strings go above U+2FFFF rests on Z3 beyond its string domain.
 - `Undecided.timeout` depends on the machine. Z3 ran past a 10-minute wall clock before its resource limit stopped it, though the limit takes about 6 seconds on a laptop. Every other answer, `Undecided.unknown` included, comes from Z3's fixed resource limit and seeds, so it is the same on every machine.
 - Ids that cannot be guessed, authentication, and anything else outside the spec's values are the implementation's concern.

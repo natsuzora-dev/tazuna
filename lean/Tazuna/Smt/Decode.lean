@@ -35,14 +35,14 @@ def uniqueKeys {κ ν : Type} (f : κ → κ → Bool) (xs : List (κ × ν)) : 
 name. -/
 def decodeId : Nat → List Val → Option IdV
   | 0, [.int s, .int i] => if 0 ≤ s then some (.fresh s.toNat i) else none
-  | 1, [.str s] => some (.named s)
+  | 1, [.str s] => (Str.of? s).map .named
   | _, _ => none
 
 mutual
 /-- The value an SMT value codes. -/
 def decodeV : (t : Ty) → Val → Option t.den
   | .int, .int n => some n
-  | .str, .str s => some s
+  | .str, .str s => if h : inDomain s then some (⟨s, h⟩ : Str) else none
   | .date, .int n => some n
   | .dsl .fresh _, .int n => if 0 ≤ n then some n.toNat else none
   | .id, .ctor d' k args => match L.find? .id with
@@ -95,7 +95,7 @@ mutual
 /-- The SMT value that codes a value, as `RelV` relates them. -/
 def embedV : (t : Ty) → t.den → Option Val
   | .int, n => some (.int n)
-  | .str, s => some (.str s)
+  | .str, s => some (.str (s : Str).1)
   | .date, n => some (.int n)
   | .dsl .fresh _, n => some (.int (Int.ofNat n))
   | .id, x => (L.find? .id).map fun (d, _) => idVal d x
@@ -225,14 +225,21 @@ theorem decodeId_val (d : Nat) {k : Nat} {args : List Val} {x : IdV} (h : decode
   · split at h
     · cases h; simp [idVal]; omega
     · cases h
-  · cases h; rfl
+  · simp only [Str.of?] at h
+    split at h
+    · cases h; rfl
+    · cases h
   · cases h
 
 mutual
 /-- T3: a decoded value is the value the SMT value codes. -/
 theorem decode_rel : (t : Ty) → (v : Val) → (x : t.den) → decodeV L t v = some x → RelV L t x v
   | .int, .int n, x, h | .date, .int n, x, h => by cases h; rfl
-  | .str, .str s, x, h => by cases h; rfl
+  | .str, .str s, x, h => by
+    simp only [decodeV] at h
+    split at h
+    · cases h; rfl
+    · cases h
   | .dsl .fresh _, .int n, x, h => by
     simp only [decodeV] at h
     split at h
@@ -352,14 +359,14 @@ mutual
 /-- T3: decoding inverts the embedding. -/
 theorem decode_embed : (t : Ty) → (x : t.den) → (v : Val) → embedV L t x = some v → decodeV L t v = some x
   | .int, x, v, h | .date, x, v, h => by cases h; rfl
-  | .str, x, v, h => by cases h; rfl
+  | .str, x, v, h => by cases h; exact Str.of?_val x
   | .dsl .fresh _, x, v, h => by
     cases h
     have hm : ∀ m : Nat, (if 0 ≤ Int.ofNat m then some (Int.ofNat m).toNat else none) = some m := by intro m; simp
     exact hm x
   | .id, x, v, h => by
     obtain ⟨⟨d, n⟩, hf, rfl⟩ := map_some.1 h
-    cases x <;> simp [idVal, decodeV, hf, decodeId] <;> rfl
+    cases x <;> simp [idVal, decodeV, hf, decodeId, Str.of?_val] <;> rfl
   | .adt 0 _ [[], []], x, v, h => by
     cases h
     match x with

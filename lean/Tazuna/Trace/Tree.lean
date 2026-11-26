@@ -162,10 +162,10 @@ instance : Leaf Nat := ⟨fun n => .int n, fun _ _ h => by simp at h; omega⟩
 instance : Leaf Key where
   toErl
     | .id (.fresh s i) => .tuple [.int 0, .int s, .int i]
-    | .id (.named s) => .tuple [.int 1, .bin s]
+    | .id (.named s) => .tuple [.int 1, .bin s.1]
     | .wire n => .tuple [.int 2, .int n]
   inj a b h := by
-    rcases a with (⟨_, _⟩ | _) | _ <;> rcases b with (⟨_, _⟩ | _) | _ <;> simp_all <;> omega
+    rcases a with (⟨_, _⟩ | _) | _ <;> rcases b with (⟨_, _⟩ | _) | _ <;> simp_all [Subtype.ext_iff] <;> omega
 
 instance : Leaf Name where
   toErl

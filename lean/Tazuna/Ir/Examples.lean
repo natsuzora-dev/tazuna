@@ -166,7 +166,7 @@ def evalMain (ret : Ty) (retJ body : Json) : Option ret.den :=
 /-! Evaluation: each surface construct means what Gleam means. -/
 
 def evalInt (body : Json) : Option Int := evalMain .int I body
-def evalStr (body : Json) : Option String := evalMain .str S body
+def evalStr (body : Json) : Option String := (evalMain .str S body).map Subtype.val
 def evalBool (body : Json) : Option Bool := (evalMain .bool B body).map Ty.toBool
 
 def callFn (name : String) (ty : Json) (args : List Json) : Json := call 40 3 I (ref 40 3 ty name) args
@@ -225,7 +225,7 @@ def withMain (ret body : Json) (fns : List Json := []) (consts : List Json := []
     clause [[pCtor 42 5 shapeT "m.Shape" "Square" [] true]] (int 42 20 "2") (some (bin 42 30 B ">" (int 42 30 "1") (int 42 34 "0")))]))
   == "src/m.gleam:40:3: m.main: case is not exhaustive"
 #guard (match loaded rootStr (withMain S (str 40 3 "\"a\\u{1F600}\\n\\\"\"")) with
-  | .ok p => @BEq.beq String _ (p.eval ()) ("a" ++ String.singleton (Char.ofNat 0x1F600) ++ "\n\"")
+  | .ok p => @BEq.beq String _ (p.eval ()).1 ("a" ++ String.singleton (Char.ofNat 0x1F600) ++ "\n\"")
   | .error _ => false)
 #guard (match loaded (.fn [] .int) (withMain I (int 40 3 "1_000_000_000_000_000_000_000")) with
   | .ok p => @BEq.beq Int _ (p.eval ()) 1000000000000000000000

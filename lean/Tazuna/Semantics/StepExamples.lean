@@ -10,11 +10,12 @@ namespace Tazuna.Ir.StepExamples
 open Step
 
 private def I (x : Int) : Int := x
-private def rule (n : String) (b : Bool) : Ty.rules.den0 := [(n, Ty.ofBool b, ())]
+private def rule (n : String) (b : Bool) (h : inDomain n = true := by decide) : Ty.rules.den0 := [(⟨n, h⟩, Ty.ofBool b, ())]
 
 /-- Named rules with one rule. -/
-private def ruleE {Γ : List Ty} (n : String) (b : Expr [] Γ Ty.bool) : Expr [] Γ Ty.rules :=
-  .list (.cons (.tuple (.cons (.str n) (.cons b .nil))) .nil)
+private def ruleE {Γ : List Ty} (n : String) (b : Expr [] Γ Ty.bool) (h : inDomain n = true := by decide) :
+    Expr [] Γ Ty.rules :=
+  .list (.cons (.tuple (.cons (.str ⟨n, h⟩) (.cons b .nil))) .nil)
 private def recordsE {Γ : List Ty} (x : Expr [] Γ (Ty.ctx .int .int .int)) : Expr [] Γ .int :=
   .field (ft := .int) "records" 0 (by simp) x
 private def inputE {Γ : List Ty} (x : Expr [] Γ (Ty.ctx .int .int .int)) : Expr [] Γ .int :=
@@ -48,8 +49,8 @@ private def keptE {Γ : List Ty} {t : Ty} (line : Nat) (body : Expr [] [] t) (ht
 /-- `request_command(external_command("ping"), "hi", fn(answer) { case answer { Ok(_) -> [1]  Error(_) -> [] } })`. -/
 private def pingE {Γ : List Ty} : Expr [] Γ (.dsl .effect [.int]) :=
   .call (.prim .requestCommand [.int, .str, .int, .str] rfl)
-    (.cons (.call (.prim .externalCommand [.str, .int, .str] rfl) (.cons (.str "ping") .nil))
-      (.cons (.str "hi")
+    (.cons (.call (.prim .externalCommand [.str, .int, .str] rfl) (.cons (.str (str! "ping")) .nil))
+      (.cons (.str (str! "hi"))
         (.cons (keptE 1 (.lam (.case (.var .here)
           (.cons (.ctor (vs := [[.int], [.str]]) ⟨0, by decide⟩ (.cons .wild .nil)) (.list (.cons (.int 1) .nil))
             (.cons (.ctor (vs := [[.int], [.str]]) ⟨1, by decide⟩ (.cons .wild .nil)) (.list .nil) .nil)) ⟨4, rfl⟩)))
@@ -68,7 +69,7 @@ def watch : MachineV .int .int :=
 private def addAccepts : Expr [] [] (Ty.fn [.int] Ty.rules) := .lam (ruleE "small" (.bin .lt (.var .here) (.int 100)))
 private def addDecide : Expr [] [] (Ty.fn [Ty.ctx .int .int .int] (Ty.result (.list .int) .str)) :=
   .lam (.call (.prim .require [.list .int, .str] rfl)
-    (.cons (.bin .lt (.int 0) (inputE (.var .here))) (.cons (.str "positive")
+    (.cons (.bin .lt (.int 0) (inputE (.var .here))) (.cons (.str (str! "positive"))
       (.cons (.lam (.ctor (i := 2) (args := [.list .int, .str]) ⟨0, by decide⟩
         (.cons (.list (.cons (inputE (.var .here)) .nil)) .nil))) .nil))))
 private def addEnsures : Expr [] [] (Ty.fn [Ty.ctx .int .int .int, .int] Ty.rules) :=
@@ -81,7 +82,7 @@ def add : CommandV .int .int .int :=
 /-- The command `add` as a spec writes it. -/
 private def addE {Γ : List Ty} : Expr [] Γ (.dsl .command [.int, .int, .int, .int, .str]) :=
   .call (.prim .command [.int, .int, .int, .int, .str] rfl)
-    (.cons (.str "add") (.cons (.list (.cons (.int 1) .nil))
+    (.cons (.str (str! "add")) (.cons (.list (.cons (.int 1) .nil))
       (.cons (keptE 2 addAccepts) (.cons (keptE 3 addDecide) (.cons (keptE 4 addEnsures) .nil)))))
 
 def total : QueryV .int .int :=
@@ -194,8 +195,8 @@ def undeclared : ServiceV := { svc with declared := [("mail", .externalCommand "
 private def rateE {Γ : List Ty} : Expr [] Γ (.dsl .effect [.int]) :=
   .call (.prim .requestQuery [.int, .str, .int] rfl)
     (.cons (.call (.prim .externalQuery [.str, .int] rfl)
-        (.cons (.str "rate") (.cons (keptE 6 (.lam (ruleE "positive" (.bin .lt (.int 0) (.var (.there .here)))))) .nil)))
-      (.cons (.str "eur") (.cons (keptE 7 (.lam (.list (.cons (.var .here) .nil)))) .nil)))
+        (.cons (.str (str! "rate")) (.cons (keptE 6 (.lam (ruleE "positive" (.bin .lt (.int 0) (.var (.there .here)))))) .nil)))
+      (.cons (.str (str! "eur")) (.cons (keptE 7 (.lam (.list (.cons (.var .here) .nil)))) .nil)))
 def asking : ServiceV :=
   { svc with machines := [{ watch with effect := .closed (.lam
       (iteE (.bin (.eq rfl) (mctxE "state" 1 (.var .here)) (.int 5)) (someE rateE) noneE)) }],
@@ -220,7 +221,7 @@ def specWith (xs : List ExternalV) : SpecV := Prim.spec.den [] rfl (([svc] : Lis
 /-- `request_query(external_query("ping", fn(_, _) { [] }), key, fn(_) { [] })`. -/
 private def askKeyE {Γ : List Ty} (key : Expr [] Γ .int) : Expr [] Γ (.dsl .effect [.int]) :=
   .call (.prim .requestQuery [.int, .int, .int] rfl)
-    (.cons (.call (.prim .externalQuery [.int, .int] rfl) (.cons (.str "ping") (.cons (keptE 8 (.lam (.list .nil))) .nil)))
+    (.cons (.call (.prim .externalQuery [.int, .int] rfl) (.cons (.str (str! "ping")) (.cons (keptE 8 (.lam (.list .nil))) .nil)))
       (.cons key (.cons (keptE 9 (.lam (.list .nil))) .nil)))
 def perKey : MachineV (.bag .int) .int :=
   { name := "perKey", key := .int, state := .int, instances := .closed (.lam (.var .here)), initial := (0 : Int),

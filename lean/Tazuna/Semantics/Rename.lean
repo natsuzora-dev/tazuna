@@ -318,7 +318,7 @@ mutual
 /-- A data value as a term, with each fresh id's step counter renamed by `σ`. -/
 def Ty.canonBy (σ : Nat → Nat) : (t : Ty) → t.den0 → Erl
   | .int, n => .int n
-  | .str, s => .bin s
+  | .str, s => .bin s.1
   | .list t, xs => .list (xs.map (Ty.canonBy σ t))
   | .bag t, xs => .list (Erl.sort (xs.map (Ty.canonBy σ t)))
   | .tuple ts, x => .tuple (Ty.canonsBy σ ts x)
@@ -328,7 +328,7 @@ def Ty.canonBy (σ : Nat → Nat) : (t : Ty) → t.den0 → Erl
     .map (ps.map (·.1)) (ps.map (·.2))
   | .date, d => .int d
   | .id, .fresh s i => .tuple [.int (σ s), .int i]
-  | .id, .named s => .bin s
+  | .id, .named s => .bin s.1
   | .dsl .fresh _, n => .int (σ (show Nat from n))
   | .param _, _ | .fn .., _ | .dsl .., _ => .atom ""
 def Ty.canonsBy (σ : Nat → Nat) : (ts : List Ty) → (Ty.semsWith Dsl.base ts).1 → List Erl
@@ -358,10 +358,10 @@ mutual
 theorem Ty.canon_iff : (t : Ty) → t.comparable = true → (x y : t.den0) →
     ((Ty.semWith Dsl.base t).2 x y = true ↔ Ty.canon t x = Ty.canon t y)
   | .int, _, x, y => (beq_iff_eq (α := Int) (a := x) (b := y)).trans ⟨congrArg Erl.int, Erl.int.inj⟩
-  | .str, _, x, y => (beq_iff_eq (α := String) (a := x) (b := y)).trans ⟨congrArg Erl.bin, Erl.bin.inj⟩
+  | .str, _, x, y => (beq_iff_eq (α := Str) (a := x) (b := y)).trans ⟨fun h => h ▸ rfl, fun h => Subtype.ext (Erl.bin.inj h)⟩
   | .date, _, x, y => (beq_iff_eq (α := Int) (a := x) (b := y)).trans ⟨congrArg Erl.int, Erl.int.inj⟩
   | .param _, _, x, y => by simp [Ty.semWith, Ty.canon, Ty.canonBy]
-  | .id, _, x, y => by cases x <;> cases y <;> simp [Ty.semWith, Ty.canon, Ty.canonBy]; omega
+  | .id, _, x, y => by cases x <;> cases y <;> simp [Ty.semWith, Ty.canon, Ty.canonBy, Subtype.ext_iff]; omega
   | .list t, h, xs, ys => by
     show listBeq _ xs ys = true ↔ Erl.list _ = Erl.list _
     rw [Erl.list.injEq]

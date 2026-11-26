@@ -42,13 +42,13 @@ mutual
 theorem decode_isSome_of_relV : (t : Ty) → t.comparable = true → (x : t.den) → (z : Val) → RelV L t x z →
     (decodeV L t z).isSome = true
   | .int, _, _, _, h | .date, _, _, _, h => by cases h; rfl
-  | .str, _, _, _, h => by cases h; rfl
+  | .str, _, x, _, h => by cases h; simp [decodeV, (x : Str).2]; rfl
   | .dsl .fresh _, _, x, _, h => by
     cases h
     have hm : ∀ m : Nat, (if 0 ≤ Int.ofNat m then some (Int.ofNat m).toNat else none).isSome = true := by
       intro m; simp
     exact hm x
-  | .id, _, x, _, ⟨d, n, hf, h⟩ => by cases h; cases x <;> simp [idVal, decodeV, hf, decodeId] <;> rfl
+  | .id, _, x, _, ⟨d, n, hf, h⟩ => by cases h; cases x <;> simp [idVal, decodeV, hf, decodeId, Str.of?_val] <;> rfl
   | .adt 0 _ vs, _, x, _, ⟨e, h⟩ => by
     subst e; cases h
     match x with

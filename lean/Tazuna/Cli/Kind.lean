@@ -57,8 +57,6 @@ inductive Tazuna.UndecidedKind : Type
   larger than prove runs or a comparison of the functions its two orders keep, or verify, or test replaying a
   scenario's trace, ran out of tries to bind the trace's names to the spec's ids. -/
   | limit
-  /-- A string literal holds a code point above U+2FFFF, outside SMT-LIB's strings. -/
-  | unencodableString
   /-- Two own steps whose orders the solver found different, with each step keeping the ids it made, end the same
   once those ids are renamed, as the oracle names ids by first appearance. The two orders are shown. -/
   | upToRenaming
@@ -199,7 +197,7 @@ def GenerateKind.name : GenerateKind → String
   | .reached => "reached"
   | .unreached => "unreached"
 
-def UndecidedKind.all : List UndecidedKind := [.unknown, .timeout, .limit, .unencodableString, .upToRenaming]
+def UndecidedKind.all : List UndecidedKind := [.unknown, .timeout, .limit, .upToRenaming]
 
 theorem UndecidedKind.mem_all (k : UndecidedKind) : k ∈ UndecidedKind.all := by cases k <;> simp [UndecidedKind.all]
 
@@ -207,7 +205,6 @@ def UndecidedKind.name : UndecidedKind → String
   | .unknown => "unknown"
   | .timeout => "timeout"
   | .limit => "limit"
-  | .unencodableString => "unencodableString"
   | .upToRenaming => "upToRenaming"
 
 namespace Kind
@@ -248,11 +245,10 @@ theorem mem_all (k : Kind) : k ∈ all := by
   | _ => simp [all]
 
 /-- Whether test/e2e has a case of the kind. A Restricted kind has its unit test in gleam/test/convert_test.gleam
-instead, one per kind of the launcher's generated table; a converter bug has no input that reaches it, a solver
-past the wall clock none that reaches it on every machine, and a string literal above U+2FFFF is
-`Restricted.highCodePoint` before any encoder sees it. -/
+instead, one per kind of the launcher's generated table; a converter bug has no input that reaches it, and a solver
+past the wall clock none that reaches it on every machine. -/
 def e2e : Kind → Bool
-  | restricted _ | internal .convert | internal .engine | undecided .timeout | undecided .unencodableString => false
+  | restricted _ | internal .convert | internal .engine | undecided .timeout => false
   | internal .invalidIr | usage _ | illegal _ | checkPassed | fault _ | test _ | verifyPassed | verifyDiffers | traceInvalid | prove _
   | generate _ | undecided .unknown | undecided .limit | undecided .upToRenaming
   | explain => true

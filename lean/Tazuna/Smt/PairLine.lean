@@ -33,13 +33,13 @@ mutual
 /-- A value that codes data has its type's sort. -/
 theorem sorted_of_relD : (t : Ty) → (x : t.den0) → (z : Val) → RelD L t x z → Sorted L t z
   | .int, x, _, h | .date, x, _, h => ⟨x, h⟩
-  | .str, x, _, h => ⟨x, h⟩
+  | .str, x, _, h => ⟨(x : Str).1, (x : Str).2, h⟩
   | .dsl .fresh _, x, _, h => ⟨_, h⟩
   | .id, x, _, ⟨d, n, hf, h⟩ => by
     subst h
     cases x with
     | fresh s i => exact ⟨d, n, hf, .inl ⟨s, i, rfl⟩⟩
-    | named s => exact ⟨d, n, hf, .inr ⟨s, rfl⟩⟩
+    | named s => exact ⟨d, n, hf, .inr ⟨s.1, s.2, rfl⟩⟩
   | .adt 0 _ vs, _, _, ⟨h, hz⟩ => ⟨h, _, hz⟩
   | .adt (i + 1) a vs, x, z, ⟨d, n, hf, h⟩ => ⟨d, n, hf, sortedAlts_of_relD d 0 vs x z h⟩
   | .tuple ts, x, z, ⟨d, n, vals, hf, hz, h⟩ => ⟨d, n, vals, hf, hz, sortedVs_of_relDs ts x vals h⟩

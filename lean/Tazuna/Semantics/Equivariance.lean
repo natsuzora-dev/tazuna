@@ -299,7 +299,7 @@ theorem Self.queries_of {r c : Ty} {ds : List DeclaredV} (h : ∀ d ∈ ds, d = 
 theorem Prim.den_rel (p : Prim) (args : List Ty) (h : p.ok args = true) :
     Ty.relV R (p.ty.inst args) (p.den args h) (p.den args h) := by
   cases p with
-  | length => rintro ⟨s, ⟨⟩⟩ ⟨s', ⟨⟩⟩ ⟨hs, -⟩; exact congrArg Gleam.length hs
+  | length => rintro ⟨s, ⟨⟩⟩ ⟨s', ⟨⟩⟩ ⟨hs, -⟩; exact congrArg (Gleam.length ∘ Subtype.val) hs
   | bagFromList => rintro ⟨xs, ⟨⟩⟩ ⟨ys, ⟨⟩⟩ ⟨hxs, -⟩; exact Multi.of_forall2 hxs
   | bagInsert => rintro ⟨xs, x, ⟨⟩⟩ ⟨ys, y, ⟨⟩⟩ ⟨hxs, hx, -⟩; exact Multi.cons hx hxs
   | bagSize => rintro ⟨xs, ⟨⟩⟩ ⟨ys, ⟨⟩⟩ ⟨hxs, -⟩; exact congrArg (fun n : Nat => (n : Int)) hxs.length_eq
@@ -416,7 +416,7 @@ theorem Prim.den_rel (p : Prim) (args : List Ty) (h : p.ok args = true) :
     exact .inr ⟨s, s', i, hs, rfl, rfl⟩
   | command =>
     rintro ⟨n, cl, acc, dec, ens, ⟨⟩⟩ ⟨n', cl', acc', dec', ens', ⟨⟩⟩ ⟨hn, hcl, hacc, hdec, hens, -⟩
-    refine ⟨hn, fun he => ?_⟩
+    refine ⟨congrArg Subtype.val hn, fun he => ?_⟩
     simp only [Prim.den] at he
     obtain ⟨-, -, -, hcl', hacc', hdec', hens'⟩ := CommandV.mk.inj (congrArg Subtype.val he)
     dsimp only at hcl' hacc' hdec' hens'
@@ -425,7 +425,7 @@ theorem Prim.den_rel (p : Prim) (args : List Ty) (h : p.ok args = true) :
     exact ⟨(congrArg (Ty.rel0 R _ _) hcl').mpr hc, hacc, hdec, hens⟩
   | query =>
     rintro ⟨n, cl, acc, res, ⟨⟩⟩ ⟨n', cl', acc', res', ⟨⟩⟩ ⟨hn, hcl, hacc, hres, -⟩
-    refine ⟨hn, fun he => ?_⟩
+    refine ⟨congrArg Subtype.val hn, fun he => ?_⟩
     simp only [Prim.den] at he
     obtain ⟨-, -, -, hcl', hacc', hres'⟩ := QueryV.mk.inj (congrArg Subtype.val he)
     dsimp only at hcl' hacc' hres'
@@ -435,7 +435,7 @@ theorem Prim.den_rel (p : Prim) (args : List Ty) (h : p.ok args = true) :
   | machine =>
     rintro ⟨n, ins, ini, on, aft, eff, inv, ⟨⟩⟩ ⟨n', ins', ini', on', aft', eff', inv', ⟨⟩⟩
       ⟨hn, hins, hini, hon, haft, heff, hinv, -⟩
-    refine ⟨hn, fun he => ?_⟩
+    refine ⟨congrArg Subtype.val hn, fun he => ?_⟩
     simp only [Prim.den] at he
     obtain ⟨-, -, -, hins', hini', hon', haft', heff', hinv'⟩ := MachineV.mk.inj he
     cases eq_of_heq hins'; cases eq_of_heq hon'; cases eq_of_heq haft'; cases eq_of_heq heff'; cases eq_of_heq hinv'
@@ -443,7 +443,7 @@ theorem Prim.den_rel (p : Prim) (args : List Ty) (h : p.ok args = true) :
     exact ⟨hins, hon, haft, (congrArg (Ty.rel0 R _ _) (eq_of_heq hini')).mpr hi, heff rfl, hinv⟩
   | reaction =>
     rintro ⟨n, x, ⟨⟩⟩ ⟨n', x', ⟨⟩⟩ ⟨hn, hx, -⟩
-    refine ⟨hn, fun h => ?_⟩
+    refine ⟨congrArg Subtype.val hn, fun h => ?_⟩
     simp only [Prim.den] at h
     obtain ⟨-, hx'⟩ := ReactionV.mk.inj h
     exact hx hx'
@@ -486,9 +486,9 @@ theorem Prim.den_rel (p : Prim) (args : List Ty) (h : p.ok args = true) :
     obtain ⟨-, -, -, hw'⟩ := SubscriptionV.mk.inj h
     cases eq_of_heq hw'
     exact hw
-  | externalCommand => rintro ⟨n, _⟩ ⟨n', _⟩ ⟨hn, -⟩; exact hn
-  | externalQuery => rintro ⟨n, f, _⟩ ⟨n', f', _⟩ ⟨hn, hf, -⟩; exact ⟨hn, hf⟩
-  | source => rintro ⟨n, _⟩ ⟨n', _⟩ ⟨hn, -⟩; exact hn
+  | externalCommand => rintro ⟨n, _⟩ ⟨n', _⟩ ⟨hn, -⟩; exact congrArg Subtype.val hn
+  | externalQuery => rintro ⟨n, f, _⟩ ⟨n', f', _⟩ ⟨hn, hf, -⟩; exact ⟨congrArg Subtype.val hn, hf⟩
+  | source => rintro ⟨n, _⟩ ⟨n', _⟩ ⟨hn, -⟩; exact congrArg Subtype.val hn
   | requestCommand =>
     rintro ⟨n, x, f, ⟨⟩⟩ ⟨n', x', f', ⟨⟩⟩ ⟨hn, hx, hf, -⟩
     obtain rfl : n = n' := hn

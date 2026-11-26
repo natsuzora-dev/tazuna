@@ -20,7 +20,7 @@ text, and this check covers what only the solver can say, that it reads the text
 reader reads. Each case encodes a closed expression, asks the solver for a variable equal to it, and compares the
 value, decoded, with `eval`. Usage: smt-check <z3 executable>. -/
 
-open Tazuna.Ir Tazuna.Smt
+open Tazuna Tazuna.Ir Tazuna.Smt
 
 /-- The cases read slots by `S[j]!`, which a case's layout always has. -/
 instance {w : Nat} : Inhabited (SlotItems w) := ⟨⟨List.replicate w tt, by simp⟩⟩
@@ -45,7 +45,7 @@ def guarded (o : E optI) : E .int :=
     ⟨10, rfl⟩
 
 def circle : E shape := .ctor ⟨1, by decide⟩ (.cons (.int 7) .nil)
-def square : E shape := .ctor ⟨0, by decide⟩ (.cons (.int 3) (.cons (.str "sq") .nil))
+def square : E shape := .ctor ⟨0, by decide⟩ (.cons (.int 3) (.cons (.str (str! "sq")) .nil))
 
 /-- `bag.from_list([1, 2, 2])` -/
 def b3 : E (.bag .int) :=
@@ -70,12 +70,12 @@ def bagOf (xs : List Int) : E (.bag .int) :=
   .call (.prim .bagFromList [.int] rfl) (.cons (.list (xs.foldr (fun x r => .cons (.int x) r) .nil)) .nil)
 def isTwo : Expr [] [.int] Ty.bool := .bin (.eq rfl) (.var .here) (.int 2)
 def bigger : Expr [] [.int] Ty.bool := .bin .gt (.var .here) (.int 1)
-/-- `table.from_list([#(1, "a"), #(1, "c")])`: the last pair for key 1 wins. -/
+/-- `table.from_list([#(1, str! "a"), #(1, str! "c")])`: the last pair for key 1 wins. -/
 def t2 : E (.table .int .str) :=
-  let pair (k : Int) (v : String) : Expr [] [] (.tuple [.int, .str]) := .tuple (.cons (.int k) (.cons (.str v) .nil))
+  let pair (k : Int) (v : Str) : Expr [] [] (.tuple [.int, .str]) := .tuple (.cons (.int k) (.cons (.str v) .nil))
   .call (.prim .tableFromList [.int, .str] rfl)
-    (.cons (.list (.cons (pair 1 "a") (.cons (pair 1 "c") .nil))) .nil)
-def tableAnyV (t : E (.table .int .str)) (v : String) : E Ty.bool :=
+    (.cons (.list (.cons (pair 1 (str! "a")) (.cons (pair 1 (str! "c")) .nil))) .nil)
+def tableAnyV (t : E (.table .int .str)) (v : Str) : E Ty.bool :=
   .call (.prim .tableAny [.int, .str] rfl)
     (.cons t (.cons (.lam (.bin (.eq rfl) (.var (.there .here)) (.str v))) .nil))
 def tableSize (t : E (.table .int .str)) : E .int := .call (.prim .tableSize [.int, .str] rfl) (.cons t .nil)
@@ -85,7 +85,7 @@ the terms would grow about seventyfold per insert; shared, the script grows by o
 def inserts : Nat → E (.table .int .str)
   | 0 => .call (.prim .tableNew [.int, .str] rfl) .nil
   | n + 1 => .call (.prim .tableInsert [.int, .str] rfl)
-    (.cons (inserts n) (.cons (.int (n % 3)) (.cons (.str s!"v{n}") .nil)))
+    (.cons (inserts n) (.cons (.int (n % 3)) (.cons (.str (Str.of? s!"v{n}").get!) .nil)))
 /-- `let x = 1; let x = x + x; ...`, `n` times: a tree of `2 ^ n` leaves, a script of `n` definitions. -/
 def doubling : Nat → (Γ : List Ty) → Expr [] Γ .int
   | 0, _ => .int 1
@@ -96,19 +96,19 @@ def tableValues (t : E (.table .int .str)) : E (.bag .str) := .call (.prim .tabl
 /-- `table.map(t, fn(k, v) { v <> "!" })` -/
 def tableBang (t : E (.table .int .str)) : E (.table .int .str) :=
   .call (.prim .tableMap [.int, .str, .str] rfl)
-    (.cons t (.cons (.lam (.bin .concat (.var (.there .here)) (.str "!"))) .nil))
+    (.cons t (.cons (.lam (.bin .concat (.var (.there .here)) (.str (str! "!")))) .nil))
 /-- `bag.from_list([1, 5])` -/
 def b2 : E (.bag .int) :=
   .call (.prim .bagFromList [.int] rfl) (.cons (.list (.cons (.int 1) (.cons (.int 5) .nil))) .nil)
 
-def tableOf (kvs : List (Int × String)) : E (.table .int .str) :=
-  let pair (k : Int) (v : String) : Expr [] [] (.tuple [.int, .str]) := .tuple (.cons (.int k) (.cons (.str v) .nil))
+def tableOf (kvs : List (Int × Str)) : E (.table .int .str) :=
+  let pair (k : Int) (v : Str) : Expr [] [] (.tuple [.int, .str]) := .tuple (.cons (.int k) (.cons (.str v) .nil))
   .call (.prim .tableFromList [.int, .str] rfl) (.cons (.list (kvs.foldr (fun (k, v) r => .cons (pair k v) r) .nil)) .nil)
 def tableGet (t : E (.table .int .str)) (k : Int) : E (Ty.option .str) :=
   .call (.prim .tableGet [.int, .str] rfl) (.cons t (.cons (.int k) .nil))
 /-- `use v <- ref(t, k, "no")` continuing with `Ok(v)`. -/
 def refOk (t : E (.table .int .str)) (k : Int) : E (Ty.result .str .str) :=
-  .call (.prim .tableLookup [.int, .str, .str, .str] rfl) (.cons t (.cons (.int k) (.cons (.str "no")
+  .call (.prim .tableLookup [.int, .str, .str, .str] rfl) (.cons t (.cons (.int k) (.cons (.str (str! "no"))
     (.cons (.lam (.ctor (vs := [[.str], [.str]]) ⟨0, by decide⟩ (.cons (.var .here) .nil))) .nil))))
 
 /-- `case o { Some(x) -> [x, x + 1]  None -> [] }`: branches of different lengths share the list's two slots. -/
@@ -125,12 +125,12 @@ def okList (o : E optI) : E (Ty.result (.list .int) .str) :=
 
 /-- `table.from_list` of pairs a case chooses, so free slots of the list are skipped. -/
 def tableOfCase (o : E optI) : E (.table .int .str) :=
-  let pair (k : Int) (v : String) : Expr [] [] (.tuple [.int, .str]) := .tuple (.cons (.int k) (.cons (.str v) .nil))
+  let pair (k : Int) (v : Str) : Expr [] [] (.tuple [.int, .str]) := .tuple (.cons (.int k) (.cons (.str v) .nil))
   .call (.prim .tableFromList [.int, .str] rfl)
     (.cons (.case o
       (.cons (.ctor (vs := [[.int], []]) ⟨0, by decide⟩ (.cons .wild .nil))
-        (.list (.cons (pair 1 "a") (.cons (pair 2 "b") (.cons (pair 1 "c") .nil))))
-        (.cons (.ctor (vs := [[.int], []]) ⟨1, by decide⟩ .nil) (.list (.cons (pair 4 "d") .nil)) .nil))
+        (.list (.cons (pair 1 (str! "a")) (.cons (pair 2 (str! "b")) (.cons (pair 1 (str! "c")) .nil))))
+        (.cons (.ctor (vs := [[.int], []]) ⟨1, by decide⟩ .nil) (.list (.cons (pair 4 (str! "d")) .nil)) .nil))
       ⟨10, rfl⟩) .nil)
 
 /-- A record holding a table and an Int. -/
@@ -142,12 +142,12 @@ def noBag : E (Ty.option (.bag .int)) := .ctor (vs := [[.bag .int], []]) ⟨1, b
 /-- `==` through the fields of records, Options and tuples that hold tables and bags: the slots of two equal values
 may hold their entries in another order. -/
 def eqCases : List (String × (t : Ty) × E t) :=
-  [ ("== on records ignores table order", ⟨Ty.bool, .bin (.eq rfl) (recOf (tableOf [(1, "a"), (2, "b")]) 3)
-      (recOf (tableOf [(2, "b"), (1, "a")]) 3)⟩),
-    ("== on records compares table values", ⟨Ty.bool, .bin (.eq rfl) (recOf (tableOf [(1, "a"), (2, "b")]) 3)
-      (recOf (tableOf [(2, "c"), (1, "a")]) 3)⟩),
-    ("== on records compares other fields", ⟨Ty.bool, .bin (.eq rfl) (recOf (tableOf [(1, "a")]) 3)
-      (recOf (tableOf [(1, "a")]) 4)⟩),
+  [ ("== on records ignores table order", ⟨Ty.bool, .bin (.eq rfl) (recOf (tableOf [(1, str! "a"), (2, str! "b")]) 3)
+      (recOf (tableOf [(2, str! "b"), (1, str! "a")]) 3)⟩),
+    ("== on records compares table values", ⟨Ty.bool, .bin (.eq rfl) (recOf (tableOf [(1, str! "a"), (2, str! "b")]) 3)
+      (recOf (tableOf [(2, str! "c"), (1, str! "a")]) 3)⟩),
+    ("== on records compares other fields", ⟨Ty.bool, .bin (.eq rfl) (recOf (tableOf [(1, str! "a")]) 3)
+      (recOf (tableOf [(1, str! "a")]) 4)⟩),
     ("== on Options of bags ignores order", ⟨Ty.bool, .bin (.eq rfl) (someBag b3) (someBag (bagOf [2, 1, 2]))⟩),
     ("!= on Options of bags across variants", ⟨Ty.bool, .bin (.ne rfl) (someBag b3) noBag⟩),
     ("== on None of bags", ⟨Ty.bool, .bin (.eq rfl) noBag noBag⟩),
@@ -176,8 +176,8 @@ def cases : List (String × (t : Ty) × E t) :=
     ("negation", ⟨.int, .neg (.bin .mul (.int 3) (.int 4))⟩),
     ("let", ⟨.int, .let_ (.int 5) (.bin .add (.var .here) (.var .here))⟩),
     ("comparison", ⟨Ty.bool, .bin .and (.bin .lt (.int 1) (.int 2)) (.not (.bin .ge (.int 1) (.int 2)))⟩),
-    ("string escapes", ⟨.str, .bin .concat (.str "quote \" backslash \\ ") (.str "tab\tnewline\né 😀")⟩),
-    ("string equality", ⟨Ty.bool, .bin (.ne rfl) (.str "a") (.str "b")⟩),
+    ("string escapes", ⟨.str, .bin .concat (.str (str! "quote \" backslash \\ ")) (.str (str! "tab\tnewline\né 😀"))⟩),
+    ("string equality", ⟨Ty.bool, .bin (.ne rfl) (.str (str! "a")) (.str (str! "b"))⟩),
     ("Bool literal", ⟨Ty.bool, .bin .or (.not tru) tru⟩),
     ("Option constructor", ⟨optI, some5⟩),
     ("== on Options", ⟨Ty.bool, .bin (.eq rfl) some5 none'⟩),
@@ -185,18 +185,18 @@ def cases : List (String × (t : Ty) × E t) :=
     ("guard not taken", ⟨.int, guarded (.ctor (vs := [[.int], []]) ⟨0, by decide⟩ (.cons (.int 2) .nil))⟩),
     ("no clause binds", ⟨.int, guarded none'⟩),
     ("shared field of another variant", ⟨.int, .field "id" 0 (fun fs h => by simp at h; rcases h with rfl | rfl <;> rfl) circle⟩),
-    ("tuple index", ⟨.str, .index (.tuple (.cons (.int 1) (.cons (.str "a") .nil))) ⟨1, by decide⟩⟩),
+    ("tuple index", ⟨.str, .index (.tuple (.cons (.int 1) (.cons (.str (str! "a")) .nil))) ⟨1, by decide⟩⟩),
     ("tuple value", ⟨.tuple [.int, Ty.bool], .tuple (.cons (.int 1) (.cons tru .nil))⟩),
     ("record update", ⟨.adt 9 [] [[.int, .str]],
-      .update (.ctor ⟨0, by decide⟩ (.cons (.int 1) (.cons (.str "a") .nil))) (.keep (.set (.str "b") .nil))⟩),
+      .update (.ctor ⟨0, by decide⟩ (.cons (.int 1) (.cons (.str (str! "a")) .nil))) (.keep (.set (.str (str! "b")) .nil))⟩),
     ("lambda call", ⟨.int, .call (.lam (.bin .add (.var .here) (.var (.there .here)))) (.cons (.int 2) (.cons (.int 40) .nil))⟩),
     ("case on a record", ⟨.str, .case square
       (.cons (.ctor (vs := [[.int, .str], [.int]]) ⟨0, by decide⟩ (.cons .wild (.cons .bind .nil))) (.var .here)
-        (.cons (.ctor (vs := [[.int, .str], [.int]]) ⟨1, by decide⟩ (.cons .wild .nil)) (.str "circle") .nil))
+        (.cons (.ctor (vs := [[.int, .str], [.int]]) ⟨1, by decide⟩ (.cons .wild .nil)) (.str (str! "circle")) .nil))
       ⟨10, rfl⟩⟩),
-    ("length counts code points", ⟨.int, .call (.prim .length [] rfl) (.cons (.str "e\u0301😀a") .nil)⟩),
+    ("length counts code points", ⟨.int, .call (.prim .length [] rfl) (.cons (.str (str! "e\u0301😀a")) .nil)⟩),
     ("require rejects", ⟨Ty.result .int .str, .call (.prim .require [.int, .str] rfl)
-      (.cons (.bin .lt (.int 2) (.int 1)) (.cons (.str "no")
+      (.cons (.bin .lt (.int 2) (.int 1)) (.cons (.str (str! "no"))
         (.cons (.lam (.ctor (vs := [[.int], [.str]]) ⟨0, by decide⟩ (.cons (.int 1) .nil))) .nil)))⟩),
     ("bag size counts occurrences", ⟨.int, .call (.prim .bagSize [.int] rfl) (.cons b3 .nil)⟩),
     ("bag count", ⟨.int, bagOp .bagCount .int rfl rfl b3 isTwo⟩),
@@ -214,28 +214,28 @@ def cases : List (String × (t : Ty) × E t) :=
       (.not (.call (.prim .bagContains [.int] rfl) (.cons b3 (.cons (.int 5) .nil))))⟩),
     ("bag all", ⟨Ty.bool, bagOp .bagAll Ty.bool rfl rfl b3 bigger⟩),
     ("table from list replaces a key", ⟨.int, tableSize t2⟩),
-    ("table keeps the last value", ⟨Ty.bool, .bin .and (tableAnyV t2 "c") (.not (tableAnyV t2 "a"))⟩),
+    ("table keeps the last value", ⟨Ty.bool, .bin .and (tableAnyV t2 (str! "c")) (.not (tableAnyV t2 (str! "a")))⟩),
     ("table remove", ⟨.int, tableSize (.call (.prim .tableRemove [.int, .str] rfl) (.cons t2 (.cons (.int 1) .nil)))⟩),
     ("table insert into new", ⟨.int, tableSize (.call (.prim .tableInsert [.int, .str] rfl)
-      (.cons (.call (.prim .tableNew [.int, .str] rfl) .nil) (.cons (.int 5) (.cons (.str "x") .nil))))⟩),
+      (.cons (.call (.prim .tableNew [.int, .str] rfl) .nil) (.cons (.int 5) (.cons (.str (str! "x")) .nil))))⟩),
     ("table keys", ⟨Ty.bool, .bin .and (bagContains .int rfl (tableKeys t2) (.int 1)) (.bin (.eq rfl) (bagSize .int rfl (tableKeys t2)) (.int 1))⟩),
-    ("table values", ⟨Ty.bool, .bin .and (bagContains .str rfl (tableValues t2) (.str "c")) (.not (bagContains .str rfl (tableValues t2) (.str "a")))⟩),
+    ("table values", ⟨Ty.bool, .bin .and (bagContains .str rfl (tableValues t2) (.str (str! "c"))) (.not (bagContains .str rfl (tableValues t2) (.str (str! "a"))))⟩),
     ("table map keeps keys", ⟨Ty.option .str, tableGet (tableBang t2) 1⟩),
     ("== on bags ignores order", ⟨Ty.bool, .bin (.eq rfl) b3 (bagOf [2, 1, 2])⟩),
     ("== on bags counts occurrences", ⟨Ty.bool, .bin (.eq rfl) b3 (bagOf [1, 1, 2])⟩),
     ("!= on bags of other sizes", ⟨Ty.bool, .bin (.ne rfl) b3 (bagOf [1, 2])⟩),
     ("bag map equals its image", ⟨Ty.bool, .bin (.eq rfl) (bagMap b3 .int rfl (.bin .mul (.var .here) (.int 10))) (bagOf [20, 10, 20])⟩),
-    ("== on tables", ⟨Ty.bool, .bin (.eq rfl) t2 (tableOf [(1, "c")])⟩),
-    ("== on tables compares values", ⟨Ty.bool, .bin (.eq rfl) t2 (tableOf [(1, "a")])⟩),
-    ("!= on tables of other sizes", ⟨Ty.bool, .bin (.ne rfl) t2 (tableOf [(1, "c"), (2, "d")])⟩),
+    ("== on tables", ⟨Ty.bool, .bin (.eq rfl) t2 (tableOf [(1, str! "c")])⟩),
+    ("== on tables compares values", ⟨Ty.bool, .bin (.eq rfl) t2 (tableOf [(1, str! "a")])⟩),
+    ("!= on tables of other sizes", ⟨Ty.bool, .bin (.ne rfl) t2 (tableOf [(1, str! "c"), (2, str! "d")])⟩),
     ("table get finds the key", ⟨Ty.option .str, tableGet t2 1⟩),
     ("table get misses a key", ⟨Ty.option .str, tableGet t2 5⟩),
     ("ref continues with the value", ⟨Ty.result .str .str, refOk t2 1⟩),
     ("ref rejects a missing key", ⟨Ty.result .str .str, refOk t2 5⟩),
-    ("twelve inserts share their tables", ⟨Ty.bool, tableAnyV (inserts 12) "v11"⟩),
+    ("twelve inserts share their tables", ⟨Ty.bool, tableAnyV (inserts 12) (str! "v11")⟩),
     ("forty lets share their values", ⟨.int, doubling 40 []⟩),
     ("require passes", ⟨Ty.result .int .str, .call (.prim .require [.int, .str] rfl)
-      (.cons (.bin .lt (.int 1) (.int 2)) (.cons (.str "no")
+      (.cons (.bin .lt (.int 1) (.int 2)) (.cons (.str (str! "no"))
         (.cons (.lam (.ctor (vs := [[.int], [.str]]) ⟨0, by decide⟩ (.cons (.int 1) .nil))) .nil)))⟩) ]
 
 /-- Slot counts that differ by item type, so maps and keys carry slots into a collection of another count: bags of
@@ -248,7 +248,7 @@ def reslots : Ty → Nat
 def reslotted : List (String × (t : Ty) × E t) :=
   [ ("map into fewer slots", ⟨.int, bagSize Ty.bool rfl (bagMap b2 Ty.bool rfl (.bin .gt (.var .here) (.int 1)))⟩),
     ("map into fewer slots keeps items", ⟨Ty.bool, bagContains Ty.bool rfl (bagMap b2 Ty.bool rfl (.bin .gt (.var .here) (.int 1))) tru⟩),
-    ("values into more slots", ⟨Ty.bool, bagContains .str rfl (tableValues t2) (.str "c")⟩) ]
+    ("values into more slots", ⟨Ty.bool, bagContains .str rfl (tableValues t2) (.str (str! "c"))⟩) ]
 
 /-- Mapped items that outgrow the two slots of a bag of Bool. -/
 def reslotOverflows : List (String × (t : Ty) × E t) :=
@@ -259,7 +259,7 @@ def overflows : List (String × (t : Ty) × E t) :=
   [ ("bag insert past the slots", ⟨.int, .call (.prim .bagSize [.int] rfl)
       (.cons (.call (.prim .bagInsert [.int] rfl) (.cons b3 (.cons (.int 7) .nil))) .nil)⟩),
     ("table insert past the slots", ⟨.int, tableSize (.call (.prim .tableInsert [.int, .str] rfl)
-      (.cons t2 (.cons (.int 3) (.cons (.str "d") .nil))))⟩) ]
+      (.cons t2 (.cons (.int 3) (.cons (.str (str! "d")) .nil))))⟩) ]
 
 def dt : Script :=
   { datatypes := [Datatype.mk [[.int, .str], []], Datatype.mk [[.dt 0]]], vars := [.dt 1, .dt 0],
@@ -352,7 +352,7 @@ def answerAt {v : ServiceV} {shs : List (PendingShape v.event)} (k j : Nat) (to 
   else throw s!"no pending shape {k}"
 
 def acceptsE : E (.fn [.int] Ty.rules) :=
-  .lam (.list (.cons (.tuple (.cons (.str "positive") (.cons (.bin .gt (.var .here) (.int 0)) .nil))) .nil))
+  .lam (.list (.cons (.tuple (.cons (.str (str! "positive")) (.cons (.bin .gt (.var .here) (.int 0)) .nil))) .nil))
 
 def resolveE : E (.fn [qctxT] (Ty.option .int)) :=
   .lam (.call (.prim .tableGet [.int, .int] rfl)
@@ -360,7 +360,7 @@ def resolveE : E (.fn [qctxT] (Ty.option .int)) :=
       (.cons (.field (ft := .int) "input" 1 (by simp) (.var .here)) .nil)))
 
 def getQ : QueryV recordsT .str :=
-  { name := "get", input := .int, output := Ty.option .int, callers := ["alice"],
+  { name := "get", input := .int, output := Ty.option .int, callers := [str! "alice"],
     accepts := .closed acceptsE, resolve := .closed resolveE }
 
 def querySvc : ServiceV :=
@@ -464,7 +464,7 @@ def applyE : E (.fn [recordsT, evT] recordsT) :=
       (.cons (.index (ts := [.int, .int]) (.var (.there .here)) ⟨1, by decide⟩) .nil))))
 
 def invariantsE : E (.fn [recordsT] Ty.rules) :=
-  .lam (.list (.cons (.tuple (.cons (.str "small")
+  .lam (.list (.cons (.tuple (.cons (.str (str! "small"))
     (.cons (.bin .lt (.call (.prim .tableSize [.int, .int] rfl) (.cons (.var .here) .nil)) (.int 3)) .nil))) .nil))
 
 def eventSvc : ServiceV :=
@@ -558,7 +558,7 @@ def evOnE : Expr [] [] (.fn [evCtxT, evT] (Ty.next .int)) :=
 
 def evInvE : Expr [] [] (.fn [evCtxT] Ty.rules) :=
   let st : Expr [] [evCtxT] .int := .field (ft := .int) "state" 1 (by simp) (.var .here)
-  .lam (.list (.cons (.tuple (.cons (.str "calm") (.cons (.bin .lt st (.int 1)) .nil))) .nil))
+  .lam (.list (.cons (.tuple (.cons (.str (str! "calm")) (.cons (.bin .lt st (.int 1)) .nil))) .nil))
 
 def evM : MachineV recordsT evT :=
   { name := "calm", key := .int, state := .int,
@@ -732,7 +732,7 @@ def boolCase {Γ : List Ty} {r : Ty} (c : Expr [] Γ Ty.bool) (yes no : Expr [] 
 def decideE : E (.fn [cctxT] (Ty.result (.list evT) .str)) :=
   let pair (k : Expr [] [cctxT] .int) (v : Int) : Expr [] [cctxT] evT := .tuple (.cons k (.cons (.int v) .nil))
   .lam (boolCase (.bin .gt inputOf (.int 10))
-    (.ctor (vs := [[.list evT], [.str]]) ⟨1, by decide⟩ (.cons (.str "big") .nil))
+    (.ctor (vs := [[.list evT], [.str]]) ⟨1, by decide⟩ (.cons (.str (str! "big")) .nil))
     (boolCase (.bin (.eq rfl) inputOf (.int 7))
       (.ctor (vs := [[.list evT], [.str]]) ⟨0, by decide⟩ (.cons (.list .nil) .nil))
       (.ctor (vs := [[.list evT], [.str]]) ⟨0, by decide⟩
@@ -741,12 +741,12 @@ def decideE : E (.fn [cctxT] (Ty.result (.list evT) .str)) :=
 def ensuresE : E (.fn [cctxT, recordsT] Ty.rules) :=
   let size {Γ : List Ty} (t : Expr [] Γ recordsT) : Expr [] Γ .int :=
     .call (.prim .tableSize [.int, .int] rfl) (.cons t .nil)
-  .lam (.list (.cons (.tuple (.cons (.str "grows")
+  .lam (.list (.cons (.tuple (.cons (.str (str! "grows"))
     (.cons (.bin .gt (size (.var (.there .here))) (size (.field (ft := recordsT) "records" 0 (by simp) (.var .here))))
       .nil))) .nil))
 
 def putC : CommandV recordsT evT .str :=
-  { name := "put", input := .int, rejection := .str, callers := ["alice"],
+  { name := "put", input := .int, rejection := .str, callers := [str! "alice"],
     accepts := .closed acceptsE, decide := .closed decideE,
     ensures := .closed ensuresE }
 
@@ -835,7 +835,7 @@ def rateAnswerE : Expr [] [.int] (.fn [.int] (.list .int)) :=
   .lam (.list (.cons (.bin .add (.var .here) (.var (.there .here))) .nil))
 
 def rateEnsuresE : Expr [] [] (.fn [.str, .int] Ty.rules) :=
-  .lam (.list (.cons (.tuple (.cons (.str "positive") (.cons (.bin .lt (.int 0) (.var (.there .here))) .nil))) .nil))
+  .lam (.list (.cons (.tuple (.cons (.str (str! "positive")) (.cons (.bin .lt (.int 0) (.var (.there .here))) .nil))) .nil))
 
 def insertE : E (.fn [recordsT, .int] recordsT) :=
   .lam (.call (.prim .tableInsert [.int, .int] rfl)
@@ -1050,16 +1050,16 @@ structure OrdCase where
 
 def ordCases : List OrdCase :=
   [⟨"Int", .int, rfl, [((1 : Int), (2 : Int)), ((2 : Int), (1 : Int)), ((-3 : Int), (-3 : Int))]⟩,
-   ⟨"String", .str, rfl, [("a", "b"), ("b", "a"), ("ab", "a"), ("z", "\u00e9"), ("x", "x")]⟩,
+   ⟨"String", .str, rfl, [(str! "a", str! "b"), (str! "b", str! "a"), (str! "ab", str! "a"), (str! "z", str! "\u00e9"), (str! "x", str! "x")]⟩,
    ⟨"Id", .id, rfl, [(IdV.fresh 3 0, IdV.fresh 4 0), (IdV.fresh 2 5, IdV.fresh 3 0), (IdV.fresh 3 1, IdV.fresh 3 (-1)),
-     (IdV.fresh 9 2, IdV.named "a"), (IdV.named "a", IdV.fresh 1 0), (IdV.named "b", IdV.named "a")]⟩,
-   ⟨"#(Int, String)", .tuple [.int, .str], rfl, [(((1 : Int), "b", ()), ((1 : Int), "a", ())),
-     (((0 : Int), "z", ()), ((1 : Int), "a", ())), (((2 : Int), "a", ()), ((2 : Int), "a", ()))]⟩,
+     (IdV.fresh 9 2, IdV.named (str! "a")), (IdV.named (str! "a"), IdV.fresh 1 0), (IdV.named (str! "b"), IdV.named (str! "a"))]⟩,
+   ⟨"#(Int, String)", .tuple [.int, .str], rfl, [(((1 : Int), str! "b", ()), ((1 : Int), str! "a", ())),
+     (((0 : Int), str! "z", ()), ((1 : Int), str! "a", ())), (((2 : Int), str! "a", ()), ((2 : Int), str! "a", ()))]⟩,
    ⟨"Bool", Ty.bool, rfl, [(.inl (), .inr (.inl ())), (.inr (.inl ()), .inl ()), (.inl (), .inl ())]⟩,
    ⟨"Color", colorT, rfl, [(.inl (), .inr (.inl ())), (.inr (.inr (.inl ())), .inl ()),
      (.inr (.inl ()), .inr (.inl ()))]⟩,
-   ⟨"Key", keyT, rfl, [(.inl ((1 : Int), "b", ()), .inl ((1 : Int), "a", ())),
-     (.inl ((0 : Int), "z", ()), .inl ((1 : Int), "a", ()))]⟩]
+   ⟨"Key", keyT, rfl, [(.inl ((1 : Int), str! "b", ()), .inl ((1 : Int), str! "a", ())),
+     (.inl ((0 : Int), str! "z", ()), .inl ((1 : Int), str! "a", ()))]⟩]
 
 def orderCheck (solver : Solver) : IO Bool := do
   let mut ok := true
@@ -1271,7 +1271,7 @@ def answerTyE : Ty := .fn [Ty.result Ty.nil Ty.nil] (.list .int)
 
 def sendE (k : Int) : Expr [] [.int] (.dsl .effect [.int]) :=
   let handle : Expr [] [.int] (.dsl .externalCommand [.int, Ty.nil, Ty.nil]) :=
-    .call (.prim .externalCommand [.int, Ty.nil, Ty.nil] rfl) (.cons (.str "send") .nil)
+    .call (.prim .externalCommand [.int, Ty.nil, Ty.nil] rfl) (.cons (.str (str! "send")) .nil)
   let body : Expr [] [.int] answerTyE := .lam (.list (.cons (.var (.there .here)) .nil))
   let clo : Expr [] [.int] (.dsl .closure [answerTyE]) := .close ⟨"m", 3, 7, 0⟩ (.cons (.var .here) .nil) rfl rfl body
   .call (.prim .requestCommand effArgs rfl) (.cons handle (.cons (.bin .add (.var .here) (.int k)) (.cons clo .nil)))
@@ -1336,7 +1336,7 @@ def sendPutE (k : Int) : Expr [] [putHandleT, .int] (.dsl .effect [evT]) :=
     .lam (.list (.cons (.tuple (.cons (.var (.there .here)) (.cons (.var (.there .here)) .nil))) .nil))
   let clo : Expr [] [putHandleT, .int] (.dsl .closure [putAnswerT]) := .close ⟨"m", 4, 2, 0⟩ (.cons x .nil) rfl rfl body
   .call (.prim .sendCommand [recordsT, evT, .str, .int, .str] rfl)
-    (.cons (.var .here) (.cons (.str "alice") (.cons (.bin .add x (.int k)) (.cons clo .nil))))
+    (.cons (.var .here) (.cons (.str (str! "alice")) (.cons (.bin .add x (.int k)) (.cons clo .nil))))
 
 def ownLayout : Layout :=
   Layout.addEffects (fun _ => 2) (Layout.addTys (fun _ => 2)
@@ -1353,7 +1353,7 @@ def ownMatches (L : Layout) (eff : EffectV evT) (v : Val) : Bool :=
     match (L.ownsOf evT)[idx - (L.effectsOf evT).length]?, Ty.same c .str, Ty.same i .int,
         Ty.sames onAnswer.Γ [.int] with
     | some (.command _ kn _ _ _ ka), some ⟨hc⟩, some ⟨hi⟩, some ⟨hg⟩ =>
-      let cl : String := cast (congrArg Ty.den0 hc) caller
+      let cl : String := (cast (congrArg Ty.den0 hc) caller : Str).1
       let x : Int := cast (congrArg Ty.den0 hi) value
       let env : Int := (cast (congrArg (fun Γ => (Ty.tuple Γ).den0) hg) onAnswer.env).1
       idx ≥ (L.effectsOf evT).length && kn == name && ka.site == onAnswer.site && vc.print == (Val.str cl).print &&
@@ -1435,7 +1435,7 @@ def machineEffectE : Expr [] [] (.fn [mctxT] (Ty.option (.dsl .effect [.int]))) 
   let key : Expr [] [mctxT] .int := .field (ft := .int) "key" 0 (by simp) ctx
   let st : Expr [] [mctxT] .int := .field (ft := .int) "state" 1 (by simp) ctx
   let handle : Expr [] [mctxT] (.dsl .externalCommand [.int, Ty.nil, Ty.nil]) :=
-    .call (.prim .externalCommand [.int, Ty.nil, Ty.nil] rfl) (.cons (.str "send") .nil)
+    .call (.prim .externalCommand [.int, Ty.nil, Ty.nil] rfl) (.cons (.str (str! "send")) .nil)
   let body : Expr [] [.int] answerTyE := .lam (.list (.cons (.var (.there .here)) .nil))
   let clo : Expr [] [mctxT] (.dsl .closure [answerTyE]) := .close ⟨"m", 3, 7, 0⟩ (.cons key .nil) rfl rfl body
   let req : Expr [] [mctxT] (.dsl .effect [.int]) :=
@@ -1553,8 +1553,8 @@ def invM : MachineV recordsT .int :=
   let key : Expr [] [invCtxT] .int := .field (ft := .int) "key" 0 (by simp) ctx
   let st : Expr [] [invCtxT] .int := .field (ft := .int) "state" 1 (by simp) ctx
   let name : Expr [] [invCtxT] .str := .case (.bin (.eq rfl) key (.int 1))
-    (.cons (.ctor (vs := [[], []]) ⟨0, by decide⟩ .nil) (.str "one")
-      (.cons (.ctor (vs := [[], []]) ⟨1, by decide⟩ .nil) (.str "other") .nil)) ⟨4, rfl⟩
+    (.cons (.ctor (vs := [[], []]) ⟨0, by decide⟩ .nil) (.str (str! "one"))
+      (.cons (.ctor (vs := [[], []]) ⟨1, by decide⟩ .nil) (.str (str! "other")) .nil)) ⟨4, rfl⟩
   { doorM with name := "inv", invariants := .closed (.lam (.list (.cons (.tuple (.cons name
       (.cons (.bin .lt st (.int 5)) .nil))) .nil))) }
 
@@ -1753,7 +1753,7 @@ def startEffectE : Expr [] [] (.fn [invCtxT] (Ty.option (.dsl .effect [.int]))) 
   let ctx : Expr [] [invCtxT] invCtxT := .var .here
   let key : Expr [] [invCtxT] .int := .field (ft := .int) "key" 0 (by simp) ctx
   let handle : Expr [] [invCtxT] (.dsl .externalCommand [.int, Ty.nil, Ty.nil]) :=
-    .call (.prim .externalCommand [.int, Ty.nil, Ty.nil] rfl) (.cons (.str "send") .nil)
+    .call (.prim .externalCommand [.int, Ty.nil, Ty.nil] rfl) (.cons (.str (str! "send")) .nil)
   let body : Expr [] [.int] answerTyE := .lam (.list (.cons (.var (.there .here)) .nil))
   let clo : Expr [] [invCtxT] (.dsl .closure [answerTyE]) := .close ⟨"m", 3, 7, 0⟩ (.cons key .nil) rfl rfl body
   let req : Expr [] [invCtxT] (.dsl .effect [.int]) :=
@@ -2055,7 +2055,7 @@ other's kind. With 4 pending slots, one pending and four new requests do not fit
 def fanSendE (k : Int) : Expr [] [Ty.reactionCtx recordsT, .int] (.dsl .effect [.int]) :=
   let ev : Expr [] [Ty.reactionCtx recordsT, .int] .int := .var (.there .here)
   let handle : Expr [] [Ty.reactionCtx recordsT, .int] (.dsl .externalCommand [.int, Ty.nil, Ty.nil]) :=
-    .call (.prim .externalCommand [.int, Ty.nil, Ty.nil] rfl) (.cons (.str "send") .nil)
+    .call (.prim .externalCommand [.int, Ty.nil, Ty.nil] rfl) (.cons (.str (str! "send")) .nil)
   let body : Expr [] [.int] answerTyE := .lam (.list (.cons (.var (.there .here)) .nil))
   let clo : Expr [] [Ty.reactionCtx recordsT, .int] (.dsl .closure [answerTyE]) :=
     .close ⟨"m", 4, 1, 0⟩ (.cons ev .nil) rfl rfl body
@@ -2384,7 +2384,7 @@ def twiceDecideE : E (.fn [cctxT] (Ty.result (.list .int) .str)) :=
   .lam (.ctor (vs := [[.list .int], [.str]]) ⟨0, by decide⟩ (.cons (.list (.cons inputOf (.cons inputOf .nil))) .nil))
 
 def twiceC : CommandV recordsT .int .str :=
-  { name := "twice", input := .int, rejection := .str, callers := ["alice"], accepts := .closed acceptsE,
+  { name := "twice", input := .int, rejection := .str, callers := [str! "alice"], accepts := .closed acceptsE,
     decide := .closed twiceDecideE, ensures := .closed (.lam (.list .nil)) }
 
 def twiceSvc : ServiceV := { writeSvc with name := "t", commands := [twiceC] }
@@ -2434,7 +2434,7 @@ def twiceCheck (solver : Solver) : IO Bool := do
   | .ok (_, Sp) =>
     let goal := [.not Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1, .not Sm[0]!.1, .not Sm[1]!.1, .not Sm[2]!.1,
       Sp[0]!.1, .eq (Sp[0]!.2[0]) (.int 2), .not Sp[1]!.1, .not Sp[2]!.1, .eq (.var 1) (.int 100),
-      .eq (.var 3) (.int 40), .eq (.var 6) (.str "alice"), .eq (.var 7) (.int 3)]
+      .eq (.var 3) (.int 40), .eq (.var 6) (.str (str! "alice")), .eq (.var 7) (.int 3)]
     match twiceScript goal with
     | .error m => fail m
     | .ok (script, _) =>
@@ -2446,7 +2446,7 @@ def twiceCheck (solver : Solver) : IO Bool := do
         match (SymState.vars 0).decode M L (v := twiceSvc) prelude twiceShapes,
             after.decode M L (v := twiceSvc) prelude twiceShapes with
         | some s, some s' =>
-          let r := step prelude twiceSvc s (.command ⟨0, by decide⟩ ("alice" : String) (3 : Int))
+          let r := step prelude twiceSvc s (.command ⟨0, by decide⟩ (str! "alice") (3 : Int))
           let view (sms : List (Step.MachineState twiceSvc.records twiceSvc.event)) :=
             sms.map fun ⟨_, is⟩ => is.map fun i => (intDen _ i.key, intDen _ i.state, i.timer.map fun (d, st) => (d, intDen _ st))
           let ids (ps : List (Step.Pending twiceSvc.event)) := (ps.map (·.id)).mergeSort (· ≤ ·)
@@ -2562,7 +2562,7 @@ read at place 1 (`queueAt`) must hold input 6, not the head's 4, and place 2 mus
 
 def putHandleE {Γ : List Ty} : Expr [] Γ (.dsl .command [recordsT, .int, .str, .int, .str]) :=
   .call (.prim .command [recordsT, .int, .str, .int, .str] rfl)
-    (.cons (.str "put") (.cons (.list (.cons (.str "alice") .nil))
+    (.cons (.str (str! "put")) (.cons (.list (.cons (.str (str! "alice")) .nil))
       (.cons (.close ⟨"m", 20, 1, 0⟩ .nil rfl rfl acceptsE)
         (.cons (.close ⟨"m", 20, 2, 0⟩ .nil rfl rfl twiceDecideE)
           (.cons (.close ⟨"m", 20, 3, 0⟩ .nil rfl rfl (.lam (.list .nil) : E (.fn [cctxT, recordsT] Ty.rules))) .nil)))))
@@ -2573,7 +2573,7 @@ def mixPutE (k : Int) : Expr [] [Ty.reactionCtx recordsT, .int] (.dsl .effect [.
   let clo : Expr [] [Ty.reactionCtx recordsT, .int] (.dsl .closure [.fn [Ty.result Ty.nil .str] (.list .int)]) :=
     .close ⟨"m", 21, 1, 0⟩ (.cons ev .nil) rfl rfl body
   .call (.prim .sendCommand [recordsT, .int, .str, .int, .str] rfl)
-    (.cons putHandleE (.cons (.str "alice") (.cons (.bin .add ev (.int k)) (.cons clo .nil))))
+    (.cons putHandleE (.cons (.str (str! "alice")) (.cons (.bin .add ev (.int k)) (.cons clo .nil))))
 
 def mixE : Expr [] [] (.fn [Ty.reactionCtx recordsT, .int] (.list (.dsl .effect [.int]))) :=
   .lam (.list (.cons (mixPutE 1) (.cons (fanSendE 2) (.cons (mixPutE 3) .nil))))
@@ -2743,7 +2743,7 @@ def internalCheck (solver : Solver) : IO Bool := do
   let Sp := slotsOf dp dpt np 2 (.var 4)
   let goal := [.not Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1, .not Sm[0]!.1, .not Sm[1]!.1, .not Sm[2]!.1,
     Sp[0]!.1, .eq (Sp[0]!.2[0]) (.int 2), .not Sp[1]!.1, .not Sp[2]!.1, .eq (.var 1) (.int 100),
-    .eq (.var 3) (.int 40), .eq (.var 6) (.str "alice"), .eq (.var 7) (.int 3)]
+    .eq (.var 3) (.int 40), .eq (.var 6) (.str (str! "alice")), .eq (.var 7) (.int 3)]
   match internalScriptOf 3 goal with
   | .error m => fail m
   | .ok (script, nn) =>
@@ -2761,7 +2761,7 @@ def internalCheck (solver : Solver) : IO Bool := do
         let flag (n : Nat) := vs.lookup n == some (.bool true)
         let ids := ((List.range nn).filterMap fun j =>
           if flag (11 + 2 * j) then natOf ((vs.lookup (12 + 2 * j)).getD (.int (-1))) else none).mergeSort (· ≤ ·)
-        match Step.runCommand prelude ({ state := s } : Step.Acc twiceSvc) twiceC ("alice" : String) (3 : Int)
+        match Step.runCommand prelude ({ state := s } : Step.Acc twiceSvc) twiceC (str! "alice") (3 : Int)
             (answerFive.fn ((5 : Int), ())) with
         | .error _ => fail "the internal step faults"
         | .ok a =>
@@ -2791,7 +2791,7 @@ def nextResolveE : E (.fn [qctxT] .int) :=
   .lam (.bin .add (.field (ft := .int) "input" 1 (by simp) (.var .here)) (.int 1))
 
 def nextQ : QueryV recordsT .str :=
-  { name := "next", input := .int, output := .int, callers := ["alice"], accepts := .closed acceptsE,
+  { name := "next", input := .int, output := .int, callers := [str! "alice"], accepts := .closed acceptsE,
     resolve := .closed nextResolveE }
 
 def answerIsEventE : Expr [] [] (.fn [.int] (.list .int)) := .lam (.list (.cons (.var .here) .nil))
@@ -2845,7 +2845,7 @@ def ownQueryCheck (solver : Solver) : IO Bool := do
   let Sp := slotsOf dp dpt np 2 (.var 4)
   let goal := [.not Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1, .not Sm[0]!.1, .not Sm[1]!.1, .not Sm[2]!.1,
     Sp[0]!.1, .eq (Sp[0]!.2[0]) (.int 2), .not Sp[1]!.1, .not Sp[2]!.1, .eq (.var 1) (.int 100),
-    .eq (.var 3) (.int 40), .eq (.var 6) (.str "alice"), .eq (.var 7) (.int 3)]
+    .eq (.var 3) (.int 40), .eq (.var 6) (.str (str! "alice")), .eq (.var 7) (.int 3)]
   match ownQueryScript goal with
   | .error m => fail m
   | .ok (script, nn) =>
@@ -2864,7 +2864,7 @@ def ownQueryCheck (solver : Solver) : IO Bool := do
         let ids := ((List.range nn).filterMap fun j =>
           if flag (11 + 2 * j) then natOf ((vs.lookup (12 + 2 * j)).getD (.int (-1))) else none).mergeSort (· ≤ ·)
         let run (site : Site [] (.fn [.int] (.list .int))) :=
-          Step.runQuery prelude ({ state := s } : Step.Acc twiceSvc) nextQ ("alice" : String) (3 : Int) (site.fn ())
+          Step.runQuery prelude ({ state := s } : Step.Acc twiceSvc) nextQ (str! "alice") (3 : Int) (site.fn ())
         match run answerIsEvent, run answerNone with
         | .ok a, .ok b =>
           let stepIds := ((a.state.pending.filter (·.id != 2)).map (·.id)).mergeSort (· ≤ ·)
@@ -2951,13 +2951,13 @@ def dispCheck (solver : Solver) : IO Bool := do
   let goal := [.not Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1, .not Sm[0]!.1, .not Sm[1]!.1, .not Sm[2]!.1,
     Sp[0]!.1, .eq (Sp[0]!.2[0]) (.int 2), .not Sp[1]!.1, .not Sp[2]!.1, .eq (.var 1) (.int 100),
     .eq (.var 2) (.int 7), .eq (.var 3) (.int 40)]
-  let twiceFx : OwnEffectV dispSvc.event := .command "twice" .str .int .str ("alice" : String) (3 : Int) (answerFive.fn ((5 : Int), ()))
-  let nextFx : OwnEffectV dispSvc.event := .query "next" .str .int .int ("alice" : String) (3 : Int) (answerIsEvent.fn ())
-  let bobFx : OwnEffectV dispSvc.event := .command "twice" .str .int .str ("bob" : String) (3 : Int) (answerFive.fn ((5 : Int), ()))
+  let twiceFx : OwnEffectV dispSvc.event := .command "twice" .str .int .str (str! "alice") (3 : Int) (answerFive.fn ((5 : Int), ()))
+  let nextFx : OwnEffectV dispSvc.event := .query "next" .str .int .int (str! "alice") (3 : Int) (answerIsEvent.fn ())
+  let bobFx : OwnEffectV dispSvc.event := .command "twice" .str .int .str (str! "bob") (3 : Int) (answerFive.fn ((5 : Int), ()))
   let cases : List (String × (Layout → Except Refusal Term) × OwnEffectV dispSvc.event × OwnEffectV dispSvc.event) :=
-    [("twice", fun L => ownT L twiceKey (.str "alice") (.int 3) [.int 5], twiceFx, nextFx),
-     ("next", fun L => ownT L nextKey (.str "alice") (.int 3) [], nextFx, twiceFx),
-     ("bob's twice", fun L => ownT L twiceKey (.str "bob") (.int 3) [.int 5], bobFx, twiceFx)]
+    [("twice", fun L => ownT L twiceKey (.str (str! "alice")) (.int 3) [.int 5], twiceFx, nextFx),
+     ("next", fun L => ownT L nextKey (.str (str! "alice")) (.int 3) [], nextFx, twiceFx),
+     ("bob's twice", fun L => ownT L twiceKey (.str (str! "bob")) (.int 3) [.int 5], bobFx, twiceFx)]
   let mut ok := true
   for (name, effect, fx, other) in cases do
     match dispScriptOf 3 effect goal [deadKey] with
@@ -3083,12 +3083,12 @@ def cascadeCheck (solver : Solver) : IO Bool := do
   let goal := [.not Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1, .not Sm[0]!.1, .not Sm[1]!.1, .not Sm[2]!.1,
     Sp[0]!.1, .eq (Sp[0]!.2[0]) (.int 2), .not Sp[1]!.1, .not Sp[2]!.1, .eq (.var 1) (.int 100),
     .eq (.var 2) (.int 7), .eq (.var 3) (.int 40)]
-  let twiceT : Layout → Except Refusal Term := fun L => ownT L twiceKey (.str "alice") (.int 3) [.int 5]
-  let nextT : Layout → Except Refusal Term := fun L => ownT L nextKey (.str "alice") (.int 3) []
-  let bobT : Layout → Except Refusal Term := fun L => ownT L twiceKey (.str "bob") (.int 3) [.int 5]
-  let twiceFx : OwnEffectV dispSvc.event := .command "twice" .str .int .str ("alice" : String) (3 : Int) (answerFive.fn ((5 : Int), ()))
-  let nextFx : OwnEffectV dispSvc.event := .query "next" .str .int .int ("alice" : String) (3 : Int) (answerIsEvent.fn ())
-  let bobFx : OwnEffectV dispSvc.event := .command "twice" .str .int .str ("bob" : String) (3 : Int) (answerFive.fn ((5 : Int), ()))
+  let twiceT : Layout → Except Refusal Term := fun L => ownT L twiceKey (.str (str! "alice")) (.int 3) [.int 5]
+  let nextT : Layout → Except Refusal Term := fun L => ownT L nextKey (.str (str! "alice")) (.int 3) []
+  let bobT : Layout → Except Refusal Term := fun L => ownT L twiceKey (.str (str! "bob")) (.int 3) [.int 5]
+  let twiceFx : OwnEffectV dispSvc.event := .command "twice" .str .int .str (str! "alice") (3 : Int) (answerFive.fn ((5 : Int), ()))
+  let nextFx : OwnEffectV dispSvc.event := .query "next" .str .int .int (str! "alice") (3 : Int) (answerIsEvent.fn ())
+  let bobFx : OwnEffectV dispSvc.event := .command "twice" .str .int .str (str! "bob") (3 : Int) (answerFive.fn ((5 : Int), ()))
   let cases : List (String × Nat × List (Layout → Except Refusal Term) × List (OwnEffectV dispSvc.event)) :=
     [("two internal steps", 2, [twiceT, nextT], [twiceFx, nextFx]),
      ("one internal step", 1, [twiceT, nextT], [twiceFx, nextFx]),
@@ -3149,7 +3149,7 @@ def oncePutE : Expr [] [Ty.reactionCtx recordsT, .int] (.dsl .effect [.int]) :=
   let clo : Expr [] [Ty.reactionCtx recordsT, .int] (.dsl .closure [.fn [Ty.result Ty.nil .str] (.list .int)]) :=
     .close ⟨"m", 24, 1, 0⟩ .nil rfl rfl onceBodyE
   .call (.prim .sendCommand [recordsT, .int, .str, .int, .str] rfl)
-    (.cons putHandleE (.cons (.str "alice") (.cons (.bin .add ev (.int 10)) (.cons clo .nil))))
+    (.cons putHandleE (.cons (.str (str! "alice")) (.cons (.bin .add ev (.int 10)) (.cons clo .nil))))
 
 def onceE : Expr [] [] (.fn [Ty.reactionCtx recordsT, .int] (.list (.dsl .effect [.int]))) :=
   .lam (boolCase (.bin .lt (.var (.there .here)) (.int 5)) (.list (.cons oncePutE .nil)) (.list .nil))
@@ -3184,9 +3184,9 @@ with every site it writes had four. -/
 
 def cmdHandleTy : Ty := .dsl .command [recordsT, .int, .str, .int, .str]
 
-def namedHandleE {G : List Ty} (n : String) (line : Nat) : Expr G [] (.fn [] cmdHandleTy) :=
+def namedHandleE {G : List Ty} (n : Str) (line : Nat) : Expr G [] (.fn [] cmdHandleTy) :=
   .lam (.call (.prim .command [recordsT, .int, .str, .int, .str] rfl)
-    (.cons (.str n) (.cons (.list (.cons (.str "alice") .nil))
+    (.cons (.str n) (.cons (.list (.cons (.str (str! "alice")) .nil))
       (.cons (.close ⟨"m", line, 1, 0⟩ .nil rfl rfl (.lam (.list .nil) : Expr G [] (.fn [.int] Ty.rules)))
         (.cons (.close ⟨"m", line, 2, 0⟩ .nil rfl rfl
           (.lam (.ctor (vs := [[.list .int], [.str]]) ⟨0, by decide⟩ (.cons (.list .nil) .nil)) :
@@ -3196,12 +3196,12 @@ def namedHandleE {G : List Ty} (n : String) (line : Nat) : Expr G [] (.fn [] cmd
 
 abbrev bothG : List Ty := [.fn [] cmdHandleTy, .fn [] cmdHandleTy]
 
-def bothDefs : Defs bothG := .snoc (.snoc .nil _ (namedHandleE "dbl" 30)) _ (namedHandleE "inc" 31)
+def bothDefs : Defs bothG := .snoc (.snoc .nil _ (namedHandleE (str! "dbl") 30)) _ (namedHandleE (str! "inc") 31)
 
 def sendFromE (h : Var bothG (.fn [] cmdHandleTy)) (line : Nat) :
     Expr bothG [Ty.reactionCtx recordsT, .int] (.dsl .effect [.int]) :=
   .call (.prim .sendCommand [recordsT, .int, .str, .int, .str] rfl)
-    (.cons (.call (.global h) .nil) (.cons (.str "alice") (.cons (.int 1)
+    (.cons (.call (.global h) .nil) (.cons (.str (str! "alice")) (.cons (.int 1)
       (.cons (.close ⟨"m", line, 1, 0⟩ .nil rfl rfl (.lam (.list .nil) :
         Expr bothG [] (.fn [Ty.result Ty.nil .str] (.list .int)))) .nil))))
 
@@ -3322,7 +3322,7 @@ def tickEffectE : Expr [] [] (.fn [invCtxT] (Ty.option (.dsl .effect [.int]))) :
     .close ⟨"m", 24, 1, 0⟩ .nil rfl rfl onceBodyE
   let put : Expr [] [invCtxT] (.dsl .effect [.int]) :=
     .call (.prim .sendCommand [recordsT, .int, .str, .int, .str] rfl)
-      (.cons putHandleE (.cons (.str "alice") (.cons (.bin .add key (.int 10)) (.cons clo .nil))))
+      (.cons putHandleE (.cons (.str (str! "alice")) (.cons (.bin .add key (.int 10)) (.cons clo .nil))))
   .lam (boolCase (.bin .lt key (.int 10)) (.ctor (vs := [[Ty.dsl .effect [.int]], []]) ⟨0, by decide⟩ (.cons put .nil))
     (.ctor (vs := [[Ty.dsl .effect [.int]], []]) ⟨1, by decide⟩ .nil))
 
@@ -3503,7 +3503,7 @@ command asserts the input's well-formedness (`SymInput.wf`, second in its contex
 it one does (sat), and decoding that model fails, which `prove` reported as an internal error. -/
 
 def takeC : CommandV recordsT evT .str :=
-  { name := "take", input := recordsT, rejection := .str, callers := ["alice"],
+  { name := "take", input := recordsT, rejection := .str, callers := [str! "alice"],
     accepts := .closed (.lam (.list .nil)),
     decide := .closed (.lam (.ctor (vs := [[.list evT], [.str]]) ⟨0, by decide⟩ (.cons (.list .nil) .nil))),
     ensures := .closed (.lam (.list .nil)) }
@@ -3549,12 +3549,12 @@ def rowDecideE (key : Expr [] [cctxT] .int) : E (.fn [cctxT] (Ty.result (.list e
     (.cons (.list (.cons (.tuple (.cons key (.cons inputOf .nil))) .nil)) .nil))
 
 def atMostOneE : E (.fn [cctxT, recordsT] Ty.rules) :=
-  .lam (.list (.cons (.tuple (.cons (.str "one")
+  .lam (.list (.cons (.tuple (.cons (.str (str! "one"))
     (.cons (.bin .le (.call (.prim .tableSize [.int, .int] rfl) (.cons (.var (.there .here)) .nil)) (.int 1)) .nil))) .nil))
 
 def rowC (name : String) (key : Expr [] [cctxT] .int) (ens : E (.fn [cctxT, recordsT] Ty.rules)) :
     CommandV recordsT evT .str :=
-  { name := name, input := .int, rejection := .str, callers := ["alice"], accepts := .closed (.lam (.list .nil)),
+  { name := name, input := .int, rejection := .str, callers := [str! "alice"], accepts := .closed (.lam (.list .nil)),
     decide := .closed (rowDecideE key), ensures := .closed ens }
 
 def noRulesE : E (.fn [recordsT] Ty.rules) := .lam (.list .nil)
@@ -3594,7 +3594,7 @@ def pairTarget (slots k1 k2 : Nat) : Except String Script := do
 
 /-- The own command a model's value of the effect datatype codes, by its variant's place among the own kinds. -/
 def pairEffect (L : Layout) : Val → Option (OwnEffectV evT)
-  | .ctor _ k [.str c, .int i, _] =>
+  | .ctor _ k [.str c, .int i, _] => (Str.of? c).bind fun c =>
     (["ins", "set", "cap"][k - (L.effectsOf evT).length]?).map fun name =>
       .command name .str .int .str c i (pairOnAnswer.fn ())
   | _ => none
@@ -3691,7 +3691,7 @@ def reqAnswerE : Expr [] [.int] (.fn [Ty.result Ty.nil Ty.nil] (.list evT)) := .
 def reqSendE (input : Expr [] [reqCtxT, evT] .int) : Expr [] [reqCtxT, evT] (.dsl .effect [evT]) :=
   let key : Expr [] [reqCtxT, evT] .int := .index (ts := [.int, .int]) (.var (.there .here)) ⟨0, by decide⟩
   let handle : Expr [] [reqCtxT, evT] (.dsl .externalCommand [.int, Ty.nil, Ty.nil]) :=
-    .call (.prim .externalCommand [.int, Ty.nil, Ty.nil] rfl) (.cons (.str "send") .nil)
+    .call (.prim .externalCommand [.int, Ty.nil, Ty.nil] rfl) (.cons (.str (str! "send")) .nil)
   let clo : Expr [] [reqCtxT, evT] (.dsl .closure [.fn [Ty.result Ty.nil Ty.nil] (.list evT)]) :=
     .close ⟨"m", 32, 1, 0⟩ (.cons key .nil) rfl rfl reqAnswerE
   .call (.prim .requestCommand [evT, .int, Ty.nil, Ty.nil] rfl) (.cons handle (.cons input (.cons clo .nil)))
@@ -4064,7 +4064,7 @@ def unrolledSum (d : Nat) : Except String Script := do
 /-- The step scripts whose sizes are measured, each as a function of the slots (or the bound, or the levels). -/
 def sizeRows : List (String × (Nat → Except String Script)) :=
   let queue : List (Layout → Except Refusal Term) :=
-    [fun L => ownT L twiceKey (.str "alice") (.int 3) [.int 5], fun L => ownT L nextKey (.str "alice") (.int 3) []]
+    [fun L => ownT L twiceKey (.str (str! "alice")) (.int 3) [.int 5], fun L => ownT L nextKey (.str (str! "alice")) (.int 3) []]
   [("event", fun k => (·.1) <$> writeScript k []),
    ("event list", fun k => (·.1) <$> eventsScript k []),
    ("command", fun k => (·.1) <$> twiceScriptOf k []),

@@ -237,7 +237,7 @@ theorem ordT_rel (L : Layout) (T : List TypeDecl) : (t : Ty) → (x y : Term) �
     exact int_ord ha hb
   | .str, x, y, p, h, _, a, b, ha, hb => by
     simp only [ordT, Option.some.injEq] at h; subst h
-    change x.denote M = .str a at ha; change y.denote M = .str b at hb
+    change x.denote M = .str a.1 at ha; change y.denote M = .str b.1 at hb
     exact str_ord ha hb
   | .id, x, y, p, h, _, a, b, ha, hb => by
     obtain ⟨d, n, hf, ha⟩ := ha

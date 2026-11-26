@@ -145,7 +145,7 @@ end
 mutual
 theorem Ty.beq_plain : (t : Ty) → t.plain = true → (x y : t.den0) → ((Ty.semWith Dsl.base t).2 x y = true ↔ x = y)
   | .int, _, x, y => beq_iff_eq (α := Int) (a := x) (b := y)
-  | .str, _, x, y => beq_iff_eq (α := String) (a := x) (b := y)
+  | .str, _, x, y => beq_iff_eq (α := Str) (a := x) (b := y)
   | .date, _, x, y => beq_iff_eq (α := Int) (a := x) (b := y)
   | .id, _, x, y => ⟨fun h => @of_decide_eq_true _ (instDecidableEqIdV x y) h,
       fun h => @decide_eq_true _ (instDecidableEqIdV x y) h⟩
@@ -253,7 +253,7 @@ mutual
 /-- Some value of a data type, when the type has one. -/
 def Ty.default? : (t : Ty) → Option t.den0
   | .int => Option.some (0 : Int)
-  | .str => Option.some ""
+  | .str => Option.some (default : Str)
   | .list _ | .bag _ => Option.some []
   | .tuple ts => Ty.defaults? ts
   | .fn _ r => (Ty.default? r).map fun d _ => d

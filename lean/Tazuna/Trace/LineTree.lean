@@ -29,7 +29,7 @@ mutual
 /-- The tree of a value of type `t`, with its ids at the leaves, where it has a wire form. -/
 def valTree : (t : Ty) → t.den0 → Option (Tree Key)
   | .int, n => some (.atom (.int n))
-  | .str, s => some (.atom (.bin s))
+  | .str, s => some (.atom (.bin s.1))
   | .list t, xs => (xs.mapM (valTree t)).map .seq
   | .bag t, xs => (xs.mapM (valTree t)).map .bag
   | .tuple ts, x => (valTrees ts x).map .seq

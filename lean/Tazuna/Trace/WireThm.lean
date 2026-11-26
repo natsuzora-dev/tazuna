@@ -73,7 +73,7 @@ mutual
 theorem dec_enc : (t : Ty) → t.ordered T = true → (x : t.den0) → (w : Wire) → enc T name t x = some w →
     ∃ y, dec T lookup t w = some y ∧ Ty.erl T t y = Ty.erl T t x
   | .int, _, x, w, h => by simp only [enc, Option.some.injEq] at h; subst h; exact ⟨x, rfl, rfl⟩
-  | .str, _, x, w, h => by simp only [enc, Option.some.injEq] at h; subst h; exact ⟨x, rfl, rfl⟩
+  | .str, _, x, w, h => by simp only [enc, Option.some.injEq] at h; subst h; exact ⟨x, Str.of?_val x, rfl⟩
   | .list t, ho, xs, w, h => by
     simp only [enc, Option.map_eq_some_iff] at h
     obtain ⟨ws, hws, rfl⟩ := h

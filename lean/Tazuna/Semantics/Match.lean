@@ -11,7 +11,7 @@ def Pat.match {t : Ty} {Δ : List Ty} : Pat t Δ → t.den → Option (Ty.dens �
   | .wild, _ => some ()
   | .bind, x => some (x, ())
   | .int n, x => if @BEq.beq Int _ x n then some () else none
-  | .str s, x => if @BEq.beq String _ x s then some () else none
+  | .str s, x => if @BEq.beq Str _ x s then some () else none
   | .tuple ps, x => Pats.match ps x
   | .ctor v ps, x => (Alts.proj x v).bind (Pats.match ps)
   | .as p, x => (Pat.match p x).map fun δ => Dens.append δ (x, ())

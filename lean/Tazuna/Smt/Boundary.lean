@@ -10,7 +10,7 @@ datatype the layout holds has a sort for each field, so `datatypes?` is found (`
 builder makes at a type refuses with that type's own limit where it has no term (`lacks`, `lacksData`), so a gap is
 left only where the layout has the type, which `Avail` rules out. The commands read a builder's result only through
 `Sound.get`, which needs the builder's theorem, so a new builder cannot reach them without one; what is left of a
-refusal is the spec's (`SpecRefusal`, an Undecided line) or a case the loaded program's types rule out (`Unexpected`,
+refusal is the spec's (a `Limit`, an Undecided line) or a case the loaded program's types rule out (`Unexpected`,
 exit 4, excluded by the loader's typing rather than by a theorem). -/
 
 namespace Tazuna.Smt
@@ -1037,21 +1037,16 @@ theorem timerQuestions_ofService {m : MachineV v.records v.event} (hm : m ∈ v.
 
 end
 
-/-- A refusal a spec reaches: a construct the fragment leaves out, or a string outside SMT-LIB's. -/
-inductive SpecRefusal where
-  | unencodableString (s : String)
-  | limit (l : Limit)
-
 /-- A builder's refusal once its theorem rules out a layout gap: the spec's, or a case the loaded program's types rule
 out. -/
 inductive Refused where
-  | spec (r : SpecRefusal)
+  /-- A construct of the spec the fragment leaves out. -/
+  | spec (l : Limit)
   | unexpected (u : Unexpected)
 
 /-- A refusal that is no layout gap, as the commands read it. -/
 def Refusal.refused : (r : Refusal) → r.gap = false → Refused
-  | .unencodableString s, _ => .spec (.unencodableString s)
-  | .limit l, _ => .spec (.limit l)
+  | .limit l, _ => .spec l
   | .unexpected u, _ => .unexpected u
   | .layout _, h => absurd h (by simp [Refusal.gap])
 

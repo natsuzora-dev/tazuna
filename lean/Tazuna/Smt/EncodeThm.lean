@@ -25,14 +25,14 @@ def altsBool0 : (Ty.semAltsWith Dsl.base [[], []]).1 → Bool
 /-- An id as a value of its datatype `d`: a fresh one by its step's counter and index, an outside one by its name. -/
 def idVal (d : Nat) : IdV → Val
   | .fresh s i => .ctor d 0 [.int s, .int i]
-  | .named s => .ctor d 1 [.str s]
+  | .named s => .ctor d 1 [.str s.1]
 
 mutual
 /-- A data value as the step holds it (`Ty.den0`) and the SMT value that codes it: `RelV` for the data a structure
 value holds, such as an effect's input and the values its kept functions captured. -/
 def RelD : (t : Ty) → t.den0 → Val → Prop
   | .int, x, v => v = .int x
-  | .str, x, v => v = .str x
+  | .str, x, v => v = .str (x : Str).1
   | .date, x, v => v = .int x
   | .id, x, v => ∃ d n, L.find? .id = some (d, n) ∧ v = idVal d x
   | .adt 0 _ vs, x, v => ∃ h : vs = [[], []], v = .bool (altsBool0 (h ▸ x))
@@ -101,7 +101,7 @@ mutual
 /-- A value of a first-order type and the SMT value that codes it. -/
 def RelV : (t : Ty) → t.den → Val → Prop
   | .int, x, v => v = .int x
-  | .str, x, v => v = .str x
+  | .str, x, v => v = .str (x : Str).1
   | .date, x, v => v = .int x
   | .id, x, v => ∃ d n, L.find? .id = some (d, n) ∧ v = idVal d x
   | .adt 0 _ vs, x, v => ∃ h : vs = [[], []], v = .bool (altsBool (h ▸ x))
@@ -579,16 +579,17 @@ theorem encodePat_agrees {t : Ty} {Δ : List Ty} : (p : Pat t Δ) → (x : t.den
     · simp [Val.beq, hb]; rfl
   | .str lit, x, s, hx, m, δs, h => by
     simp only [encodePat] at h
-    split at h
-    · cases h
-      simp only [Rel, RelV] at hx
-      refine ⟨?_, fun _ _ => trivial⟩
-      simp only [Term.denote, hx, Pat.match]
-      show Val.bool (Val.beq (.str x) (.str lit)) = _
-      cases hb : (@BEq.beq String _ x lit)
-      · simp [Val.beq, hb]
-      · simp [Val.beq, hb]; rfl
-    · cases h
+    cases h
+    obtain ⟨x, hxd⟩ := x
+    obtain ⟨lit, hl⟩ := lit
+    simp only [Rel, RelV] at hx
+    refine ⟨?_, fun _ _ => trivial⟩
+    simp only [Term.denote, hx, Pat.match]
+    show Val.bool (Val.beq (.str x) (.str lit)) = _
+    by_cases hb : x = lit
+    · subst hb; simp [Val.beq]; rfl
+    · have : (@BEq.beq Str _ ⟨x, hxd⟩ ⟨lit, hl⟩) = false := by simp [hb]
+      simp [Val.beq, hb, this]
   | @Pat.tuple ts _ ps, x, s, hx, m, δs, h => by
     obtain ⟨d, n, vals, hf, e, hv⟩ := hx
     simp only [encodePat, tupleD, hf, bind, Except.bind] at h
@@ -714,6 +715,7 @@ theorem relV_beq : (t : Ty) → t.eqable = true → (x y : t.den) → (vx vy : V
       by_cases hab : a = b <;> by_cases hij : i = j <;> simp [hab, hij, Int.natCast_inj]
     · rename_i a b
       by_cases hab : a = b <;> simp [hab]
+      exact fun h => hab (Subtype.ext h)
   | .adt 0 _ vs, _, x, y, _, _, ⟨h, ex⟩, ⟨_, ey⟩ => by
     subst h ex ey
     rcases x with _ | _ | e <;> rcases y with _ | _ | e' <;> first | rfl | exact nomatch e | exact nomatch e'
@@ -1590,7 +1592,7 @@ theorem encodeBin_agrees {a b c : Ty} (op : BinOp a b c) (sx : Code a) (sy : Cod
   | or =>
     cases h; replace hx := (rel_bool _ _).1 hx; replace hy := (rel_bool _ _).1 hy; refine (rel_bool _ _).2 ?_
     simp only [Term.denote, hx, hy, Val.toBool, BinOp.eval, toBool_ofBool]
-  | concat => cases h; simp only [Rel, RelV] at hx hy ⊢; simp [Term.denote, hx, hy, Val.toStr, BinOp.eval]
+  | concat => cases h; simp only [Rel, RelV] at hx hy ⊢; simp [Term.denote, hx, hy, Val.toStr, BinOp.eval, Str.append]
   | eq hc =>
     simp only [encodeBin] at h
     refine (rel_bool _ _).2 ?_
@@ -2466,9 +2468,7 @@ theorem encode_agrees {Γ : List Ty} {t : Ty} : (e : Expr G Γ t) → (σ : Code
     Rel M L t (e.eval D g ρ) s
   | .int n, _, _, _, s, c, h, _ => by cases h; simp [Rel, RelV, Expr.eval, Term.denote]
   | .str lit, _, _, _, s, c, h, _ => by
-    simp only [encode] at h; split at h
-    · cases h; simp [Rel, RelV, Expr.eval, Term.denote]
-    · cases h
+    simp only [encode] at h; cases h; simp [Rel, RelV, Expr.eval, Term.denote]
   | .var v, σ, ρ, hσ, s, c, h, _ => by cases h; exact var_rel v ρ σ hσ
   | .global v, _, _, _, s, c, h, hc => hg _ v s c h hc
   | @Expr.ctor _ _ i args vs v es, σ, ρ, hσ, s, c, h, hc => by

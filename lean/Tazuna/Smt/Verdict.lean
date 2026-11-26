@@ -34,7 +34,7 @@ def SortsInhabited (L : Layout) (tys : List Ty) : Prop :=
   ∃ M : Model, ∀ n (h : n < tys.length), VarSorted L tys[n] (M.vars n)
 
 /-- The solver found no model of the question's script: no model whose variables hold values of the sorts of the
-question's types satisfies every assertion. A model of the script as SMT-LIB reads it is such a model (`Term.denote` states the
+question's types, strings among them only of SMT-LIB's domain (`Sorted`), satisfies every assertion. A model of the script as SMT-LIB reads it is such a model (`Term.denote` states the
 standard's meaning), so this is what an unsat answer says. The sorts hold values, as SMT-LIB's do, so an unsat answer
 is never free: a script with no assertion is not unsat, and a sort with no value cannot make a question unsat
 whatever it asks. `sorts_inhabited` proves the sorts of every script an encoder builds hold values. -/
