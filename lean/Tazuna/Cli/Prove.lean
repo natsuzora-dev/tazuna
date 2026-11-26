@@ -267,14 +267,14 @@ def pairReport (L : Layout) (k1 k2 : OwnPlace L v.event) (g : Target) (step : St
 
 /-- The line of a refused encoding of the step's questions about `g` (none: all of the step's): undecided where the
 refusal is the spec's, else an engine bug. -/
-def refusedItems (step : String) (g : Option Target) (r : Refusal) : Except String (List Item) :=
-  match refusalLine c.T r with
-  | some (k, fields) => .ok [.ready (.undecided k v.name step g fields)]
-  | none => .error s!"service {v.name}, {step}: the encoding refused: {reprStr r}"
+def refusedItems (step : String) (g : Option Target) (r : Refused) : Except String (List Item) :=
+  match refusedLine c.T r with
+  | .ok (k, fields) => .ok [.ready (.undecided k v.name step g fields)]
+  | .error m => .error s!"service {v.name}, {step}: {m}"
 
 /-- The lines of a question family with one target and two questions (a timer machine, a pair of own kinds): its
 bound question and its target question where `--only` keeps the target, else the target skipped. -/
-def familyItems (only : String → Bool) (g : Target) (step : String) (built : Except Refusal (TypedScript × TypedScript))
+def familyItems (only : String → Bool) (g : Target) (step : String) (built : Except Refused (TypedScript × TypedScript))
     (report : Smt.Answer → Except String Report) : Except String (List Item) :=
   match built with
   | .error r => refusedItems c v step (some g) r
@@ -292,14 +292,14 @@ def serviceItems (sv : CheckedService c) (only : String → Bool) : ServiceItems
   let b := stateWidth v
   let mut items : List Item := []
   let mut targets : List Target := []
-  for inp in stepInputs v (shapes v) senv.nT b do
+  for ⟨inp, hinp⟩ in (stepInputs v (shapes v) senv.nT b).attach do
     let step := inp.text
-    match questions L c.T c.P v senv inp with
+    match Sound.get (questions L c.T c.P v senv inp) (questions_ofService sv.mem c.T senv inp hinp) with
     | .error r =>
       match refusedItems c v step none r with
       | .ok more => items := items ++ more
       | .error why => return { internal := some why }
-    | .ok (gs, qs) =>
+    | .ok ⟨(gs, qs), _⟩ =>
       for g in gs do
         unless targets.contains g do targets := targets ++ [g]
       let kept := qs.filter fun q => match q.target with
@@ -312,9 +312,10 @@ def serviceItems (sv : CheckedService c) (only : String → Bool) : ServiceItems
         (qs.filterMap fun q => q.target.bind fun g => if kept.any (·.target == some g) then none else some g).map
           (.skipped v.name)
   -- A machine whose `after` never sets a timer fires forward by itself (`timerForward_of_noTimer`), so it gets no line.
-  for m in v.machines.filter (!·.noTimer) do
+  for ⟨m, hm⟩ in v.machines.attach.filter (!·.1.noTimer) do
     let step := "timer " ++ m.name
-    match familyItems c v only (.timer m.name) step (timerQuestions L m) (timerReport c v L m step) with
+    match familyItems c v only (.timer m.name) step
+        ((Sound.get (timerQuestions L m) (timerQuestions_ofService sv.mem hm)).map (·.1)) (timerReport c v L m step) with
     | .ok more => items := items ++ more
     | .error why => return { internal := some why }
   let owns := L.ownsOf v.event
@@ -326,7 +327,9 @@ def serviceItems (sv : CheckedService c) (only : String → Bool) : ServiceItems
       if exact.any (OwnKey.same k) then none else some (ownText owns k)
     let g := Target.pair (ownText owns key1) (ownText owns key2) widened.eraseDups
     let step := ownText owns key1 ++ " then " ++ ownText owns key2
-    match familyItems c v only g step (pairQuestions L c.T c.P v senv k1 k2) (pairReport c v L k1 k2 g step) with
+    match familyItems c v only g step
+        ((Sound.get (pairQuestions L c.T c.P v senv k1 k2) (pairQuestions_ofService sv.mem c.T senv k1 k2)).map (·.1))
+        (pairReport c v L k1 k2 g step) with
     | .ok more => items := items ++ more
     | .error why => return { internal := some why }
   let init := (initReports c v targets).map fun r => match r with
@@ -444,15 +447,14 @@ def prove (root path : String) (opts : Options) : IO UInt32 := do
     let mut responses : Array (String × String × List Json × IO.Ref (Option (Except String (SearchResult (List Wire))))) := #[]
     for sv in c.services do
       let v := sv.v
-      let resps := v.responses.filter fun r => opts.keeps (v.name ++ "/" ++ r.text)
+      let resps := v.responses.attach.filter fun r => opts.keeps (v.name ++ "/" ++ r.1.text)
       if resps.isEmpty then continue
       let L := sv.L
-      let senv := sv.senv
-      let (bs, ds) ← depthJobs solver c v L senv v.bounds.stepsNat
+      let (bs, ds) ← depthJobs solver sv v.bounds.stepsNat
       builds := builds ++ bs
-      for resp in resps do
-        -- `respGoalE_ofService`: the goal's refusal is the spec's, never a layout gap.
-        let (j, r) ← Job.of (searchDepths solver cache c.T v L senv resp.text ds sv.callerData (respGoalE L v resp)
+      for ⟨resp, hr⟩ in resps do
+        let (j, r) ← Job.of (searchDepths solver cache sv resp.text ds
+          (fun sts => (Sound.get (respGoalE L v resp sts) (respGoalE_ofService c sv.mem hr sts)).map (·.1))
           (responsePlay c.T v resp))
         searches := searches.push j
         responses := responses.push (v.name, resp.name, scopeBounds c.T L v, r)

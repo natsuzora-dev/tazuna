@@ -396,6 +396,33 @@ def stateWidth (v : ServiceV) : Nat := (stateTys v (shapes v)).length
 theorem stateWidth_eq (v : ServiceV) : stateWidth v = 5 + v.machines.length := by
   simp [stateWidth, stateTys]; omega
 
+/-- The refusal of a lookup that needs a value term of the type `t` (its well-formedness, its names): the limit that
+it has none where `t` holds a function, a type variable or a structure value, or a table whose key is no plain value;
+else a gap. -/
+def lacksData (t : Ty) : Refusal :=
+  if !t.embeddable then .limit (.unsortable t) else if !t.plainKeys then .limit (.tableKey t) else .layout (.type t)
+
+/-- The refusal of a lookup over values of the types `ts`: the first one's that has no term (`lacksData`), else a
+gap. -/
+def lacksDatas (ts : List Ty) : Refusal :=
+  match ts.find? fun t => !(t.embeddable && t.plainKeys) with
+  | some t => lacksData t
+  | none => .layout (.type (.tuple ts))
+
+section
+variable {v : ServiceV} {shs : List (PendingShape v.event)} {n : Nat}
+
+/-- The types of an input's values, whose well-formedness `SymInput.wf` asserts. -/
+def SymInput.dataTys : SymInput v shs n → List Ty
+  | .command i .. => [v.caller, (v.commands.get i).input]
+  | .query i .. => [v.caller, (v.queries.get i).input]
+  | .answer k .. => [answerTy shs[k].output shs[k].rejection]
+  | .unmatched t .. => [t]
+  | .event i _ => [(v.subscribes.get i).event]
+  | .clock _ => []
+
+end
+
 section
 variable (L : Layout) (T : List TypeDecl) (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v))
 
@@ -410,7 +437,7 @@ def questions (inp : SymInput v (shapes v) senv.nT) :
   let S : SymState v := SymState.vars 0
   let t ← encodeStep L T P v senv S inp
   let wf ← need (.layout (.type v.records)) (S.wf L (shapes v))
-  let iwf ← need (.layout (.type v.records)) (inp.wf L)
+  let iwf ← need (lacksDatas inp.dataTys) (inp.wf L)
   let below ← pendingBelowT L (shapes v) S.pending S.nextId
   let (inv, ci0) ← v.invariants.code L
   let (rules, ci) ← encodeInvariants L inv S.records
@@ -418,7 +445,7 @@ def questions (inp : SymInput v (shapes v) senv.nT) :
   let held := andT (allT (rules.map (·.2))) (allT (checks.toList.map instHoldT))
   let side := andT t.codes (andT t.sites (andT ci0 (andT ci ck)))
   let tys := stateTys v (shapes v) ++ inp.tys
-  let vars ← tys.mapM fun ty => need (.layout (.type ty)) (L.srt? ty)
+  let vars ← tys.mapM fun ty => need (lacks ty) (L.srt? ty)
   let dts ← need (.layout (.type v.records)) L.datatypes?
   let script (asserts : List Term) : TypedScript := ⟨dts, tys, vars, [wf, iwf, below, t.out.case], asserts⟩
   let cmd := inp.command?

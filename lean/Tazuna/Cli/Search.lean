@@ -3,6 +3,7 @@ import Tazuna.Smt.Unroll
 import Tazuna.Smt.Bounds
 import Tazuna.Smt.PairOrders
 import Tazuna.Smt.Cover
+import Tazuna.Smt.Boundary
 
 /-! What `prove` and `generate` share: their options, the solver pool, the lines of a refused encoding and of a
 service's scope, and the search of a service's unrolled run depth by depth for a model of a goal, with each depth's
@@ -83,6 +84,7 @@ def _root_.Tazuna.Smt.Limit.text (T : List TypeDecl) : Limit → String
   | .slots t => s!"a value the spec writes of {tyText T t} holds more items than its bounds give"
   | .renamings n => s!"the two steps sent {n} requests, more than the {wireSearchCap} whose renamings are searched"
   | .keptFunctions => "the two orders end with the same data but keep different functions, whose results are not compared"
+  | .tableKey t => s!"a value of {tyText T t} holds a table whose key is no plain value"
 
 /-- Every bound a step of the service can go past: each table and bag type of its layout, and the pending requests
 where the service has a request shape, with the bound its slots come from (`stepBound`) and its slots as
@@ -98,12 +100,16 @@ def scopeBounds (T : List TypeDecl) (L : Layout) (v : ServiceV) : List Json :=
       | .table .. | .bag _ => line (tyText T t)
       | _ => none
 
-/-- The kind and fields of a refused encoding's line where the refusal is the spec's; none for an engine gap. -/
-def refusalLine (T : List TypeDecl) (r : Refusal) : Option (Kind × List (String × Json)) :=
-  match r with
-  | .unencodableString s => some (.undecided .unencodableString, [("string", Json.str s)])
-  | .limit l => some (.undecided .limit, [("limit", Json.str (l.text T))])
-  | .layout _ | .unexpected _ => none
+/-- The kind and fields of the line of a refusal that is the spec's: undecided, with its reason. -/
+def refusalLine (T : List TypeDecl) : SpecRefusal → Kind × List (String × Json)
+  | .unencodableString s => (.undecided .unencodableString, [("string", Json.str s)])
+  | .limit l => (.undecided .limit, [("limit", Json.str (l.text T))])
+
+/-- A builder's refusal as a line where it is the spec's; else an engine bug, a case the loaded program's types rule
+out. -/
+def refusedLine (T : List TypeDecl) : Refused → Except String (Kind × List (String × Json))
+  | .spec r => .ok (refusalLine T r)
+  | .unexpected u => .error s!"the encoding met a case the loaded program's types rule out: {reprStr u}"
 
 /-- The options of `prove` and `generate`: the prefix `--only` keeps lines by, how many solvers run at once, and the
 cache directory. -/
@@ -155,27 +161,30 @@ def runAll (jobs : Nat) (xs : Array Job) : IO Unit := do
     | .error e => throw e
 
 section
-variable (solver : Solver) (c : CheckedSpec) (v : ServiceV) (L : Layout) (senv : StepEnv L (shapes v))
+variable (solver : Solver) {c : CheckedSpec} (s : CheckedService c)
 
 /-- One depth's unrolled run as every goal at that depth shares it: its base, merged into one object per equal subterm
 (`shareCommon'`, the identity on values) so a goal built from its steps finds its shared terms among the assertions'
-at once, and the prefix of its scripts (`ScriptPrefix`), read once; or the refusal of its encoding. -/
-abbrev Depth (v : ServiceV) (n : Nat) := Except Refusal (UnrollBase v n × Option ScriptPrefix)
+at once, the input kinds it refused with their refusals (no gap, by `unrollBase_ofService`), and the prefix of its
+scripts (`ScriptPrefix`), read once; or the refusal of its encoding. -/
+abbrev Depth (v : ServiceV) (n : Nat) :=
+  Except Refused (UnrollBase v n × List (SymInput v (shapes v) n × Refused) × Option ScriptPrefix)
 
 /-- The run at depth `d`, each goal aside. -/
-def depthAt (d : Nat) : Depth v senv.nT :=
-  (unrollBase L c.T c.P v senv d).map fun B =>
+def depthAt (d : Nat) : Depth s.v s.senv.nT :=
+  (Sound.get (unrollBase s.L c.T c.P s.v s.senv d) (unrollBase_ofService s.mem c.T s.senv d)).map fun ⟨B, hB⟩ =>
+    let refused := B.refused.attach.map fun ⟨p, hp⟩ => (p.1, p.2.refused (hB p hp))
     let B := ShareCommon.shareCommon' B
-    (B, B.script.prefix? solver.header)
+    (B, refused, B.script.prefix? solver.header)
 
 /-- Each depth from 1 to `k`, built by its own job once for every search over it: the jobs, and each depth as a task a
 search awaits when it reaches that depth; none if its job never ran, an engine bug. -/
-def depthJobs (k : Nat) : IO (Array Job × Array (Task (Option (Depth v senv.nT)))) := do
+def depthJobs (k : Nat) : IO (Array Job × Array (Task (Option (Depth s.v s.senv.nT)))) := do
   let mut jobs : Array Job := #[]
   let mut ds := #[]
   for d in List.range' 1 k do
     let p ← IO.Promise.new
-    jobs := jobs.push (d, fun d => (p.resolve (some (depthAt solver c v L senv d)) : BaseIO Unit))
+    jobs := jobs.push (d, fun d => (p.resolve (some (depthAt solver s d)) : BaseIO Unit))
     ds := ds.push (p.resultD none)
   return (jobs, ds)
 
@@ -190,45 +199,45 @@ inductive SearchResult (α : Type) where
   | undecided (kind : Kind) (fields : List (String × Json))
 
 section
-variable (solver : Solver) (cache : System.FilePath) (T : List TypeDecl) (v : ServiceV) (L : Layout)
-  (senv : StepEnv L (shapes v))
+variable (solver : Solver) (cache : System.FilePath) {c : CheckedSpec} (s : CheckedService c)
 
 /-- The search over the depths 1, 2, ... of the service's unrolled run (`ds`, each awaited when the search reaches it)
 for a model of the goal each depth's steps give, stopping at the first, whose decoded run `play` reads. A refused
 encoding of the run or of the goal ends the search undecided; a refused input kind (which the script then lacks)
 leaves it undecided unless a model is found. `what` names the search in an engine bug's message. -/
-def searchDepths {α : Type} (what : String) (ds : Array (Task (Option (Depth v senv.nT))))
-    (hc : v.caller.isData = true) (goal : List (UnrollStep v senv.nT) → Except Refusal Term)
-    (play : List (Input v) → Except String α) : IO (Except String (SearchResult α)) := do
-  let fail (m : String) : Except String (SearchResult α) := .error s!"service {v.name}, {what}: {m}"
-  let refusedLine (step : Option String) (r : Refusal) : Except String (SearchResult α) :=
-    match refusalLine T r with
-    | some (kind, fields) => .ok (.undecided kind (step.toList.map (("step", Json.str ·)) ++ fields))
-    | none => fail s!"the encoding refused: {reprStr r}"
-  let mut refused : Option (SymInput v (shapes v) senv.nT × Refusal) := none
+def searchDepths {α : Type} (what : String) (ds : Array (Task (Option (Depth s.v s.senv.nT))))
+    (goal : List (UnrollStep s.v s.senv.nT) → Except Refused Term) (play : List (Input s.v) → Except String α) :
+    IO (Except String (SearchResult α)) := do
+  let fail (m : String) : Except String (SearchResult α) := .error s!"service {s.v.name}, {what}: {m}"
+  let undecided (step : Option String) (r : Refused) : Except String (SearchResult α) :=
+    match refusedLine c.T r with
+    | .ok (kind, fields) => .ok (.undecided kind (step.toList.map (("step", Json.str ·)) ++ fields))
+    | .error m => fail m
+  let mut refused : Option (SymInput s.v (shapes s.v) s.senv.nT × Refused) := none
   for (t, i) in ds.toList.zipIdx do
     let d := i + 1
     let some depth ← IO.wait t | return fail s!"depth {d} was never built"
-    let (B, pre) ← match depth with
-      | .error r => return refusedLine none r
+    let (B, kinds, pre) ← match depth with
+      | .error r => return undecided none r
       | .ok x => pure x
     let g ← match goal B.steps with
-      | .error r => return refusedLine none r
+      | .error r => return undecided none r
       | .ok g => pure g
     let U := B.withGoal g
-    if refused.isNone then refused := U.refused.head?
+    if refused.isNone then refused := kinds.head?
     let some q := pre.bind (·.ask g) | return fail s!"depth {d}: {noSort}"
     match ← solver.runKeyed cache q with
     | .unsat => pure ()
     | .unknown why => return .ok (.undecided (.undecided .unknown) [("depth", Lean.toJson d), ("why", Json.str why)])
     | .sat vs =>
       -- `unroll_decode`: every model's steps decode to a run that faults nowhere.
-      let some xs := U.steps.mapM (·.decode (modelOf vs) L hc) | return fail s!"a model of depth {d} does not decode"
+      let some xs := U.steps.mapM (·.decode (modelOf vs) s.L s.callerData)
+        | return fail s!"a model of depth {d} does not decode"
       match play xs with
       | .ok a => return .ok (.found d a)
       | .error why => return fail s!"a model of depth {d} {why}"
   match refused with
-  | some (inp, r) => return refusedLine (some inp.text) r
+  | some (inp, r) => return undecided (some inp.text) r
   | none => return .ok (.noModel ds.size)
 
 end

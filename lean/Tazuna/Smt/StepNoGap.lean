@@ -1113,7 +1113,7 @@ theorem commandOk_ofService {x : CommandV v.records v.event v.caller} (hx : x �
     CommandOk (Layout.ofService c.program.defs v) c.P v.declared c.program.defs.handles v x := by
   have chk := c.checked v hv
   obtain ⟨⟨her, -⟩, -, -, -, -, ⟨hec, -⟩⟩ := stateTys_iff.1 chk.stateTys
-  have hu : ∀ t ∈ [Ty.ctx v.records x.input v.caller, Ty.result (.list v.event) x.rejection],
+  have hu : ∀ t ∈ [Ty.ctx v.records x.input v.caller, Ty.result (.list v.event) x.rejection, x.input],
       t ∈ useTys v (Layout.kindsOf c.program.defs.parts v) := fun t ht => by
     simp only [useTys, List.mem_append, List.mem_flatMap]
     exact .inl (.inl (.inl (.inl (.inr ⟨x, hx, ht⟩))))
@@ -1128,7 +1128,7 @@ theorem queryOk_ofService {q : QueryV v.records v.caller} (hq : q ∈ v.queries)
     QueryOk (Layout.ofService c.program.defs v) c.P v.declared c.program.defs.handles v q := by
   have chk := c.checked v hv
   obtain ⟨⟨her, -⟩, -, -, -, -, ⟨hec, -⟩⟩ := stateTys_iff.1 chk.stateTys
-  have hu : ∀ t ∈ [Ty.queryCtx v.records q.input v.caller, q.output],
+  have hu : ∀ t ∈ [Ty.queryCtx v.records q.input v.caller, q.output, q.input],
       t ∈ useTys v (Layout.kindsOf c.program.defs.parts v) := fun t ht => by
     simp only [useTys, List.mem_append, List.mem_flatMap]
     exact .inl (.inl (.inl (.inr ⟨q, hq, ht⟩)))

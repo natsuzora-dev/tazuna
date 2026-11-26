@@ -137,9 +137,9 @@ def pairQuestions (k1 k2 : OwnPlace L v.event) : Except Refusal (TypedScript × 
   let below ← pendingBelowT L (shapes v) S.pending S.nextId
   let names ← need (.layout (.type v.records)) (namesStateT L S)
   let tests := [Term.is senv.dE (L.ownCtor v.event k1) (.var n), .is senv.dE (L.ownCtor v.event k2) (.var (n + 1))]
-  let w1 ← need (.layout (.type v.event)) (ownWf L v.event senv.dE k1 (.var n))
-  let w2 ← need (.layout (.type v.event)) (ownWf L v.event senv.dE k2 (.var (n + 1)))
-  let vars ← (pairTys v).mapM fun ty => need (.layout (.type ty)) (L.srt? ty)
+  let w1 ← need (lacksDatas (L.ownsOf v.event)[k1].fields) (ownWf L v.event senv.dE k1 (.var n))
+  let w2 ← need (lacksDatas (L.ownsOf v.event)[k2].fields) (ownWf L v.event senv.dE k2 (.var (n + 1)))
+  let vars ← (pairTys v).mapM fun ty => need (lacks ty) (L.srt? ty)
   let dts ← need (.layout (.type v.records)) L.datatypes?
   let found := if ownFound P L v.event k1 && ownFound P L v.event k2 then [] else [Term.bool false]
   let script (asserts : List Term) : TypedScript :=

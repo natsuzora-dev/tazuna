@@ -108,15 +108,14 @@ def generate (root dir path : String) (opts : Options) : IO UInt32 := do
     for sv in c.services do
       let v := sv.v
       let L := sv.L
-      let senv := sv.senv
       let rules := ruleNamesOf v
       let gs := (targets c.T v rules).filter fun g => opts.keeps (v.name ++ "/" ++ g.text)
       if gs.isEmpty then continue
-      let (bs, ds) ← depthJobs solver c v L senv v.bounds.stepsNat
+      let (bs, ds) ← depthJobs solver sv v.bounds.stepsNat
       builds := builds ++ bs
       for g in gs do
         -- `generate_sound`: the decoded run's last step shows the target, so "misses the target" is unreachable.
-        let (j, r) ← Job.of (searchDepths solver cache c.T v L senv g.text ds sv.callerData (fun sts => .ok (genGoal L c.T rules g sts))
+        let (j, r) ← Job.of (searchDepths solver cache sv g.text ds (fun sts => .ok (genGoal L c.T rules g sts))
           (genTrace c.T v rules g))
         searches := searches.push j
         jobs := jobs.push (v.name, g, scopeBounds c.T L v, r)

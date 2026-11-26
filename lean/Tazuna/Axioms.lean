@@ -106,16 +106,13 @@ elab "#check_tazuna_reach" : command => do
     ``Tazuna.Smt.Term.denote_eq_denoteFast, ``Tazuna.Smt.Term.beq_eq_beqFast,
     -- Compiled code extends a script's shared definitions in place; it is the extension the sharing theorems are about.
     ``Tazuna.Smt.Defs.add_eq_addFast,
-    -- The service's layout, derived from its program: the wire-id invariant's term is found, and every create fits its
-    -- table's slots. (Its step environment is found by `stepEnv_ofService`, which the commands use.)
-    ``Tazuna.Smt.pendingBelowT_ofService, ``Tazuna.Smt.atMost_le_count,
+    -- The service's layout, derived from its program: every create fits its table's slots. (The commands read every
+    -- script builder through `Sound.get` with its no-gap theorem, so those are the commands' own: `unrollBase_ofService`,
+    -- `questions_ofService`, `timerQuestions_ofService`, `pairQuestions_ofService`, `respGoalE_ofService`.)
+    ``Tazuna.Smt.atMost_le_count,
     -- In a checked service's layout, a state within the slots embeds, so a script without a model has no state within
-    -- the bounds, and the state's well-formedness term is always built.
-    ``Tazuna.Smt.embedState_ofService, ``Tazuna.Smt.wf_ofService,
-    -- In each service's layout, the step encoding meets no layout gap: refusals are the spec's, never the builder's.
-    ``Tazuna.Smt.encodeStep_ofService,
-    -- Nor does a response's goal on an unrolled run, so prove never reads a response's refusal as an engine bug.
-    ``Tazuna.Smt.respGoalE_ofService,
+    -- the bounds.
+    ``Tazuna.Smt.embedState_ofService,
     -- T4: where every input kind's questions about the rules named n are unsat, and its bound question is unsat or
     -- the step fits the slots (Prove.withinBounds), no step within the slots of a run from an initial state whose
     -- invariants hold faults naming n.

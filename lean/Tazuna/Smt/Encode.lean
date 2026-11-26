@@ -39,6 +39,9 @@ inductive Limit where
   values), and what functions do is not compared, so whether the orders end the same is not known. Never an encoder's
   refusal: prove reads it from a pair's counterexample. -/
   | keptFunctions
+  /-- A value of the type, written or decoded as a whole, holds a table whose key is no plain value, so its
+  well-formedness (distinct keys) has no term. -/
+  | tableKey (t : Ty)
 deriving Repr
 
 /-- What a layout lacks that an encoding needs. A layout built for the program has none of these. -/

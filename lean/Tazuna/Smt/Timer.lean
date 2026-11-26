@@ -36,8 +36,8 @@ captured values leave the slots at some context; and the target question, whethe
 it is set at where everything fits. -/
 def timerQuestions (m : MachineV r e) : Except Refusal (TypedScript × TypedScript) := do
   let (back, c, c0) ← encodeTimer L m (.var 0) (.var 1) (.var 2) (.var 3)
-  let wfs ← (timerTys m).zipIdx.mapM fun (t, i) => need (.layout (.type t)) (wfT L t (.var i))
-  let vars ← (timerTys m).mapM fun t => need (.layout (.type t)) (L.srt? t)
+  let wfs ← (timerTys m).zipIdx.mapM fun (t, i) => need (lacksData t) (wfT L t (.var i))
+  let vars ← (timerTys m).mapM fun t => need (lacks t) (L.srt? t)
   let dts ← need (.layout (.type r)) L.datatypes?
   let script (asserts : List Term) : TypedScript := ⟨dts, timerTys m, vars, wfs, asserts⟩
   pure (script [.or (.not c0) (.not c)], script [c0, c, back])
@@ -137,7 +137,7 @@ def TimerVals.ctx {m : MachineV r e} (x : TimerVals L m M) : (Ty.tuple [Ty.machi
   (.inl (x.key, x.state, x.records, x.now, ()), ())
 
 theorem wfs_hold (m : MachineV r e) (x : TimerVals L m M) {wfs : List Term}
-    (h : (timerTys m).zipIdx.mapM (fun (t, i) => need (.layout (.type t)) (wfT L t (.var i))) = .ok wfs) :
+    (h : (timerTys m).zipIdx.mapM (fun (t, i) => need (lacksData t) (wfT L t (.var i))) = .ok wfs) :
     ∀ w ∈ wfs, Holds M w := by
   have hF := mapM_ok _ _ _ h
   intro w hw

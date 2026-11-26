@@ -121,14 +121,14 @@ variable (L : Layout) {v : ServiceV} {n : Nat}
 /-- Every name the input's terms carry was made below the counter `fresh` or is from outside (`Input.Valid`). -/
 def SymInput.validT (fresh : Term) : SymInput v (shapes v) n → Except Refusal Term
   | .command i caller input => do
-    let c ← need (.layout (.type v.caller)) (namesT L fresh v.caller caller)
-    let x ← need (.layout (.type (v.commands.get i).input)) (namesT L fresh (v.commands.get i).input input)
+    let c ← need (lacksData v.caller) (namesT L fresh v.caller caller)
+    let x ← need (lacksData (v.commands.get i).input) (namesT L fresh (v.commands.get i).input input)
     pure (andT c x)
   | .query .. | .clock _ | .unmatched .. => pure tt
   | .answer k _ _ value =>
     let t := answerTy (shapes v)[k].output (shapes v)[k].rejection
-    need (.layout (.type t)) (namesT L fresh t value)
-  | .event i value => need (.layout (.type (v.subscribes.get i).event)) (namesT L fresh (v.subscribes.get i).event value)
+    need (lacksData t) (namesT L fresh t value)
+  | .event i value => need (lacksData (v.subscribes.get i).event) (namesT L fresh (v.subscribes.get i).event value)
 
 end
 
@@ -248,7 +248,7 @@ refusal of its encoding. -/
 def unrollKind (S : SymState v) (sel : Term) (inp : SymInput v (shapes v) senv.nT) :
     Except (SymInput v (shapes v) senv.nT × Refusal) ((SymInput v (shapes v) senv.nT × EncodedStep v) × Term × Term ×
       SymState v) :=
-  match encodeStep L T P v senv S inp, inp.validT L S.fresh, need (.layout (.type v.records)) (inp.wf L) with
+  match encodeStep L T P v senv S inp, inp.validT L S.fresh, need (lacksDatas inp.dataTys) (inp.wf L) with
   | .ok t, .ok valid, .ok wf =>
     let (ok, after) := t.out.after S inp
     let picks := selectsT sel (inp, t)
@@ -280,10 +280,12 @@ def unrollSteps (S : SymState v) (i b : Nat) :
 
 /-- The runs of `d` inputs from the initial state, before a goal: what every goal at that depth shares. -/
 def unrollBase (d : Nat) : Except Refusal (UnrollBase v senv.nT) := do
-  let S0 ← need (.layout (.type v.records)) (initState L v)
+  -- The initial records have a term where they fit the slots (`embedV`); else a bound is below them.
+  let S0 ← need (if (embedV L v.records (Ty.up _ v.records_data v.init)).isSome then .layout (.type v.records)
+    else .limit (.slots v.records)) (initState L v)
   let dts ← need (.layout (.type v.records)) L.datatypes?
   let r := unrollSteps L T P v senv S0 0 0 d
-  let vars ← r.1.mapM fun ty => need (.layout (.type ty)) (L.srt? ty)
+  let vars ← r.1.mapM fun ty => need (lacks ty) (L.srt? ty)
   pure ⟨dts, r.1, vars, r.2.1, r.2.2.1, r.2.2.2⟩
 
 end

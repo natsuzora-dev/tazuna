@@ -99,15 +99,15 @@ def Layout.exactOwns (p : ProgramParts) (v : ServiceV) : List OwnKey :=
     (SendSite.keys (eventTys p v) r.1 r.2.1)
 
 /-- The types the step's encoders build beyond the state's: contexts, functions' results, rules, event and effect
-lists, answers and own commands' answers. They are listed after the program's types, which already hold them where a
+lists, answers, own commands' answers, and the inputs, whose terms a run's script declares. They are listed after the program's types, which already hold them where a
 function of the program has them, so the layout keeps its order. -/
 def useTys (v : ServiceV) (K : Layout) : List Ty :=
   [Ty.rules, .list v.event] ++
     v.reactions.flatMap (fun _ => [Ty.reactionCtx v.records, .list (.dsl .effect [v.event])]) ++
     v.machines.flatMap (fun m => [Ty.machineCtx m.key m.state v.records, Ty.next m.state, Ty.option (Ty.timer m.state),
       .bag m.key]) ++
-    v.commands.flatMap (fun x => [Ty.ctx v.records x.input v.caller, Ty.result (.list v.event) x.rejection]) ++
-    v.queries.flatMap (fun q => [Ty.queryCtx v.records q.input v.caller, q.output]) ++
+    v.commands.flatMap (fun x => [Ty.ctx v.records x.input v.caller, Ty.result (.list v.event) x.rejection, x.input]) ++
+    v.queries.flatMap (fun q => [Ty.queryCtx v.records q.input v.caller, q.output, q.input]) ++
     v.subscribes.map (·.event) ++
     (shapes v).map (fun sh => answerTy sh.output sh.rejection) ++
     K.owns.flatMap fun
