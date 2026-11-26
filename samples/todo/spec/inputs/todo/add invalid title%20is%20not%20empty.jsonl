@@ -1,0 +1,3 @@
+{"service":"todo","trace":1}
+{"caller":{"tag":"User"},"id":"1","in":"request","input":"","name":"add","time":0}
+{"out":"answer","outcome":"invalid","rules":["title is not empty"],"time":0,"to":"1"}

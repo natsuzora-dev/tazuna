@@ -1,0 +1,18 @@
+{"service":"todo","trace":1}
+{"caller":{"tag":"User"},"id":"1","in":"request","input":"","name":"add","time":0}
+{"out":"answer","outcome":"invalid","rules":["title is not empty"],"time":0,"to":"1"}
+{"caller":{"tag":"User"},"id":"2","in":"request","input":"Buy milk","name":"add","time":0}
+{"out":"answer","outcome":"accepted","time":0,"to":"2"}
+{"out":"event","time":0,"value":{"tag":"Added","task":"id1","title":"Buy milk"}}
+{"caller":{"tag":"User"},"id":"3","in":"request","input":"Call the bank","name":"add","time":0}
+{"out":"answer","outcome":"accepted","time":0,"to":"3"}
+{"out":"event","time":0,"value":{"tag":"Added","task":"id2","title":"Call the bank"}}
+{"caller":{"tag":"User"},"id":"4","in":"request","input":"id1","name":"complete","time":0}
+{"out":"answer","outcome":"accepted","time":0,"to":"4"}
+{"out":"event","time":0,"value":{"tag":"Completed","task":"id1"}}
+{"caller":{"tag":"User"},"id":"5","in":"request","input":null,"name":"open tasks","time":0}
+{"out":"answer","outcome":"answered","output":1,"time":0,"to":"5"}
+{"in":"clock","time":3600000}
+{"out":"event","time":3600000,"value":{"tag":"ReminderDue","task":"id2","title":"Call the bank"}}
+{"external":"mailer","id":"r1","input":{"subject":"Call the bank","tag":"Mail"},"name":"send","out":"request","time":3600000}
+{"in":"answer","ok":null,"time":3600000,"to":"r1"}

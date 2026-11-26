@@ -1,0 +1,8 @@
+{"service":"todo","trace":1}
+{"caller":{"tag":"User"},"id":"1","in":"request","input":"A","name":"add","time":0}
+{"out":"answer","outcome":"accepted","time":0,"to":"1"}
+{"out":"event","time":0,"value":{"tag":"Added","task":"id1","title":"A"}}
+{"caller":{"tag":"Reminder"},"id":"2","in":"request","input":"id1","name":"remind","time":0}
+{"out":"answer","outcome":"accepted","time":0,"to":"2"}
+{"out":"event","time":0,"value":{"tag":"ReminderDue","task":"id1","title":"A"}}
+{"external":"mailer","id":"r1","input":{"subject":"A","tag":"Mail"},"name":"send","out":"request","time":0}
