@@ -9,7 +9,7 @@ writer scenarios use, read back and replayed by verify's own replay, and the tra
 passes and its last step shows the target (`generate_reaches`). A target with no model at any depth is unreached
 within the steps (`generate_unreached`). The targets of a service share each depth's run (`unrollBase`), built once;
 only the goal differs, so an answer is looked up under a key read off the shared prefix's digest and the goal
-(`ScriptPrefix.key`), and a script's text is printed only for the solver. -/
+(`ScriptPrefix.ask`), and a script's text is printed only for the solver. -/
 
 namespace Tazuna.Cli
 
@@ -139,9 +139,9 @@ def searchTarget (ds : List (Depth v senv.nT)) (g : GenTarget) : IO (Except Stri
       if refused.isNone then refused := U.refused.head?
       let some pre := pre | return .ok (.undecided (.undecided .unknown) [("depth", Lean.toJson d),
         ("why", Json.str "a shared term of the script has no sort")])
-      let some key := pre.key goal | return .ok (.undecided (.undecided .unknown)
+      let some q := pre.ask goal | return .ok (.undecided (.undecided .unknown)
         [("depth", Lean.toJson d), ("why", Json.str "a shared term of the script has no sort")])
-      match ← solver.runKeyed cache key fun _ => U.ask.script.text solver.header with
+      match ← solver.runKeyed cache q with
       | .unsat => pure ()
       | .unknown why =>
         return .ok (.undecided (.undecided .unknown) [("depth", Lean.toJson d), ("why", Json.str why)])

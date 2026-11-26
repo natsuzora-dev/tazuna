@@ -60,15 +60,31 @@ def Solver.run (s : Solver) (script : Script) : IO Answer := do
   | .ok out => return Answer.parse out
   | .error why => return .unknown why
 
-/-- Runs the script whose text `text` gives, or reads its answer from the cache directory `dir` under `key`, a
-SHA-256 that determines the text. The text is built only when the answer is not kept. A sat or unsat answer is kept;
-an unknown answer, which a wall-clock limit may give, is not. -/
-def Solver.runKeyed (s : Solver) (dir : System.FilePath) (key : String) (text : Unit → Option String) : IO Answer := do
-  let answerFile := dir / (key ++ ".answer")
+/-- Strings joined so the parts can be read back: each prefixed by its length. -/
+def frame (parts : List String) : String := String.join (parts.map fun p => s!"{p.length}:{p}")
+
+/-- A script's text with the cache key its answer is kept under. A key is the SHA-256 of exactly the parts that print
+the text, so equal keys mean equal texts unless SHA-256 collides: built only here, by `Script.keyed` and
+`ScriptPrefix.ask`. -/
+structure Keyed where
+  private mk ::
+  key : String
+  /-- Printed only when the answer is not kept. -/
+  text : Unit → String
+
+/-- The script keyed by the SHA-256 of its whole text; none as `Script.text`. -/
+def Script.keyed (s : Script) (header : List String) : Option Keyed :=
+  (s.text header).map fun t => ⟨Sha256.hex t.toUTF8, fun _ => t⟩
+
+/-- Runs the keyed script, or reads its answer from the cache directory `dir` under its key, as ccache and Bazel key
+results by a digest of their inputs, so the cache keeps no script. The text holds the solver's header (resource limit,
+seeds), so the same text gets the same answer. A sat or unsat answer is kept; an unknown answer, which a wall-clock
+limit may give, is not. -/
+def Solver.runKeyed (s : Solver) (dir : System.FilePath) (q : Keyed) : IO Answer := do
+  let answerFile := dir / (q.key ++ ".answer")
   if ← answerFile.pathExists then
     return Answer.parse (← IO.FS.readFile answerFile)
-  let some text := text () | return .unknown "a shared term of the script has no sort"
-  match ← s.runText text with
+  match ← s.runText (q.text ()) with
   | .error why => return .unknown why
   | .ok out =>
     let a := Answer.parse out
@@ -82,42 +98,42 @@ def Solver.runKeyed (s : Solver) (dir : System.FilePath) (key : String) (text : 
       IO.FS.rename partFile answerFile
     return a
 
-/-- Runs one script, or reads its answer from the cache directory `dir`: a sat or unsat answer is kept under the
-SHA-256 of the script's text, as ccache and Bazel key results by a digest of their inputs, so the cache keeps no
-script. The text holds the solver's header (resource limit, seeds), so the same text gets the same answer. -/
+/-- Runs one script, or reads its answer from the cache directory `dir`, keyed by its whole text. -/
 def Solver.runCached (s : Solver) (dir : System.FilePath) (script : Script) : IO Answer := do
-  let some text := script.text s.header | return .unknown "a shared term of the script has no sort"
-  s.runKeyed dir (Sha256.hex text.toUTF8) fun _ => some text
+  let some q := script.keyed s.header | return .unknown "a shared term of the script has no sort"
+  s.runKeyed dir q
 
-/-- A script's assertions but its last, with their shared definitions found, the definitions' sorts and the SHA-256
-of the text of the script they make: what scripts that differ only in their last assertion share (generate's goals at
+/-- A script's text parts with their shared definitions found, the definitions' sorts and the SHA-256 of the framed
+parts: what scripts that add one goal assertion share (the goals of generate's targets and of a service's responses at
 one depth). The assertions are to be merged into one object per equal subterm first (`shareCommon'`), with whatever
-builds the last assertions, so finding a last assertion's shared terms among them stops at equal objects. -/
+builds the goals, so finding a goal's shared terms among them stops at equal objects. -/
 structure ScriptPrefix where
   script : Script
   defs : Defs
   sorts : Array Srt
+  parts : TextParts
   digest : String
 
-/-- The prefix of the script `s` (its assertions without the last), read once. -/
+/-- The script `s` as the prefix of scripts that add a goal, read once. -/
 def Script.prefix? (s : Script) (header : List String) : Option ScriptPrefix := do
   let (asserts, D) := Term.extracts s.asserts {}
   let sorts ← D.entries.foldlM (fun acc (_, b) => do pure (acc.push (← b.srt? s.datatypes s.vars acc))) #[]
-  let text := s.render header asserts (D.entries.toList.map (·.2) |>.zip sorts.toList)
-  pure ⟨s, D, sorts, Sha256.hex text.toUTF8⟩
+  let parts := s.parts header asserts (D.entries.toList.map (·.2) |>.zip sorts.toList)
+  pure ⟨s, D, sorts, parts, Sha256.hex (frame [parts.head, parts.body, parts.tail]).toUTF8⟩
 
-/-- The cache key of the prefix's script with `goal` as its last assertion: the SHA-256 of the prefix's digest, then
-the lines the full script's text adds to the prefix's, the goal's new definitions and its assertion. The full text is
-the prefix's text with those lines inserted (before the first assertion and before `check-sat`), and a printed term
-holds no line break, so equal keys mean equal texts unless SHA-256 collides: the trust of keying by the text's own
-digest, without printing the prefix again. -/
-def ScriptPrefix.key (p : ScriptPrefix) (goal : Term) : Option String := do
+/-- The prefix's script with `goal` as its last assertion, keyed: the text is the prefix's parts with the goal's new
+definitions after the prefix's and its assertion after the prefix's, and the key is the SHA-256 of the prefix's digest
+and those two pieces, so the key covers exactly what prints the text without printing the prefix again. None where a
+new definition has no sort. -/
+def ScriptPrefix.ask (p : ScriptPrefix) (goal : Term) : Option Keyed := do
   let (g, D) := goal.extract p.defs
   let fresh := D.entries.toList.drop p.defs.entries.size
   let sorts ← fresh.foldlM (fun acc (_, b) => do pure (acc.push (← b.srt? p.script.datatypes p.script.vars acc))) p.sorts
-  let lines := (fresh.zip (sorts.toList.drop p.sorts.size)).zipIdx.map fun (((_, b), srt), i) =>
-    defineLine (p.defs.entries.size + i) b srt
-  pure (Sha256.hex ("\n".intercalate (p.digest :: lines ++ [s!"(assert {g.print})"])).toUTF8)
+  let defs := linesText ((fresh.zip (sorts.toList.drop p.sorts.size)).zipIdx.map fun (((_, b), srt), i) =>
+    defineLine (p.defs.entries.size + i) b srt)
+  let assert := linesText [s!"(assert {g.print})"]
+  pure ⟨Sha256.hex (frame [p.digest, defs, assert]).toUTF8,
+    fun _ => p.parts.head ++ defs ++ p.parts.body ++ assert ++ p.parts.tail⟩
 
 /-- A question to the solver that owns its call: the script, and how its answer reads as a result. Nothing pairs
 answers with questions by position. -/

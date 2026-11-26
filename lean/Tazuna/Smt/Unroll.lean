@@ -135,6 +135,10 @@ structure UnrollBase (v : ServiceV) (n : Nat) where
   steps : List (UnrollStep v n)
   refused : List (SymInput v (shapes v) n × Refusal)
 
+/-- The script of the run alone; `withGoal`'s script is it with the goal's assertion added. -/
+def UnrollBase.script {v : ServiceV} {n : Nat} (B : UnrollBase v n) : Script :=
+  ({ datatypes := B.datatypes, tys := B.tys, vars := B.vars, context := [], asserts := B.asserts } : TypedScript).script
+
 /-- The unrolled run with `goal`, a term on its steps, as its last assertion. -/
 def UnrollBase.withGoal {v : ServiceV} {n : Nat} (B : UnrollBase v n) (goal : Term) : Unrolled v n :=
   ⟨⟨B.datatypes, B.tys, B.vars, [], B.asserts ++ [goal]⟩, B.steps, B.refused⟩

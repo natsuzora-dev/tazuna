@@ -428,8 +428,7 @@ abbrev Depth (v : ServiceV) (n : Nat) := Except Refusal (UnrollBase v n × Optio
 def depthAt (d : Nat) : Depth v senv.nT :=
   (unrollBase L c.T c.P v senv d).map fun B =>
     let B := ShareCommon.shareCommon' B
-    (B, ({ datatypes := B.datatypes, vars := B.vars, asserts := B.asserts, shows := List.range B.tys.length } : Script).prefix?
-      solver.header)
+    (B, B.script.prefix? solver.header)
 
 end
 
@@ -483,8 +482,8 @@ def searchResponse (ds : List (Task (Depth v senv.nT))) (resp : ResponseV v.even
         let unsorted : RespResult := .undecided (.undecided .unknown) [("depth", Lean.toJson d),
           ("why", Json.str "a shared term of the script has no sort")]
         let some pre := pre | return .ok unsorted
-        let some key := pre.key g | return .ok unsorted
-        match ← solver.runKeyed cache key fun _ => U.ask.script.text solver.header with
+        let some q := pre.ask g | return .ok unsorted
+        match ← solver.runKeyed cache q with
         | .unsat => pure ()
         | .unknown why =>
           return .ok (.undecided (.undecided .unknown) [("depth", Lean.toJson d), ("why", Json.str why)])

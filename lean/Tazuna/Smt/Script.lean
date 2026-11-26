@@ -51,16 +51,31 @@ def Script.shared (s : Script) : Option (List Term × List (Term × Srt)) := do
 /-- The line defining `s<i>` as the body `b` of the sort `srt`. -/
 def defineLine (i : Nat) (b : Term) (srt : Srt) : String := s!"(define-fun {(Name.def_ i).text} () {srt.text} {b.print})"
 
+/-- A script's text in three parts, each a run of whole lines: the header, declarations and definitions; the
+assertions; the check and the values asked for. -/
+structure TextParts where
+  head : String
+  body : String
+  tail : String
+
+def TextParts.text (p : TextParts) : String := p.head ++ p.body ++ p.tail
+
+/-- Lines as text, each ended by a line break. -/
+def linesText (ls : List String) : String := String.join (ls.map (· ++ "\n"))
+
+/-- The script's text after the solver's header lines, in parts, from its shared assertions and definitions. -/
+def Script.parts (s : Script) (header : List String) (asserts : List Term) (defs : List (Term × Srt)) : TextParts :=
+  { head := linesText (header ++ ["(set-option :produce-models true)", "(set-logic ALL)"] ++
+      s.datatypes.zipIdx.map (fun (d, i) => d.text i) ++
+      s.vars.zipIdx.map (fun (srt, n) => s!"(declare-const {(Name.var n).text} {srt.text})") ++
+      defs.zipIdx.map (fun ((b, srt), i) => defineLine i b srt))
+    body := linesText (asserts.map (fun t => s!"(assert {t.print})"))
+    tail := linesText (["(check-sat)"] ++ (if s.shows.isEmpty then [] else
+      [s!"(get-value ({" ".intercalate (s.shows.map fun n => (Name.var n).text)}))"])) }
+
 /-- The script's text after the solver's header lines, from its shared assertions and definitions. -/
 def Script.render (s : Script) (header : List String) (asserts : List Term) (defs : List (Term × Srt)) : String :=
-  let lines := header ++ ["(set-option :produce-models true)", "(set-logic ALL)"] ++
-    s.datatypes.zipIdx.map (fun (d, i) => d.text i) ++
-    s.vars.zipIdx.map (fun (srt, n) => s!"(declare-const {(Name.var n).text} {srt.text})") ++
-    defs.zipIdx.map (fun ((b, srt), i) => defineLine i b srt) ++
-    asserts.map (fun t => s!"(assert {t.print})") ++ ["(check-sat)"] ++
-    (if s.shows.isEmpty then [] else
-      [s!"(get-value ({" ".intercalate (s.shows.map fun n => (Name.var n).text)}))"])
-  "\n".intercalate lines ++ "\n"
+  (s.parts header asserts defs).text
 
 /-- The script's text after the solver's header lines; `none` as `Script.shared`. -/
 def Script.text (s : Script) (header : List String) : Option String := do
