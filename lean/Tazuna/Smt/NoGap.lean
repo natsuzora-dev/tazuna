@@ -62,13 +62,6 @@ variable (L : Layout)
 /-- The type's datatypes are in the layout whenever it has a sort. -/
 def Avail (t : Ty) : Prop := t.sorted = true → L.Has t
 
-/-- Every datatype of the layout has a sort, so a type it finds has one, and every kind of effect's fields are data
-with sorts. -/
-structure SortedLayout : Prop where
-  types : ∀ p ∈ L.types, p.1.sorted = true
-  effects : ∀ k ∈ L.effects, Ty.sorteds k.fields = true ∧ (Ty.tuple k.fields).isData = true
-  owns : ∀ k ∈ L.owns, Ty.sorteds k.fields = true ∧ (Ty.tuple k.fields).isData = true
-
 end
 
 section

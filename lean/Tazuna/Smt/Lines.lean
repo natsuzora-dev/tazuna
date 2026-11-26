@@ -53,12 +53,12 @@ theorem keeps_preserved {T : List TypeDecl} {P : List AnySite} {E : List AnyEffe
 /-- A cascade's step from a step in progress it keeps, whose state fits the slots and whose waiting own effects are
 coded, keeps them coded where the pair lines speak for the step (`coded_step`). -/
 theorem coded_preserved {P : List AnySite} {E : List AnyEffectSite} {T : List TypeDecl} (chk : Checked P E T v)
-    (senv : StepEnv L (shapes v)) {a b : Step.Acc v} {i : Nat}
+    (hL : SortedLayout L) (senv : StepEnv L (shapes v)) {a b : Step.Acc v} {i : Nat}
     (ha : CascadeKeeps T P a) (hW : Within L (shapes v) a.state) (hc : QueueCoded L a) (hi : i < a.own.length)
     (hcf : ∀ p ∈ L.ownPairs v.event, PairLine L T P v senv (ownFits L.count T a.state a.own[i]) p)
     (hb : (Step.ownSys T v).pick a i = .ok b) : QueueCoded L b := by
   simp only [Step.ownSys, List.getElem?_eq_getElem hi] at hb
-  exact coded_step chk senv ha.keys hW ha.inv ha.supp ha.queue hc hi hcf hb
+  exact coded_step chk hL senv ha.keys hW ha.inv ha.supp ha.queue hc hi hcf hb
 
 /-- At a step in progress a cascade keeps, which fits the slots, two of its waiting effects meet a pair question's
 preconditions with the rest of the queue as the step in progress. -/
@@ -85,7 +85,7 @@ bounds and the cascade fits (`CascadeFits`), every order of a cascade from a ste
 own effects are coded, ends as `settle` does, up to renaming the names the cascade made, or both fault, wherever
 every step in progress the cascade reaches in any order fits the slots. The effects it queues stay coded
 (`coded_preserved`). -/
-theorem cascade_lines (c : CheckedSpec) (hv : v ∈ c.spec.services) (senv : StepEnv L (shapes v))
+theorem cascade_lines (c : CheckedSpec) (hv : v ∈ c.spec.services) (hL : SortedLayout L) (senv : StepEnv L (shapes v))
     {a : Step.Acc v} (ha : CascadeKeeps c.T c.P a) (hcoded : QueueCoded L a)
     (hall : ∀ p ∈ L.ownPairs v.event, PairLine L c.T c.P v senv (CascadeFits L c.T a) p)
     (hfit : ∀ b, Diamond.Reach (Step.ownSys c.T v) a b → Within L (shapes v) b.state) :
@@ -97,11 +97,11 @@ theorem cascade_lines (c : CheckedSpec) (hv : v ∈ c.spec.services) (senv : Ste
   refine Step.cascade_agrees c.T he
     (J := fun b => Diamond.Reach (Step.ownSys c.T v) a b ∧ CascadeKeeps c.T c.P b ∧ QueueCoded L b)
     (fun b i d hb hi hd => ⟨.step hb.1 hi hd, keeps_preserved he chk.reach b i d hb.2.1 hi hd,
-      coded_preserved chk senv hb.2.1 (hfit b hb.1) hb.2.2 hi
+      coded_preserved chk hL senv hb.2.1 (hfit b hb.1) hb.2.2 hi
         (fun p hp => (hall p hp).mono fun h => (h b hb.1).1 i hi) hd⟩)
     (fun b _ hb i j hi hj hij => ?_) fuel a ha.supp ⟨.refl, ha, hcoded⟩ hr
   obtain ⟨hk, hs, hq, hsa, hr1, hr2⟩ := pair_pre hb.2.1 hi hj
-  exact pairs_at chk senv (fun p hp => (hall p hp).mono fun h => (h b hb.1).2 i j hi hj hij) hk (hfit b hb.1)
+  exact pairs_at chk hL senv (fun p hp => (hall p hp).mono fun h => (h b hb.1).2 i j hi hj hij) hk (hfit b hb.1)
     hb.2.1.inv hs hq hsa (hb.2.2 _ (List.getElem_mem hi)) (hb.2.2 _ (List.getElem_mem hj)) hr1 hr2
 
 /-- A timer's context fits the slots: the instance's key, the state its timer moves it to and the records embed. -/

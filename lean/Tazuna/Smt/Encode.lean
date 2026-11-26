@@ -346,6 +346,39 @@ def Ty.eqabless : List (List Ty) → Bool
   | ts :: vs => Ty.eqables ts && Ty.eqabless vs
 end
 
+mutual
+/-- Data with a sort is comparable: a sort rules out functions and type variables, data rules out structure values. -/
+theorem Ty.comparable_of_sorted : (t : Ty) → t.sorted = true → t.isData = true → t.comparable = true
+  | .int, _, _ | .str, _, _ | .date, _, _ | .id, _, _ | .param _, _, _ => rfl
+  | .fn .., h, _ => by simp [Ty.sorted] at h
+  | .list t, h, hd | .bag t, h, hd =>
+    Ty.comparable_of_sorted t (by simpa [Ty.sorted] using h) (by simpa [Ty.isData] using hd)
+  | .table k v, h, hd => by
+    simp only [Ty.sorted, Ty.isData, Bool.and_eq_true] at h hd
+    simp [Ty.comparable, Ty.comparable_of_sorted k h.1 hd.1, Ty.comparable_of_sorted v h.2 hd.2]
+  | .tuple ts, h, hd => Ty.comparables_of_sorteds ts h hd
+  | .adt 0 _ vs, h, _ => by
+    simp only [Ty.sorted] at h
+    unfold Smt.boolVs? at h
+    split at h
+    · rfl
+    · simp at h
+  | .adt (_ + 1) _ vs, h, hd => Ty.comparabless_of_sortedss vs h hd
+  | .dsl k _, _, hd => by simpa [Ty.comparable, Ty.isData] using hd
+theorem Ty.comparables_of_sorteds : (ts : List Ty) → Ty.sorteds ts = true → Ty.isDatas ts = true →
+    Ty.comparables ts = true
+  | [], _, _ => rfl
+  | t :: ts, h, hd => by
+    simp only [Ty.sorteds, Ty.isDatas, Bool.and_eq_true] at h hd
+    simp [Ty.comparables, Ty.comparable_of_sorted t h.1 hd.1, Ty.comparables_of_sorteds ts h.2 hd.2]
+theorem Ty.comparabless_of_sortedss : (vs : List (List Ty)) → Ty.sortedss vs = true → Ty.isDatass vs = true →
+    Ty.comparabless vs = true
+  | [], _, _ => rfl
+  | ts :: vs, h, hd => by
+    simp only [Ty.sortedss, Ty.isDatass, Bool.and_eq_true] at h hd
+    simp [Ty.comparabless, Ty.comparables_of_sorteds ts h.1 hd.1, Ty.comparabless_of_sortedss vs h.2 hd.2]
+end
+
 end Tazuna.Ir
 
 namespace Tazuna.Smt
@@ -359,6 +392,33 @@ def lacks (t : Ty) : Refusal := if t.sorted then .layout (.type t) else .limit (
 def lacksKind (name : String) (fields : List Ty) : Refusal :=
   if !(Ty.tuple fields).isData then .limit (.function (.tuple fields))
   else if Ty.sorteds fields then .layout (.effectKind name) else .limit (.unsortable (.tuple fields))
+
+section
+variable (L : Layout)
+
+/-- Every datatype of the layout has a sort, so a type it finds has one, and every kind of effect's fields are data
+with sorts. -/
+structure SortedLayout : Prop where
+  types : ∀ p ∈ L.types, p.1.sorted = true
+  effects : ∀ k ∈ L.effects, Ty.sorteds k.fields = true ∧ (Ty.tuple k.fields).isData = true
+  owns : ∀ k ∈ L.owns, Ty.sorteds k.fields = true ∧ (Ty.tuple k.fields).isData = true
+
+end
+
+/-- An own kind's fields in a sorted layout are comparable, so a model's value of them decodes wherever it codes
+data (`decode_of_relV`). -/
+theorem SortedLayout.ownsComparable {L : Layout} (hL : SortedLayout L) {e : Ty} {k : OwnKey} (hk : k ∈ L.ownsOf e) :
+    ∀ t ∈ k.fields, t.comparable = true := by
+  have h := hL.owns k (List.mem_filter.1 hk).1
+  exact comparables_mem (Ty.comparables_of_sorteds _ h.1 (by simpa [Ty.isData] using h.2))
+where
+  comparables_mem : {ts : List Ty} → Ty.comparables ts = true → ∀ t ∈ ts, t.comparable = true
+    | [], _, _, ht => by cases ht
+    | _ :: _, hc, _, ht => by
+      simp only [Ty.comparables, Bool.and_eq_true] at hc
+      rcases List.mem_cons.1 ht with rfl | ht
+      · exact hc.1
+      · exact comparables_mem hc.2 _ ht
 
 /-- Selects field `j` of whichever of the constructors `k`, `k + 1`, ..., `k + n` built `x`; every one of them has
 the field. -/

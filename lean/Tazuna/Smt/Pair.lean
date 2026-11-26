@@ -42,13 +42,9 @@ theorem mem_ownPairs {L : Layout} {e : Ty} (p : OwnPlace L e × OwnPlace L e) : 
   List.mem_flatMap.2 ⟨p.1, List.mem_finRange _, List.mem_map.2 ⟨p.2, List.mem_finRange _, rfl⟩⟩
 
 /-- The fields of the own kind `k`'s variant of the effect at `z` are well formed, as an input's are (`SymInput.wf`):
-its caller, its input and its `on_answer`'s captured values, so a model's effect of the kind decodes. None where a
-field's type is not comparable: decoding a table relies on comparing its keys. -/
+its caller, its input and its `on_answer`'s captured values, so a model's effect of the kind decodes. -/
 def ownWf (L : Layout) (e : Ty) (dE : Nat) (k : OwnPlace L e) (z : Term) : Option Term :=
-  let fs := (L.ownsOf e)[k].fields
-  if fs.all Ty.comparable then
-    (fs.zipIdx.mapM fun (t, j) => wfT L t (.sel dE (L.ownCtor e k) j z)).map allT
-  else none
+  ((L.ownsOf e)[k].fields.zipIdx.mapM fun (t, j) => wfT L t (.sel dE (L.ownCtor e k) j z)).map allT
 
 /-- An own effect's code is the variant of an own kind. -/
 theorem own_variant {L : Layout} {e : Ty} {x : OwnEffectV e} {z : Val} (hx : EffRel L x.effect z) :
@@ -180,8 +176,9 @@ theorem ownFields_rel {e : Ty} {key : OwnKey} {x : OwnEffectV e} {vals : List Va
       exact ⟨⟨_, hc⟩, ⟨_, hi⟩, hv, trivial⟩
 
 /-- A model's value of an own kind's variant that codes an own effect has well-formed fields (`ownWf`), so a pair
-question's context, which asserts them, holds at every pair of effects a step can queue. -/
-theorem ownWf_holds {d n : Nat} (hd : L.find? (.dsl .effect [v.event]) = some (d, n)) {k : OwnPlace L v.event}
+question's context, which asserts them, holds at every pair of effects a step can queue. The fields are comparable
+in a sorted layout, which is what decoding a table's keys needs. -/
+theorem ownWf_holds (hL : SortedLayout L) {d n : Nat} (hd : L.find? (.dsl .effect [v.event]) = some (d, n)) {k : OwnPlace L v.event}
     {x : OwnEffectV v.event} {i : Nat} (hx : RelV L (.dsl .effect [v.event]) x.effect (M.vars i))
     (ht : Holds M (.is d (L.ownCtor v.event k) (.var i))) {c : Term}
     (hw : ownWf L v.event d k (.var i) = some c) : Holds M c := by
@@ -198,24 +195,21 @@ theorem ownWf_holds {d n : Nat} (hd : L.find? (.dsl .effect [v.event]) = some (d
     subst hk
     have hkey : (L.ownsOf v.event)[k] = key := by
       rw [List.getElem?_eq_getElem k.isLt] at hk0; exact Option.some.inj hk0
+    have hcmp := hL.ownsComparable (hkey ▸ List.getElem_mem k.isLt)
     unfold ownWf at hw
     rw [hkey] at hw
-    dsimp only at hw
-    split at hw
-    · rename_i hcmp
-      obtain ⟨cs, hcs, rfl⟩ := map_some.1 hw
-      rw [holds_allT]
-      intro c' hc'
-      obtain ⟨⟨t, j⟩, hmem, hcj⟩ := forall2_mem_left (mapM_forall2 (E := fun c q => wfT L q.1
-        (.sel d (L.ownCtor v.event k) q.2 (.var i)) = some c) (fun _ _ h => h) _ _ hcs) c' hc'
-      have hj : key.fields[j]? = some t := List.mem_zipIdx_iff_getElem?.1 hmem
-      obtain ⟨z, hzj, y, hy⟩ := forall2_getElem? (ownFields_rel hh) hj
-      have htc : t.comparable = true := List.all_eq_true.1 hcmp t (List.mem_of_getElem? hj)
-      have hden : (Term.sel d (L.ownCtor v.event k) j (.var i)).denote M = z := by
-        simp [Term.denote, hz, hzj, Layout.ownCtor]
-      obtain ⟨y', hy', -⟩ := decode_of_relV htc (relD_up t (Ty.isData_of_comparable t htc) y z hy)
-      exact wfT_of_decodeV hcj (by rw [hden]; exact hy')
-    · cases hw
+    obtain ⟨cs, hcs, rfl⟩ := map_some.1 hw
+    rw [holds_allT]
+    intro c' hc'
+    obtain ⟨⟨t, j⟩, hmem, hcj⟩ := forall2_mem_left (mapM_forall2 (E := fun c q => wfT L q.1
+      (.sel d (L.ownCtor v.event k) q.2 (.var i)) = some c) (fun _ _ h => h) _ _ hcs) c' hc'
+    have hj : key.fields[j]? = some t := List.mem_zipIdx_iff_getElem?.1 hmem
+    obtain ⟨z, hzj, y, hy⟩ := forall2_getElem? (ownFields_rel hh) hj
+    have htc : t.comparable = true := hcmp t (List.mem_of_getElem? hj)
+    have hden : (Term.sel d (L.ownCtor v.event k) j (.var i)).denote M = z := by
+      simp [Term.denote, hz, hzj, Layout.ownCtor]
+    obtain ⟨y', hy', -⟩ := decode_of_relV htc (relD_up t (Ty.isData_of_comparable t htc) y z hy)
+    exact wfT_of_decodeV hcj (by rw [hden]; exact hy')
 
 /-- Two steps in progress that extend `a0` by alike requests at the same ids from `a0`'s next id on (with their out
 lines), by related own effects and events, and whose records and instances relate, are the same with every name kept. -/
@@ -655,7 +649,8 @@ theorem PairLine.mono {P : List AnySite} {senv : StepEnv L (shapes v)} {F G : Pr
 the next id, names below the counter) and whose effect variables hold the pair's kinds: the questions' context holds,
 so an unsat bound question makes the codes and the condition hold, and an unsat target question leaves only orders
 that agree. -/
-theorem pair_unfold {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v))
+theorem pair_unfold {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (hL : SortedLayout L)
+    (senv : StepEnv L (shapes v))
     {k1 k2 : OwnPlace L v.event} {bq tq : TypedScript} (hq : pairQuestions L T P v senv k1 k2 = .ok (bq, tq))
     (hM : ∀ n (h : n < (pairTys v).length), VarSorted L (pairTys v)[n] (M.vars n))
     {s : State v} (hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some s)
@@ -686,8 +681,8 @@ theorem pair_unfold {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P
     · exact stateSupp_names hR hsupp chk.recordsComparable chk.machinesComparable (need_ok.1 hnames)
     · exact ht1
     · exact ht2
-    · exact ownWf_holds senv.hE hx1 ht1 (need_ok.1 hw1)
-    · exact ownWf_holds senv.hE hx2 ht2 (need_ok.1 hw2)
+    · exact ownWf_holds hL senv.hE hx1 ht1 (need_ok.1 hw1)
+    · exact ownWf_holds hL senv.hE hx2 ht2 (need_ok.1 hw2)
   refine ⟨o, ho, fun hbq => ?_, fun htq hc hd hv => ?_⟩
   · obtain ⟨a, ha, hna⟩ := hbq.noModel M hM
     rcases List.mem_append.1 ha with ha | ha
@@ -723,7 +718,8 @@ theorem pair_kinds (senv : StepEnv L (shapes v)) {x1 x2 : OwnEffectV v.event}
 slots, the two effects of the pair's kinds commute from every step in progress whose state a model's values decode
 to, with its pending ids below its next id and its names below its counter, and which relates to itself under every
 renaming keeping its counters. -/
-theorem pair_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v))
+theorem pair_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (hL : SortedLayout L)
+    (senv : StepEnv L (shapes v))
     {a0 : Step.Acc v} {x1 x2 : OwnEffectV v.event} {k1 k2 : OwnPlace L v.event}
     (hl : PairLine L T P v senv (PairFits L.count T a0 x1 x2) (k1, k2))
     (hM : ∀ n (h : n < (pairTys v).length), VarSorted L (pairTys v)[n] (M.vars n))
@@ -737,7 +733,7 @@ theorem pair_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P 
     (ht2 : Holds M (.is senv.dE (L.ownCtor v.event k2) (.var (pairVar v + 1)))) :
     Step.PairCommutes T a0 x1 x2 := by
   obtain ⟨bq, tq, hq, htq, hbq⟩ := hl
-  obtain ⟨o, ho, hb, ht⟩ := pair_unfold chk senv hq hM hS hbelow hsupp hx1 hx2 ht1 ht2
+  obtain ⟨o, ho, hb, ht⟩ := pair_unfold chk hL senv hq hM hS hbelow hsupp hx1 hx2 ht1 ht2
   have hR := decode_state hS
   have hinv := decode_inv chk.reach hS hbelow
   have hcc : Holds M o.codes ∧ Holds M o.cond := hbq.elim hb fun ⟨hc, hf⟩ =>

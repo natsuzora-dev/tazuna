@@ -102,15 +102,15 @@ theorem begins_coded {P : List AnySite} {E : List AnyEffectSite} {T : List TypeD
       exact E.2.2 (E.1.2 hfit.2.2.2.2.2) a hb
   · exact (h.2 a hb).elim
 
-/-- T5 for runs, scoped to the slots: in a checked spec's service whose initial state keeps its invariants, take a run
-from the initial state on valid inputs. Every cascade a step of the run starts, at a state and an input within the
+/-- T5 for runs, scoped to the slots: in a checked spec's service whose initial state keeps its invariants, and a layout
+whose datatypes have sorts (as the service's, `sorted_ofParts`), take a run from the initial state on valid inputs. Every cascade a step of the run starts, at a state and an input within the
 slots, ends in every order as `settle` does, up to renaming the names the cascade made, or both fault, wherever every
 step in progress it reaches in any order fits the slots, every input kind's step line reads proved or within the
 bounds where the step fits (`StepLine`), and every listed pair of own kinds reads proved or within the bounds where
 the cascade fits (`PairLine`, `CascadeFits`). Where every timer line reads proved, every order of the timers due at
 one deadline of a clock line ends as `fire` does, wherever every timer set in a state the firing reaches in any order
 has a context that fits. -/
-theorem run_lines (c : CheckedSpec) (hv : v ∈ c.spec.services) (senv : StepEnv L (shapes v))
+theorem run_lines (c : CheckedSpec) (hv : v ∈ c.spec.services) (hL : SortedLayout L) (senv : StepEnv L (shapes v))
     (hinit : Step.invariants (Step.State.init v) = []) (htimers : ∀ m ∈ v.machines, TimerLine L m)
     {xs : List (Input v)} (hxs : Step.Assumption.validInputs.Holds c.T (Step.State.init v) xs) :
     (∀ {x : Input v}, x.Valid (run c.T v (Step.State.init v) xs).1 →
@@ -128,7 +128,7 @@ theorem run_lines (c : CheckedSpec) (hv : v ∈ c.spec.services) (senv : StepEnv
       ∀ {r}, Diamond.Runs (Step.timerSys v) fuel (s, []) r → Diamond.Agree Step.TimerEq r (Step.fireResult s (fuel + 1))) := by
   obtain ⟨hinv, hs, hk⟩ := run_keeps c hv hxs
   refine ⟨fun hx hW hvals hsteps _ ha hpairs hfit => ?_, fun _ fuel hfit _ hr => timers_lines htimers fuel _ hfit hr⟩
-  exact cascade_lines c hv senv (begins_keeps c hv hinv hs hk hx ha) (begins_coded (c.checked v hv) senv hsteps hinv
+  exact cascade_lines c hv hL senv (begins_keeps c hv hinv hs hk hx ha) (begins_coded (c.checked v hv) senv hsteps hinv
     (Tazuna.Ir.run_invariants c.T _ xs hinit) hk hW hvals ha) hpairs hfit
 
 end

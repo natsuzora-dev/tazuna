@@ -154,7 +154,8 @@ theorem pair_model {s : State v} (hkeys : Step.KeysOk T s) (hW : Within L (shape
 step in progress whose state fits the slots, whose names are below its counter, whose pending requests and waiting
 effects are the program's, and whose two effects some value codes, where every line reading within the bounds has the
 two orders fit the slots. -/
-theorem pairs_at {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v))
+theorem pairs_at {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (hL : SortedLayout L)
+    (senv : StepEnv L (shapes v))
     {a0 : Step.Acc v} {x1 x2 : OwnEffectV v.event}
     (hall : ∀ p ∈ L.ownPairs v.event, PairLine L T P v senv (PairFits L.count T a0 x1 x2) p)
     (hkeys : Step.KeysOk T a0.state) (hW : Within L (shapes v) a0.state)
@@ -165,7 +166,7 @@ theorem pairs_at {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E 
     Step.PairCommutes T a0 x1 x2 := by
   obtain ⟨M, hM, hS, hx1, hx2⟩ := pair_model hkeys hW he1 he2
   obtain ⟨p, hp, ht1, ht2⟩ := pair_kinds senv hx1 hx2
-  exact pair_sound chk senv (hall p hp) hM hS hinv.below hsupp hqk hsa hx1 hx2 hreach1 hreach2 ht1 ht2
+  exact pair_sound chk hL senv (hall p hp) hM hS hinv.below hsupp hqk hsa hx1 hx2 hreach1 hreach2 ht1 ht2
 
 end
 
