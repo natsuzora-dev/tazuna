@@ -51,7 +51,7 @@ No step breaks its target while the state fits the spec's `bounds`, but a step c
 Each line lists those bounds.
 
 The response `something is reminded or done within an hour of an add` reads `Prove.withinBounds` as well.
-`after` and `then` are separate functions of one event, so the response cannot tie the reminder to the task that was added.
+As its name says, it does not tie the reminder or the completion to the task that was added.
 
 ## Test the scenario
 
@@ -68,10 +68,8 @@ Later runs compare the trace with that snapshot:
 {"kind":"Test.passed","scenario":"remind the open task","service":"todo"}
 ```
 
-The snapshot is where you check the answers.
-Its line `{"out":"answer","outcome":"answered","output":1,...}` shows that `open tasks` counts one task after the completion.
+In the snapshot, `open tasks` answers `1` after the completion.
 After the clock line at 3600000 it shows one `ReminderDue` event and one request to `mailer`, for the task that is still open.
-The machine starts its effect once, when an instance enters `Due`, so no second reminder follows.
 
 ## Generate inputs for an implementation
 
@@ -90,7 +88,7 @@ One target reads `Generate.unreached`: `add rejected Nil`.
 
 The inputs show one thing the spec allows that you may not expect.
 In `remind accepted.jsonl` an outside request sends `remind` with the caller `Reminder`.
-`callers` lists the caller values a command accepts, and who may claim a value is the implementation's concern.
+The spec accepts it, because `remind` lists `Reminder` in `callers`.
 
 ## Verify an implementation's log
 
@@ -116,7 +114,7 @@ In `remind accepted.jsonl` an outside request sends `remind` with the caller `Re
    {"kind":"Verify.passed","trace":"traces/remind the open task.jsonl"}
    ```
 
-`verify` binds the implementation's names to the spec's ids, so `task-1` can stand for the spec's `id1`.
+The trace keeps the implementation's names, as [Traces](../../docs/concepts.md#traces) allows.
 The replay script maps names the other way, because a generated input refers to tasks and requests by the spec's names.
 
 To see a failure, change `state.dueAt <= now` to `state.dueAt < now` in `web/todo.mjs`, which fires the reminder only after its deadline, and run both steps again.
