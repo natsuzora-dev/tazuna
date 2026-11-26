@@ -457,14 +457,13 @@ theorem unrollKinds_terms {ans : Bool} :
   · exact ⟨rfl, rfl⟩
   · exact ⟨rfl, rfl⟩
 
-/-- An unrolled step's constants: its selector, its kinds' terms, then the state after it, so the next step starts
-past them. -/
+/-- An unrolled step's constants: its selector, then its kinds' terms, so the next step starts past them. -/
 theorem unrollOne_next (S : SymState v) (i b : Nat) :
     (unrollOne L T P v senv S i b).2.2.2.2 = b + (unrollOne L T P v senv S i b).1.length := by
   have hk := placeKinds_at (unrollKinds v (shapes v) senv.nT (i != 0)) (b + 1) (unrollKinds_terms senv)
   rcases hp : placeKinds (unrollKinds v (shapes v) senv.nT (i != 0)) (b + 1) with ⟨inps, e⟩
   rw [hp] at hk
-  simp only [unrollOne, hp, List.length_append, List.length_cons, List.length_nil, stateWidth] at hk ⊢
+  simp only [unrollOne, hp, List.length_append, List.length_cons, List.length_nil] at hk ⊢
   have e1 : (inps.flatMap fun x => x.tys).length = (inps.flatMap SymInput.tys).length := rfl
   omega
 
@@ -495,15 +494,19 @@ theorem unrollSteps_at : (d : Nat) → (S : SymState v) → (i b : Nat) →
       rw [List.getElem?_append_right (by omega), show bs - b + p - tys.length = bs - b' + p by omega]
       exact hty p hp
 
-theorem unrollKind_ok {S S' : SymState v} {sel : Term} {inp : SymInput v (shapes v) senv.nT} {k : Nat}
-    {x : (Nat × SymInput v (shapes v) senv.nT × EncodedStep v) × Term}
-    (h : unrollKind L T P v senv S S' sel inp k = .ok x) :
-    ∃ t wf, inp.wf L = some wf ∧ x.1 = (k, inp, t) ∧ ∃ rest, x.2 = .or (.not (.eq sel (.int k))) (andT wf rest) := by
+theorem unrollKind_ok {S : SymState v} {sel : Term} {inp : SymInput v (shapes v) senv.nT}
+    {x : (SymInput v (shapes v) senv.nT × EncodedStep v) × Term × Term × SymState v}
+    (h : unrollKind L T P v senv S sel inp = .ok x) :
+    ∃ t valid wf, encodeStep L T P v senv S inp = .ok t ∧ inp.validT L S.fresh = .ok valid ∧ inp.wf L = some wf ∧
+      x = ((inp, t), andT (.eq sel (.int inp.pick)) t.out.case,
+        .or (.not (andT (.eq sel (.int inp.pick)) t.out.case))
+          (andT wf (andT t.codes (andT t.sites (andT t.cond (andT (t.out.after S inp).1 valid))))),
+        (t.out.after S inp).2) := by
   unfold unrollKind at h
   split at h
-  · rename_i t valid wf _ _ hw
+  · rename_i t valid wf he hv hw
     cases h
-    exact ⟨t, wf, need_ok.1 hw, rfl, _, rfl⟩
+    exact ⟨t, valid, wf, he, hv, need_ok.1 hw, rfl⟩
   all_goals cases h
 
 theorem holds_anyT_mem {ts : List Term} (h : Holds M (anyT ts)) : ∃ t ∈ ts, Holds M t := (holds_anyT ts).1 h
@@ -530,8 +533,8 @@ theorem unroll_inputs_decode (hc : v.caller.isData = true) {d : Nat} {goal : Lis
   rcases hp : placeKinds (unrollKinds v (shapes v) senv.nT (i != 0)) (bs + 1) with ⟨inps, e⟩
   rw [hp] at hk
   simp only [unrollOne, hp] at hty has ⊢
-  have hsorted : ∀ q (h : q < ([Ty.int] ++ inps.flatMap (·.tys) ++ stateTys v (shapes v)).length),
-      ∀ t, ([Ty.int] ++ inps.flatMap (·.tys) ++ stateTys v (shapes v))[q]? = some t → t.isData = true →
+  have hsorted : ∀ q (h : q < ([Ty.int] ++ inps.flatMap (·.tys)).length),
+      ∀ t, ([Ty.int] ++ inps.flatMap (·.tys))[q]? = some t → t.isData = true →
         Sorted L t (M.vars (bs + q)) := by
     intro q h t ht hd
     have hq := hty q h
@@ -542,58 +545,52 @@ theorem unroll_inputs_decode (hc : v.caller.isData = true) {d : Nat} {goal : Lis
     simp only at this
     rw [(List.getElem?_eq_some_iff.1 hq).2] at this
     exact sorted_of_varSorted hd this
-  obtain ⟨K, hK⟩ : ∃ K, M.vars bs = .int K := by
-    have := hsorted 0 (by simp) .int (by simp) rfl
-    simpa [Sorted] using this
-  let rs := inps.zipIdx.map fun (inp, k) =>
-    unrollKind L T P v senv S (SymState.vars e) (.var bs) inp k
+  let rs := inps.map fun inp => unrollKind L T P v senv S (.var bs) inp
   let oks := rs.filterMap fun | .ok x => some x | .error _ => none
-  have hany : Holds M (anyT (oks.map fun x => .eq (.var bs) (.int x.1.1))) :=
+  have hany : Holds M (anyT (oks.map (·.2.1))) :=
     hA _ (List.mem_append_left _ (has _ (List.mem_append_right _ (List.mem_singleton.2 rfl))))
   obtain ⟨_, hx, hxe⟩ := holds_anyT_mem hany
   obtain ⟨x, hxo, rfl⟩ := List.mem_map.1 hx
-  have hKx : K = x.1.1 := by
-    have e := Val.eq_of_beq _ _ (by simp only [Holds, Term.denote, Val.toBool, hK] at hxe; exact hxe)
-    cases e; rfl
-  obtain ⟨y, hy⟩ : ∃ y, (oks.map (·.1)).find? (·.1 == K.toNat) = some y :=
-    Option.isSome_iff_exists.1 (List.find?_isSome.2 ⟨x.1, List.mem_map_of_mem hxo, by simp [hKx]⟩)
-  have hyp : (y.1 == K.toNat) = true := by have := List.find?_some hy; exact this
-  obtain ⟨x', hx'o, rfl⟩ := List.mem_map.1 (List.mem_of_find?_eq_some hy)
-  obtain ⟨r, hrm, hro⟩ := List.mem_filterMap.1 hx'o
-  obtain ⟨⟨inp, k⟩, hik, rfl⟩ := List.mem_map.1 hrm
-  have hkind : unrollKind L T P v senv S (SymState.vars e) (.var bs) inp k = .ok x' := by
-    cases hu : unrollKind L T P v senv S (SymState.vars e) (.var bs) inp k with
+  have hok : ∀ y ∈ oks, ∃ inp ∈ inps, unrollKind L T P v senv S (.var bs) inp = .ok y := fun y hy => by
+    obtain ⟨r, hrm, hro⟩ := List.mem_filterMap.1 hy
+    obtain ⟨inp, hi, rfl⟩ := List.mem_map.1 hrm
+    refine ⟨inp, hi, ?_⟩
+    cases hu : unrollKind L T P v senv S (.var bs) inp with
     | error _ => simp [hu] at hro
     | ok x0 => simp [hu] at hro; rw [hro]
-  obtain ⟨t, wf, hwf, hx1, rest, hx2⟩ := unrollKind_ok senv hkind
-  have hk' : K = k := by
-    rw [hx1] at hyp
-    have := beq_iff_eq.1 hyp
-    have h0 : 0 ≤ K := by rw [hKx]; omega
-    omega
-  have hassert : Holds M x'.2 := hA _ (List.mem_append_left _ (has _ (List.mem_append_left _ (List.mem_map_of_mem hx'o))))
-  rw [hx2] at hassert
+  have hpick : ∀ y ∈ oks, y.2.1 = andT (.eq (.var bs) (.int y.1.1.pick)) y.1.2.out.case := fun y hy => by
+    obtain ⟨inp, -, hu⟩ := hok y hy
+    obtain ⟨t, -, -, -, -, -, rfl⟩ := unrollKind_ok senv hu
+    rfl
+  obtain ⟨y, hy⟩ : ∃ y, (oks.map (·.1)).find? (fun k => ((andT (.eq (.var bs) (.int k.1.pick)) k.2.out.case).denote M).toBool) = some y :=
+    Option.isSome_iff_exists.1 (List.find?_isSome.2 ⟨x.1, List.mem_map_of_mem hxo, by rw [← hpick x hxo]; exact hxe⟩)
+  have hyp := List.find?_some hy
+  obtain ⟨x', hx'o, rfl⟩ := List.mem_map.1 (List.mem_of_find?_eq_some hy)
+  obtain ⟨inp, hik, hkind⟩ := hok x' hx'o
+  obtain ⟨t, valid, wf, -, -, hwf, hx'⟩ := unrollKind_ok senv hkind
+  have hassert : Holds M x'.2.2.1 := hA _ (List.mem_append_left _ (has _ (List.mem_append_left _ (List.mem_map_of_mem hx'o))))
+  subst hx'
   have hwfH : Holds M wf := by
     simp only [holds_or, holds_not, holds_andT] at hassert
     rcases hassert with h | h
-    · exact (h (by simp only [Holds, Term.denote, Val.toBool, hK, hk']; show Val.beq _ _ = true; simp [Val.beq])).elim
+    · exact (h ((holds_andT _ _).1 hyp)).elim
     · exact h.1
-  obtain ⟨⟨p, hpk, c, rfl⟩, j, hterms, hflat⟩ := hk.2 _ (List.fst_mem_of_mem_zipIdx hik)
+  obtain ⟨⟨p, hpk, c, rfl⟩, j, hterms, hflat⟩ := hk.2 _ hik
   have hdata := (unrollKinds_shape hc hpk c).2.2
   have hs : ∀ q (h : q < (p.2 c).tys.length), Sorted L (p.2 c).tys[q] (M.vars (bs + 1 + j + q)) := by
     intro q h
     have hf : (inps.flatMap (·.tys))[j + q]? = some (p.2 c).tys[q] := hflat q h
     have hlt := (List.getElem?_eq_some_iff.1 hf).1
-    have hget : ([Ty.int] ++ inps.flatMap (·.tys) ++ stateTys v (shapes v))[1 + (j + q)]? = some (p.2 c).tys[q] := by
-      rw [List.getElem?_append_left (by rw [List.length_append, List.length_singleton]; omega), List.singleton_append, show 1 + (j + q) = (j + q) + 1 by omega,
-        List.getElem?_cons_succ]
+    have hget : ([Ty.int] ++ inps.flatMap (·.tys))[1 + (j + q)]? = some (p.2 c).tys[q] := by
+      rw [List.singleton_append, show 1 + (j + q) = (j + q) + 1 by omega, List.getElem?_cons_succ]
       exact hf
     have := hsorted (1 + (j + q)) (List.getElem?_eq_some_iff.1 hget).1 _ hget (hdata _ (List.getElem_mem h))
     simpa [Nat.add_assoc] using this
   obtain ⟨z, hz⟩ := SymInput.decode_total hc hdata hwf hwfH (hterms ▸ forall2_vars _ (bs + 1 + j) hs)
   refine ⟨z, ?_⟩
-  change UnrollStep.decode M L hc ⟨.var bs, S, SymState.vars e, oks.map (·.1)⟩ = some z
-  simp only [UnrollStep.decode, Term.denote, hK, hy, hx1]
+  change UnrollStep.decode M L hc ⟨.var bs, S, _, oks.map (·.1)⟩ = some z
+  simp only [UnrollStep.decode, UnrollStep.picks]
+  rw [hy]
   exact hz
 
 end

@@ -3783,8 +3783,8 @@ condition it is sat). -/
 /-- Whether the last step takes an answer whose rules hold. -/
 def answeredLast {v : ServiceV} {n : Nat} (steps : List (UnrollStep v n)) : Term :=
   match steps.getLast? with
-  | some st => anyT (st.kinds.filterMap fun (k, _, t) => match t.out with
-      | .answer o => some (andT (.eq st.sel (.int k)) (allT (o.rules.map (·.2))))
+  | some st => anyT (st.kinds.filterMap fun k => match k.2.out with
+      | .answer o => some (andT (st.picks k) (allT (o.rules.map (·.2))))
       | _ => none)
   | none => .bool false
 
@@ -3797,8 +3797,8 @@ def sentLast {v : ServiceV} {n : Nat} (steps : List (UnrollStep v n)) : Term :=
 /-- Whether the last step is a command from a caller it does not list. -/
 def callerRefusedLast {v : ServiceV} {n : Nat} (steps : List (UnrollStep v n)) : Term :=
   match steps.getLast? with
-  | some st => anyT (st.kinds.filterMap fun (k, _, t) => match t.out with
-      | .command o => some (andT (.eq st.sel (.int k)) (.not o.callerOk))
+  | some st => anyT (st.kinds.filterMap fun k => match k.2.out with
+      | .command o => some (andT (st.picks k) (.not o.callerOk))
       | _ => none)
   | none => .bool false
 
@@ -3863,8 +3863,8 @@ def unrollCheck (solver : Solver) : IO Bool := do
   let .ok tsenv := StepEnv.of tL (shapes tv) | fail "no step environment for tagging"
   let some (dId, _) := tL.find? .id | fail "no id datatype"
   let freshInput (steps : List (UnrollStep tv tsenv.nT)) : Term := match steps.head? with
-    | some st => anyT (st.kinds.filterMap fun (k, inp, _) => match inp with
-        | .command _ _ x => some (andT (.eq st.sel (.int k)) (.is dId 0 x))
+    | some st => anyT (st.kinds.filterMap fun k => match k.1 with
+        | .command _ _ x => some (andT (st.picks k) (.is dId 0 x))
         | _ => none)
     | none => .bool false
   match unroll tL prelude (svcParts tv).sites tv tsenv 1 freshInput with
@@ -3986,7 +3986,7 @@ def check (z3 : String) : IO Bool := do
 and declarations included. -/
 def nodes (s : Script) : Nat := ((s.text []).getD "").foldl (fun n c => if c == '(' then n + 1 else n) 0
 
-/-- The unrolled run of `sum` at depth `d` with no goal: fresh constants per state keep it linear in `d`. -/
+/-- The unrolled run of `sum` at depth `d` with no goal: each state is one shared term, which keeps it linear in `d`. -/
 def unrolledSum (d : Nat) : Except String Script := do
   let v := StepExamples.svc
   let L := svcLayout v 3
