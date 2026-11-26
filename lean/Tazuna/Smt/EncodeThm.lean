@@ -1221,6 +1221,15 @@ section
 variable {M : Model} {L : Layout}
 
 mutual
+theorem Val.beq_refl : (a : Val) → Val.beq a a = true
+  | .int _ | .bool _ | .str _ => by simp [Val.beq]
+  | .ctor _ _ as => by simp [Val.beq, Val.beqs_refl as]
+theorem Val.beqs_refl : (as : List Val) → Val.beqs as as = true
+  | [] => rfl
+  | a :: as => by simp [Val.beqs, Val.beq_refl a, Val.beqs_refl as]
+end
+
+mutual
 theorem Val.eq_of_beq : (a b : Val) → Val.beq a b = true → a = b
   | .int _, .int _, h | .bool _, .bool _, h | .str _, .str _, h => by simp [Val.beq] at h; rw [h]
   | .ctor d k as, .ctor d' k' bs, h => by

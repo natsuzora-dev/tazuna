@@ -1,6 +1,7 @@
 import Tazuna.Smt.Prove
 import Tazuna.Semantics.After
 import Tazuna.Smt.StepSites
+import Tazuna.Smt.NameCodeThm
 
 /-! T4 for a step: where the solver finds no model of an input kind's bound question and of its questions about the
 targets a fault `f` falls under (the invariant or `ensures` rules of its name, the cascade bound, the own command or
@@ -29,19 +30,65 @@ theorem varSorted_of_sorted {L : Layout} {t : Ty} {w : Val} (h : Sorted L t w) :
   · simp [Sorted] at h
   · exact h
 
+/-- The id datatype, if the layout has one: what `Script.sent` codes names in. -/
+def Layout.ids (L : Layout) : Option Nat := (L.find? .id).map (·.1)
+
 /-- Every variable's sort holds a value, as SMT-LIB requires of every sort a script declares. -/
 def SortsInhabited (L : Layout) (tys : List Ty) : Prop :=
   ∃ M : Model, ∀ n (h : n < tys.length), VarSorted L tys[n] (M.vars n)
 
-/-- The solver found no model of the question's script: no model whose variables hold values of the sorts of the
-question's types, strings among them only of SMT-LIB's domain (`Sorted`), satisfies every assertion. A model of the script as SMT-LIB reads it is such a model (`Term.denote` states the
-standard's meaning), so this is what an unsat answer says. The sorts hold values, as SMT-LIB's do, so an unsat answer
-is never free: a script with no assertion is not unsat, and a sort with no value cannot make a question unsat
+/-- What the solver reads for the question (`Script.sent`): its script with names as codes where the layout has ids
+and every assertion has a variant, else its script. -/
+def TypedScript.sent (L : Layout) (q : TypedScript) : Script := q.script.sent L.ids
+
+/-- The model's variables hold values of the sorts of the question's types, strings among them only of SMT-LIB's
+domain (`Sorted`): with each name as its code, by one coding `c` (`Coded`), where the solver reads names as codes. -/
+def SentSorted (L : Layout) (q : TypedScript) (M : Model) : Prop :=
+  match L.ids.bind (q.script.code ·) with
+  | some _ => ∃ d c, L.ids = some d ∧
+    ∀ n (h : n < q.tys.length), ∃ w, VarSorted L q.tys[n] w ∧ Coded d c w (M.vars n)
+  | none => ∀ n (h : n < q.tys.length), VarSorted L q.tys[n] (M.vars n)
+
+/-- The solver found no model of what it reads for the question (`TypedScript.sent`): no model whose variables hold
+values of the sorts of the question's types (`SentSorted`) satisfies every assertion. A model of the script as SMT-LIB
+reads it is such a model (`Term.denote` states the standard's meaning), so this is what an unsat answer says; the
+question's own script then has no model either (`Unsat.noModel`). The sorts hold values, as SMT-LIB's do, so an unsat
+answer is never free: a script with no assertion is not unsat, and a sort with no value cannot make a question unsat
 whatever it asks. `sorts_inhabited` proves the sorts of every script an encoder builds hold values. -/
 structure Unsat (L : Layout) (q : TypedScript) : Prop where
   sorts : SortsInhabited L q.tys
-  noModel : ∀ M : Model, (∀ n (h : n < q.tys.length), VarSorted L q.tys[n] (M.vars n)) →
-    ∃ a ∈ q.script.asserts, ¬ Holds M a
+  noSentModel : ∀ M : Model, SentSorted L q M → ∃ a ∈ (q.sent L).asserts, ¬ Holds M a
+
+theorem Script.code_asserts {d : Nat} {s s' : Script} (h : s.code d = some s') : Term.codes d s.asserts = some s'.asserts := by
+  unfold Script.code at h
+  rw [(Term.codesC_ok d s.asserts {} (CodeCache.ok_empty d)).1] at h
+  cases hc : Term.codes d s.asserts with
+  | none => simp [hc] at h
+  | some as =>
+    simp only [hc] at h
+    by_cases hg : (s.datatypes[d]? == some idDatatype) = true
+    · simp only [hg, guard, ite_true, Option.pure_def] at h
+      cases h; rfl
+    · simp [hg, guard, failure] at h
+
+/-- An unsat question has no model whose variables hold values of its types: where the solver read names as codes,
+a model would give one of what it read with each name as its code (`code_model`). -/
+theorem Unsat.noModel {L : Layout} {q : TypedScript} (h : Unsat L q) (M : Model)
+    (hM : ∀ n (h : n < q.tys.length), VarSorted L q.tys[n] (M.vars n)) : ∃ a ∈ q.script.asserts, ¬ Holds M a := by
+  have hs := h.noSentModel
+  unfold TypedScript.sent Script.sent SentSorted at hs
+  split at hs
+  · rename_i s' hc
+    simp only [hc] at hs
+    obtain ⟨d, hd, hsc⟩ := Option.bind_eq_some_iff.1 hc
+    refine Classical.byContradiction fun hno => ?_
+    obtain ⟨M', c, hcod, hall⟩ := code_model (Script.code_asserts hsc) M q.tys.length
+      (fun a ha => Classical.byContradiction fun hna => hno ⟨a, ha, hna⟩)
+    obtain ⟨a, ha, hna⟩ := hs M' ⟨d, c, hd, fun n hn => ⟨M.vars n, hM n hn, hcod n hn⟩⟩
+    exact hna (hall a ha)
+  · rename_i hc
+    simp only [hc] at hs
+    exact hs M hM
 
 /-- An unsat question has no model whose variables hold values of the types it was built with. -/
 theorem Unsat.noModel_at {L : Layout} {q : TypedScript} (h : Unsat L q) {tys : List Ty} (ht : q.tys = tys) (M : Model)

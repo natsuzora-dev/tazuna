@@ -105,6 +105,9 @@ elab "#check_tazuna_reach" : command => do
     ``Tazuna.Smt.boundReached_iff,
     -- T3: a model's values decode to a state a run reaches.
     ``Tazuna.Smt.decode_run,
+    -- The solver reads names of ids from outside as codes (an unsat answer is the script's: `Unsat.noModel`); a model's
+    -- codes read back as names in the codes' order, so the names keep what `<` said and stay distinct.
+    ``Tazuna.Smt.nameOf_lt,
     -- SMT-LIB text: printing then parsing gives the values back (and the terms, which values rest on), and shared
     -- definitions keep the meaning.
     ``Tazuna.Smt.Val.parse_print, ``Tazuna.Smt.shared_agrees,

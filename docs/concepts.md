@@ -91,6 +91,7 @@ On each event an instance stays or enters a state.
 
 A command makes new ids with `tazuna.fresh` from its context.
 An `Id` compares with `==` only, and an id from outside the service comes by its name.
+Where `prove` or `generate` picks an id from outside, it names it by a number, in the order of ids: `0`, `7`, `~42`, and `-8` for one before `0`.
 An external is a service outside the spec, known by the commands, queries, and events it declares.
 
 A scenario is a list of steps from `init` at time 0, and `test` compares its run with a snapshot.

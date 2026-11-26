@@ -197,14 +197,14 @@ variable (solver : Solver) {c : CheckedSpec} (s : CheckedService c)
 at once, the input kinds it refused with their refusals (no gap, by `unrollBase_ofService`), and the prefix of its
 scripts (`ScriptPrefix`), read once; or the refusal of its encoding. -/
 abbrev Depth (v : ServiceV) (n : Nat) :=
-  Except Refused (UnrollBase v n × List (SymInput v (shapes v) n × Refused) × Option ScriptPrefix)
+  Except Refused (UnrollBase v n × List (SymInput v (shapes v) n × Refused) × SentPrefix)
 
 /-- The run at depth `d`, each goal aside. -/
 def depthAt (d : Nat) : Depth s.v s.senv.nT :=
   (Sound.get (unrollBase s.L c.T c.P s.v s.senv d) (unrollBase_ofService s.mem c.T s.senv d)).map fun ⟨B, hB⟩ =>
     let refused := B.refused.attach.map fun ⟨p, hp⟩ => (p.1, p.2.refused (hB p hp))
     let B := ShareCommon.shareCommon' B
-    (B, refused, B.script.prefix? solver.header)
+    (B, refused, B.script.sentPrefix? s.L.ids solver.header)
 
 /-- Each depth from 1 to `k`, built by its own job once for every search over it: the jobs, and each depth as a task a
 search awaits when it reaches that depth; none if its job never ran, an engine bug. -/
@@ -297,8 +297,8 @@ def searchDepths {α : Type} (what : String) (ds : Array (Task (Option (Depth s.
       | .ok g => pure g
     let U := B.withGoal g
     if refused.isNone then refused := kinds.head?
-    let some q := pre.bind (·.ask g) | return fail s!"depth {d}: {noSort}"
-    match ← solver.runKeyed cache q with
+    let some q := pre.ask g | return fail s!"depth {d}: {noSort}"
+    match (← solver.runKeyed cache q).uncode s.L.ids with
     | .unsat => pure ()
     | .unknown why => return .ok (.undecided (.undecided .unknown) [("depth", Lean.toJson d), ("why", Json.str why)])
     | .timeout ms =>

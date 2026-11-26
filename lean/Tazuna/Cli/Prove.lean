@@ -294,12 +294,13 @@ def refusedItems (step : String) (g : Option Target) (r : Refused) : Except Stri
 
 /-- The lines of a question family with one target and two questions (a timer machine, a pair of own kinds): its
 bound question and its target question where `--only` keeps the target, else the target skipped. -/
-def familyItems (only : String → Bool) (g : Target) (step : String) (built : Except Refused (TypedScript × TypedScript))
-    (report : Smt.Answer → Except String Report) : Except String (List Item) :=
+def familyItems (ids : Option Nat) (only : String → Bool) (g : Target) (step : String)
+    (built : Except Refused (TypedScript × TypedScript)) (report : Smt.Answer → Except String Report) :
+    Except String (List Item) :=
   match built with
   | .error r => refusedItems c v step (some g) r
   | .ok (bq, tq) => .ok (if only (v.name ++ "/" ++ g.text ++ "/" ++ step) then
-      [.ask ⟨bq.script, boundReport v.name step⟩, .ask ⟨tq.script, report⟩]
+      [.ask ⟨bq.script, ids, boundReport v.name step⟩, .ask ⟨tq.script, ids, report⟩]
     else [.skipped v.name g])
 
 -- The bound question has no target, and its name says so.
@@ -335,13 +336,13 @@ def serviceItems (sv : CheckedService c) (only : String → Bool) : ServiceItems
       -- The bound questions of every input kind decide together whether the service's lines say proved or within
       -- the bounds (`proved_sound`), so each is asked whatever `--only` keeps.
       let asked := if kept.any (·.target.isSome) then kept else kept.filter (·.target.isNone)
-      items := items ++ asked.map (fun q => .ask ⟨q.script, answerReport c v L senv sv.callerData q⟩) ++
+      items := items ++ asked.map (fun q => .ask ⟨q.script, L.ids, answerReport c v L senv sv.callerData q⟩) ++
         (qs.filterMap fun q => q.target.bind fun g => if kept.any (·.target == some g) then none else some g).map
           (.skipped v.name)
   -- A machine whose `after` never sets a timer fires forward by itself (`timerForward_of_noTimer`), so it gets no line.
   for ⟨m, hm⟩ in v.machines.attach.filter (!·.1.noTimer) do
     let step := "timer " ++ m.name
-    match familyItems c v only (.timer m.name) step
+    match familyItems c v L.ids only (.timer m.name) step
         ((Sound.get (timerQuestions L m) (timerQuestions_ofService sv.mem hm)).map (·.1)) (timerReport c v L m step) with
     | .ok more => items := items ++ more
     | .error why => return { internal := some why }
@@ -354,7 +355,7 @@ def serviceItems (sv : CheckedService c) (only : String → Bool) : ServiceItems
       if exact.any (OwnKey.same k) then none else some (ownText owns k)
     let g := Target.pair (ownText owns key1) (ownText owns key2) widened.eraseDups
     let step := ownText owns key1 ++ " then " ++ ownText owns key2
-    match familyItems c v only g step
+    match familyItems c v L.ids only g step
         ((Sound.get (pairQuestions L c.T c.P v senv k1 k2) (pairQuestions_ofService sv.mem c.T senv k1 k2)).map (·.1))
         (pairReport c v L k1 k2 g step) with
     | .ok more => items := items ++ more
@@ -491,7 +492,7 @@ def prove (root path : String) (opts : Options) : Cmd Unit := do
             | .error _ => built := false
             | .ok ⟨q, _⟩ =>
               for script in [a.bound.script, q.script] do
-                let (j, r) ← Job.of (solver.runCached cache script)
+                let (j, r) ← Job.of (solver.runCached cache sv.L.ids script)
                 asks := asks.push j
                 refs := refs ++ [r]
         if !built then continue
@@ -530,10 +531,11 @@ def prove (root path : String) (opts : Options) : Cmd Unit := do
     let mut placed : Array Placed := #[]
     let mut deads : Array (String × GenTarget × List (IO.Ref (Option (Except String Smt.Answer)))) := #[]
     for (s, sc) in scopes do
+      let ids := (c.services.find? (·.v.name == s)).bind (·.L.ids)
       for it in sc.shows do
         let mut refs := []
         for q in it.asks do
-          let (j, r) ← Job.of (solver.runCached cache q.script)
+          let (j, r) ← Job.of (solver.runCached cache ids q.script)
           questions := questions.push j
           refs := refs ++ [r]
         deads := deads.push (s, it.target, refs)
@@ -542,7 +544,7 @@ def prove (root path : String) (opts : Options) : Cmd Unit := do
       | .ready r => placed := placed.push (.ready r)
       | .skipped s g => placed := placed.push (.skipped s g)
       | .ask o =>
-        let (j, r) ← Job.of do pure ((← solver.runCached cache o.script) >>= o.read)
+        let (j, r) ← Job.of do pure ((← solver.runCached cache o.ids o.script) >>= o.read)
         questions := questions.push j
         placed := placed.push (.asked r)
     -- One pool for all: the builds first, so a search waits only on a build some worker runs, then the searches,

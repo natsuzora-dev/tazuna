@@ -1,4 +1,4 @@
-import Tazuna.Smt.Script
+import Tazuna.Smt.NameCode
 import Tazuna.Smt.Sha256
 
 /-! Running the solver. Each script runs in its own solver process, which reads the script from a file and prints its
@@ -116,11 +116,19 @@ def Solver.runKeyed (s : Solver) (dir : System.FilePath) (q : Keyed) : IO Answer
       IO.FS.rename partFile answerFile
     return a
 
-/-- Runs one script, or reads its answer from the cache directory `dir`, keyed by its whole text; an engine bug where
-the script has no text (`noSort`). -/
-def Solver.runCached (s : Solver) (dir : System.FilePath) (script : Script) : IO (Except String Answer) := do
-  let some q := script.keyed s.header | return .error noSort
-  return .ok (← s.runKeyed dir q)
+/-- The answer with each name the solver gave as a code (`Script.sent`) read as its name. -/
+def Answer.uncode (ids : Option Nat) (a : Answer) : Answer :=
+  match ids, a with
+  | some d, .sat vs => .sat (vs.map fun (n, v) => (n, v.uncode d))
+  | _, a => a
+
+/-- Runs what the solver reads for a script (`Script.sent`, `ids` being the id datatype if the script has one), or
+reads its answer from the cache directory `dir`, keyed by its whole text; an engine bug where the script has no text
+(`noSort`). -/
+def Solver.runCached (s : Solver) (dir : System.FilePath) (ids : Option Nat) (script : Script) :
+    IO (Except String Answer) := do
+  let some q := (script.sent ids).keyed s.header | return .error noSort
+  return .ok ((← s.runKeyed dir q).uncode ids)
 
 /-- A script's text parts with their shared definitions found, the definitions' sorts and the SHA-256 of the framed
 parts: what scripts that add one goal assertion share (the goals of generate's targets and of a service's responses at
@@ -154,10 +162,36 @@ def ScriptPrefix.ask (p : ScriptPrefix) (goal : Term) : Option Keyed := do
   pure ⟨Sha256.hex (frame [p.digest, defs, assert]).toUTF8,
     fun _ => p.parts.head ++ defs ++ p.parts.body ++ assert ++ p.parts.tail⟩
 
-/-- A question to the solver that owns its call: the script, and how its answer reads as a result. Nothing pairs
-answers with questions by position. -/
+/-- What the solver reads for scripts that add a goal to one script (`Script.sent`): the prefix with names as codes
+and the cache its terms were coded with, so a goal's shared terms code to the prefix's objects, where the script has
+names as codes; and the prefix as it is, read only for a goal that has no codes. -/
+structure SentPrefix where
+  coded : Option (Nat × ScriptPrefix × CodeCache)
+  exact : Thunk (Option ScriptPrefix)
+
+/-- The prefix of what the solver reads for `s` and goals added to it, `ids` being the id datatype if any. -/
+def Script.sentPrefix? (s : Script) (ids : Option Nat) (header : List String) : SentPrefix :=
+  let coded := ids.bind fun d =>
+    if s.datatypes[d]? == some idDatatype then
+      match Term.codesC d s.asserts {} with
+      | (some asserts, c) =>
+        (Script.prefix? { s with datatypes := s.datatypes.set d codedIdDatatype, asserts } header).map (d, ·, c)
+      | (none, _) => none
+    else none
+  { coded, exact := Thunk.mk fun _ => s.prefix? header }
+
+/-- What the solver reads for the prefix's script with `goal` as its last assertion, keyed: with names as codes where
+the goal has codes too, else as it is. -/
+def SentPrefix.ask (p : SentPrefix) (goal : Term) : Option Keyed :=
+  match p.coded.bind fun (d, q, c) => ((goal.codeC d c).1).map (q, ·) with
+  | some (q, g) => q.ask g
+  | none => p.exact.get.bind (·.ask goal)
+
+/-- A question to the solver that owns its call: the script, the id datatype if it has one, and how its answer reads
+as a result. Nothing pairs answers with questions by position. -/
 structure Obligation (α : Type) where
   script : Script
+  ids : Option Nat
   read : Answer → α
 
 end Tazuna.Smt

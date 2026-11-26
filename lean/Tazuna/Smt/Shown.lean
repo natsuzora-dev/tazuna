@@ -80,15 +80,6 @@ def idsAltsV : (vs : List (List Ty)) → Ty.alts vs → List IdV
   | _ :: vs, .inr y => idsAltsV vs y
 end
 
-mutual
-theorem Val.beq_refl : (a : Val) → Val.beq a a = true
-  | .int _ | .bool _ | .str _ => by simp [Val.beq]
-  | .ctor _ _ as => by simp [Val.beq, Val.beqs_refl as]
-theorem Val.beqs_refl : (as : List Val) → Val.beqs as as = true
-  | [] => rfl
-  | a :: as => by simp [Val.beqs, Val.beq_refl a, Val.beqs_refl as]
-end
-
 /-- The positions whose conditions hold are exactly the ids `l` holds: each such position's value is one of them, and
 each of them is some such position's value. -/
 def IdsExact (M : Model) (L : Layout) (ps : List (Term × Term)) (l : List IdV) : Prop :=
