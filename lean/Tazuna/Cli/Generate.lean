@@ -44,13 +44,15 @@ def lastHits (xs : List (Input v)) : Bool :=
 
 /-- The trace generate writes for the inputs: their trace (`foundTrace`, which verify replays as passed) where the
 last step shows the target. -/
-def genTrace (xs : List (Input v)) : Except String TraceFile := do
-  let tr ← foundTrace T v xs
+def genTrace {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (xs : List (Input v)) :
+    Except String TraceFile := do
+  let tr ← foundTrace chk xs
   if lastHits T v rules g xs then .ok tr else .error "misses the target"
 
 /-- T6: a written trace reaches its target. Verify replays its lines as passed, and the last step of its run from the
 initial state shows a class the target aims at. -/
-theorem generate_reaches {xs : List (Input v)} {tr : TraceFile} (h : genTrace T v rules g xs = .ok tr) :
+theorem generate_reaches {P : List AnySite} {E : List AnyEffectSite} {chk : Checked P E T v} {xs : List (Input v)}
+    {tr : TraceFile} (h : genTrace T v rules g chk xs = .ok tr) :
     replay T v tr.numbered = .passed ∧
       ∃ ys x, xs = ys ++ [x] ∧ Hits T v rules g x (step T v (run T v (State.init v) ys).1 x) := by
   simp only [genTrace, bind, Except.bind] at h
@@ -60,23 +62,16 @@ theorem generate_reaches {xs : List (Input v)} {tr : TraceFile} (h : genTrace T 
     split at h
     · rename_i hit
       cases h
-      refine ⟨?_, ?_⟩
-      · unfold foundTrace at htr
-        split at htr
-        · cases htr
-        · cases htr
-        · split at htr
-          · rename_i hp; cases htr; exact hp
-          · cases htr
-      · unfold lastHits at hit
-        split at hit
-        · rename_i x hx
-          obtain ⟨ys, rfl⟩ := List.getLast?_eq_some_iff.1 hx
-          refine ⟨ys, x, rfl, ?_⟩
-          obtain ⟨c, hc, hcov⟩ := List.any_eq_true.1 hit
-          simp only [List.dropLast_concat] at hc
-          exact ⟨c, hc, hcov⟩
-        · cases hit
+      refine ⟨foundTrace_passed htr, ?_⟩
+      unfold lastHits at hit
+      split at hit
+      · rename_i x hx
+        obtain ⟨ys, rfl⟩ := List.getLast?_eq_some_iff.1 hx
+        refine ⟨ys, x, rfl, ?_⟩
+        obtain ⟨c, hc, hcov⟩ := List.any_eq_true.1 hit
+        simp only [List.dropLast_concat] at hc
+        exact ⟨c, hc, hcov⟩
+      · cases hit
     · cases h
 
 end
@@ -108,7 +103,7 @@ def generate (root dir path : String) (opts : Options) : IO UInt32 := do
         -- `generate_sound`: the decoded run's last step shows the target, so "misses the target" is unreachable unless the
         -- goal read z3's values for division by zero or a selector on another constructor (`lastHits`).
         let (j, r) ← Job.of (searchDepths solver cache sv g.text ds (fun sts => .ok (genGoal L c.T rules g sts))
-          (genTrace c.T v rules g))
+          (genTrace c.T v rules g (c.checked v sv.mem)))
         searches := searches.push j
         jobs := jobs.push (v.name, g, scopeBounds c.T L v, r)
     -- One pool: the builds first, so a search waits only on a build some worker runs.

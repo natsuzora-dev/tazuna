@@ -222,36 +222,45 @@ def finIdx {α : Type} (xs : List α) (p : α → Bool) : Option (Fin xs.length)
 section
 variable (T : List TypeDecl) (v : ServiceV)
 
+/-- Each item written in order by `f` with the names so far: their lines, or none from the first that has no wire
+form. -/
+def writeAll {α : Type} (f : Names → α → Names × Option Line) : Names → List α → Names × Option (List Line)
+  | ns, [] => (ns, some [])
+  | ns, a :: as => match f ns a with
+    | (ns, some l) => let r := writeAll f ns as; (r.1, r.2.map (l :: ·))
+    | (ns, none) => (ns, none)
+
+/-- The line answering the request named `to` with the outcome, at time `t`; none for a fault, which no line writes. -/
+def answerLine (ns : Names) (t : Int) (to : String) : Outcome → Names × Option Line
+  | .accepted => (ns, some (.answered t to .accepted))
+  | .answered ⟨ty, x⟩ => let (ns, w) := ns.enc T ty x; (ns, w.map fun w => .answered t to (.answered w))
+  | .rejected ⟨ty, x⟩ => let (ns, w) := ns.enc T ty x; (ns, w.map fun w => .answered t to (.rejected w))
+  | .invalid rules => (ns, some (.answered t to (.invalid rules)))
+  | .fault _ => (ns, none)
+
+/-- An applied event's line at time `t`. -/
+def eventLine (t : Int) (ns : Names) (ev : v.event.den0) : Names × Option Line :=
+  let (ns, w) := ns.enc T v.event ev
+  (ns, w.map (.applied t))
+
+/-- A sent request's line at time `t`, its wire id named. -/
+def sentLine (t : Int) (ns : Names) (o : OutLine) : Names × Option Line :=
+  let (ns, id) := ns.wire o.id
+  let (ns, w) := ns.enc T o.input.1 o.input.2
+  (ns, w.map (.sent t id o.external o.name))
+
 /-- The out lines of one step's result: the answer to a request (named by `answerTo`), each event applied, each
 request sent. -/
-def outLines (ns : Names) (answerTo : Option String) (r : Result v) : Names × Option (List Line) := Id.run do
-  let mut ns := ns
-  let mut lines : List Line := []
+def outLines (ns : Names) (answerTo : Option String) (r : Result v) : Names × Option (List Line) :=
   let t := r.state.now
-  if let some to := answerTo then
-    let answer ← match r.outcome with
-      | .accepted => pure (some Answer.accepted)
-      | .answered ⟨ty, x⟩ => do let (ns', w) := ns.enc T ty x; ns := ns'; pure (w.map .answered)
-      | .rejected ⟨ty, x⟩ => do let (ns', w) := ns.enc T ty x; ns := ns'; pure (w.map .rejected)
-      | .invalid rules => pure (some (.invalid rules))
-      | .fault _ => pure none
-    match answer with
-    | some a => lines := lines ++ [.answered t to a]
-    | none => return (ns, none)
-  for ev in r.events do
-    let (ns', w) := ns.enc T v.event ev
-    ns := ns'
-    match w with
-    | some w => lines := lines ++ [.applied t w]
-    | none => return (ns, none)
-  for o in r.out do
-    let (ns', id) := ns.wire o.id
-    let (ns', w) := ns'.enc T o.input.1 o.input.2
-    ns := ns'
-    match w with
-    | some w => lines := lines ++ [.sent t id o.external o.name w]
-    | none => return (ns, none)
-  return (ns, some lines)
+  let a : Names × Option (List Line) := match answerTo with
+    | some to => let (ns, l) := answerLine T ns t to r.outcome; (ns, l.map ([·]))
+    | none => (ns, some [])
+  match a with
+  | (ns, none) => (ns, none)
+  | (ns, some a) => match writeAll (eventLine T v t) ns r.events with
+    | (ns, none) => (ns, none)
+    | (ns, some evs) => let o := writeAll (sentLine T t) ns r.out; (o.1, o.2.map (a ++ evs ++ ·))
 
 /-- What runs a scenario step needs between steps. -/
 structure Run where
@@ -361,16 +370,19 @@ theorem TraceFile.read_wires (tr : TraceFile) :
   | nil => rfl
   | cons l ls ih => simp [List.mapM_cons, Line.ofWire_toWire, ih]
 
-/-- The names of the outside ids the inputs carry. -/
-def outsideNames (T : List TypeDecl) {v : ServiceV} (xs : List (Input v)) : List String :=
-  xs.flatMap fun x => (x.ids T).filterMap fun | .named s => some s | .fresh .. => none
+/-- The names of the outside ids the run from `s` on the inputs writes: those its inputs carry and those its steps
+show. -/
+def outsideNames (T : List TypeDecl) {v : ServiceV} (s : State v) (xs : List (Input v)) : List String :=
+  (xs.flatMap (·.ids T) ++ (run T v s xs).2.flatMap (·.shownIds T)).filterMap fun
+    | .named s => some s
+    | .fresh .. => none
 
 /-- The trace of a run of the inputs from the initial state: what generate writes, in the format of snapshots, or why
-a step stopped. Its names avoid every outside id's name the inputs carry, so a fresh id is never called like an
-outside id the run names later (`Names.bind_ok`). -/
+a step stopped. Its names avoid every outside id's name the run writes, so a fresh id is never called like an outside
+id the run names later (`Names.bind_ok`). -/
 def traceOf (T : List TypeDecl) (v : ServiceV) (xs : List (Input v)) : Except Stop TraceFile := do
   let (run, _) ← xs.foldlM (fun (run, k) x => do pure (← run.input T v (k + 1) x, k + 1))
-    (({ state := State.init v, names := { avoid := outsideNames T xs } } : Run v), 0)
+    (({ state := State.init v, names := { avoid := outsideNames T (State.init v) xs } } : Run v), 0)
   pure ⟨v.name, run.lines⟩
 
 instance : Inhabited Stop := ⟨.badStep 0 ""⟩

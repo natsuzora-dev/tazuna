@@ -347,9 +347,9 @@ def _root_.Tazuna.Ir.ResponseV.text {e : Ty} (resp : ResponseV e) : String := "r
 
 /-- A response's model played back in Lean: its run must have timely clock lines and violate the response, which
 `response_sound` proves of every model, so this check never fails; its trace is `foundTrace`'s. -/
-def responsePlay (T : List TypeDecl) (v : ServiceV) (resp : ResponseV v.event) (xs : List (Input v)) :
-    Except String TraceFile :=
-  if resp.violatedBy T (State.init v) xs && decide (Step.TimelyRun T (State.init v) xs) then foundTrace T v xs
+def responsePlay {P : List AnySite} {E : List AnyEffectSite} {T : List TypeDecl} {v : ServiceV}
+    (chk : Checked P E T v) (resp : ResponseV v.event) (xs : List (Input v)) : Except String TraceFile :=
+  if resp.violatedBy T (State.init v) xs && decide (Step.TimelyRun T (State.init v) xs) then foundTrace chk xs
   else .error "does not violate it"
 
 /-- The line of a response's search. -/
@@ -453,7 +453,7 @@ def prove (root path : String) (opts : Options) : IO UInt32 := do
       for ⟨resp, hr⟩ in resps do
         let (j, r) ← Job.of (searchDepths solver cache sv resp.text ds
           (fun sts => (Sound.get (respGoalE L v resp sts) (respGoalE_ofService c sv.mem hr sts)).map (·.1))
-          (responsePlay c.T v resp))
+          (responsePlay (c.checked v sv.mem) resp))
         searches := searches.push j
         responses := responses.push (v.name, resp.name, scopeBounds c.T L v, r)
     let mut questions : Array Job := #[]
