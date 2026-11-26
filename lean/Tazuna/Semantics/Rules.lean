@@ -46,13 +46,16 @@ inductive Illegal where
   /-- Two responses of a service share a name, or a response's `within` is negative: a response line names its
   target by the response's name, and a deadline before the opening event is no deadline. -/
   | response
+  /-- A field of a custom type is labelled `tag`: on the wire a variant's name sits under the key `tag`, beside its
+  fields under their labels, so a field labelled so has no place. -/
+  | tagLabel
 deriving Repr, DecidableEq
 
 namespace Illegal
 
 def all : List Illegal :=
   [wireName, owner, unknownSource, creates, wireType, stateType, bounds, scenario, rejection, machineKey, unknownHandle,
-    handleName, tableKey, response]
+    handleName, tableKey, response, tagLabel]
 
 theorem mem_all (k : Illegal) : k ∈ all := by cases k <;> simp [all]
 
@@ -71,6 +74,7 @@ def name : Illegal → String
   | handleName => "handleName"
   | tableKey => "tableKey"
   | response => "response"
+  | tagLabel => "tagLabel"
 
 end Illegal
 
@@ -391,6 +395,10 @@ capturing values of the types `captures`, and whose service `v`'s own sends can 
 message naming the definition. -/
 def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) (captures : List (SiteId × List Ty))
     (sent : ServiceV → List HandleSite) : List (Illegal × String) :=
+  let tagLabels := T.flatMap fun d => d.variants.filterMap fun var =>
+    if var.fields.any (·.label == some "tag") then
+      some (Illegal.tagLabel, s!"{d.name}.{var.name} has a field labelled tag, the key its variant's name sits under on the wire; rename the field")
+    else none
   let names := s.services.map (·.name) ++ s.externals.map (·.name)
   let topNames := (duplicates names).map fun n => (.wireName, s!"{n} names more than one service or external")
   let entries : List (String × DeclaredV) := s.services.flatMap (fun v => v.declares.map (v.name, ·)) ++
@@ -499,6 +507,6 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) (c
     | none => none
   let capturedKeys := captures.filterMap fun (site, Γ) => if (Ty.tuple Γ).plainKeys then none else
     some (Illegal.tableKey, s!"{site.module}:{site.line}:{site.col}: a function a structure value keeps captures a table whose key is no plain value; {tableKeyAdvice}")
-  topNames ++ sharedOwners ++ perService ++ perExternal ++ unknownHandles ++ unlistedSends ++ capturedKeys
+  tagLabels ++ topNames ++ sharedOwners ++ perService ++ perExternal ++ unknownHandles ++ unlistedSends ++ capturedKeys
 
 end Tazuna.Ir
