@@ -107,6 +107,8 @@ inductive Tazuna.Kind : Type
   | undecided (k : Tazuna.UndecidedKind)
   /-- What a kind of line means, as `explain` prints it. -/
   | explain
+  /-- The engine's version, which is the Gleam package's: `tazuna-engine` with no arguments prints it. -/
+  | version
 
 namespace Tazuna
 
@@ -222,11 +224,12 @@ def name : Kind → String
   | generate k => "Generate." ++ k.name
   | undecided k => "Undecided." ++ k.name
   | explain => "Explain.kind"
+  | version => "Engine.version"
 
 def all : List Kind :=
   InternalKind.all.map internal ++ UsageKind.all.map usage ++ Restricted.all.map restricted ++ Ir.Illegal.all.map illegal ++ [checkPassed] ++ FaultKind.all.map fault ++ TestKind.all.map test ++
     [verifyPassed, verifyDiffers, traceInvalid] ++ ProveKind.all.map prove ++
-    GenerateKind.all.map generate ++ UndecidedKind.all.map undecided ++ [explain]
+    GenerateKind.all.map generate ++ UndecidedKind.all.map undecided ++ [explain, version]
 
 theorem mem_all (k : Kind) : k ∈ all := by
   cases k with
@@ -248,7 +251,7 @@ def e2e : Kind → Bool
   | restricted _ | internal .convert | internal .engine | undecided .timeout => false
   | internal .invalidIr | usage _ | illegal _ | checkPassed | fault _ | test _ | verifyPassed | verifyDiffers | traceInvalid | prove _
   | generate _ | undecided .unknown | undecided .limit | undecided .upToRenaming
-  | explain => true
+  | explain | version => true
 
 /-- The outcome a line of the kind gives its command; the command exits with its worst line's (`Exit.max`). -/
 def exit : Kind → Exit
@@ -257,7 +260,7 @@ def exit : Kind → Exit
   | restricted _ | illegal _ | fault _ | verifyDiffers | traceInvalid => .violation
   | test .passed | test .written => .ok
   | test .changed | test .badStep => .violation
-  | checkPassed | verifyPassed | explain => .ok
+  | checkPassed | verifyPassed | explain | version => .ok
   | prove .proved | prove .withinBounds => .ok
   | prove .violated => .violation
   | generate .reached | generate .unreached => .ok

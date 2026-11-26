@@ -65,6 +65,7 @@ def means : Field := ⟨"means", "what a line of the kind means"⟩
 def exit : Field := ⟨"exit", "the exit code a line of the kind gives; a command exits with its worst line's"⟩
 def backedBy : Field := ⟨"backedBy", "the theorems the line rests on, as lean/Tazuna/Axioms.lean names its roots"⟩
 def fields : Field := ⟨"fields", "each field a line of the kind can carry, with what it holds"⟩
+def version : Field := ⟨"version", "the version"⟩
 
 end Field
 
@@ -199,6 +200,7 @@ def explanation : Kind → Explanation
   | generate k => k.explanation
   | undecided k => k.explanation
   | explain => ⟨docOf% Kind.explain, [], [Field.name, Field.means, Field.exit, Field.backedBy, Field.fields]⟩
+  | version => ⟨docOf% Kind.version, [], [Field.version]⟩
 
 /-- Every theorem `explain` names: lean/Tazuna/Axioms.lean fails the build unless each is one of its roots. -/
 def backing : List Name := all.flatMap (·.explanation.backedBy)

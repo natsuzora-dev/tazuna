@@ -7,8 +7,9 @@ import Tazuna.Version
 open Tazuna.Cli in
 /-- The command the arguments name, or none when they name none. The launcher runs `tazuna-engine <command> <root>
 [...] --ir <path>`, with the user's arguments as given and the IR it converted from them; `explain [<kind>]` alone, as
-it reads no spec. -/
+it reads no spec; and no arguments for the version. -/
 def commandOf : List String → Option (Cmd Unit)
+  | [] => some (printLine .version [("version", Lean.Json.str Tazuna.version)])
   | ["check", root, "--ir", path] => some (check root path)
   | ["test", root, "--ir", path] => some (test root path false)
   | ["test", root, "--update", "--ir", path] => some (test root path true)
@@ -19,11 +20,7 @@ def commandOf : List String → Option (Cmd Unit)
   | ["explain", kind] => some (explain (some kind))
   | _ => none
 
-/-- `tazuna-engine` alone prints the version. -/
-def main (args : List String) : IO UInt32 := do
-  if args.isEmpty then
-    IO.println Tazuna.version
-    return 0
+def main (args : List String) : IO UInt32 :=
   Tazuna.Cli.Cmd.exitCode <| match commandOf args with
     | some c => c
     | none => Tazuna.Cli.printLine (.usage .arguments) [("message", Lean.Json.str

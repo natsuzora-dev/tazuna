@@ -18,7 +18,7 @@ fi
 (cd lean && lake build --wfail && lake exe gen-dsl ..)
 
 gleam_version=$(sed -n 's/^version = "\(.*\)"$/\1/p' gleam/gleam.toml)
-lean_version=$(cd lean && lake exe tazuna-engine)
+lean_version=$(lean/.lake/build/bin/tazuna-engine | sed -n 's/^{"kind":"Engine.version","version":"\(.*\)"}$/\1/p')
 if [ "$gleam_version" != "$lean_version" ]; then
   echo "gleam/gleam.toml has version $gleam_version but the engine prints $lean_version. Make them the same."
   exit 1
