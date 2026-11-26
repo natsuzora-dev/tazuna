@@ -165,6 +165,9 @@ elab "#check_tazuna_reach" : command => do
     -- A response's model decodes to a run from the initial state on inputs `validInputs` allows, with timely clock
     -- lines, that violates it.
     ``Tazuna.Smt.response_sound,
+    -- Check's wireType rule reads every wire type, so a user's spec never fails `Checked.wire`: a function on the wire
+    -- is Illegal.wireType, and only a loader bug is left to break it (exit 4).
+    ``Tazuna.Smt.wireTys_wire,
     -- The step reads no bag's or table's order: from states and on inputs that differ only in how bags and tables are
     -- stored, it steps to results that differ only so, every other order kept.
     ``Tazuna.Ir.Step.step_same]

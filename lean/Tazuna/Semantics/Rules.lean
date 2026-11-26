@@ -510,6 +510,11 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) (c
     | none => none
   let capturedKeys := captures.filterMap fun (site, Γ) => if (Ty.tuple Γ).plainKeys then none else
     some (Illegal.tableKey, s!"{site.module}:{site.line}:{site.col}: a function a structure value keeps captures a table whose key is no plain value; {tableKeyAdvice}")
-  tagLabels ++ topNames ++ sharedOwners ++ perService ++ perExternal ++ unknownHandles ++ unlistedSends ++ capturedKeys
+  -- Each service's `declared` is checked as its wire types read it (`ServiceV.wireTys`); what an external's own entry
+  -- reports already is dropped as a duplicate.
+  let declaredTypes := s.services.flatMap fun v => (v.declared.filter fun (_, d) => !d.wireTypes.all Ty.wire).map
+    fun (x, d) => (Illegal.wireType, s!"{x}.{d.name}: its types cross the wire, so they hold no functions")
+  (tagLabels ++ topNames ++ sharedOwners ++ perService ++ perExternal ++ unknownHandles ++ unlistedSends ++ capturedKeys ++
+    declaredTypes).eraseDups
 
 end Tazuna.Ir

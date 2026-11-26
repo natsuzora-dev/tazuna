@@ -76,7 +76,8 @@ structure Checked (P : List AnySite) (E : List AnyEffectSite) (T : List TypeDecl
   /-- Not a rule of check's: the loader builds every type of a program's values from the type table, whose ADT 0 is
   Bool, and the program from ground instances; check validates the result, so a loader bug is reported, not assumed. -/
   stateTys : v.stateTys = true
-  /-- Not a rule of check's either: check's wireType and tagLabel rules leave only a loader bug to break it. -/
+  /-- Not a rule of check's either: check's wireType rule leaves no function or fresh-id source on the wire
+  (`wireTys_wire`) and its tagLabel rule no field keyed `tag`, so only a loader bug breaks it. -/
   wire : v.wireOk T = true
   /-- No two commands or queries share a name, so an in line's name picks one. -/
   requests : (v.commands.map (·.name) ++ v.queries.map (·.name)).Nodup
@@ -202,6 +203,75 @@ theorem nodup_of_duplicates {l : List String} (h : duplicates l = []) : l.Nodup 
     exact this
   · rw [List.count_eq_zero_of_not_mem ha]; omega
 
+theorem nil_of_eraseDups {α : Type} [BEq α] {l : List α} (h : l.eraseDups = []) : l = [] := by
+  cases l with
+  | nil => rfl
+  | cons a as => simp [List.eraseDups_cons] at h
+
+/-- Check's wireType rule reads every type `ServiceV.wireTys` lists: a check with no finding leaves no function or
+fresh-id source on the wire, so `Checked.wire` fails only for what the loader builds (type variables, the prelude's
+Bool and Nil, a variant's keys and atoms), never for a user's spec. -/
+theorem wireTys_wire {T : List TypeDecl} {s : SpecV} {handles : List HandleSite} {captures : List (SiteId × List Ty)}
+    {sent : ServiceV → List HandleSite} (h : SpecV.illegal T s handles captures sent = []) :
+    ∀ v ∈ s.services, ∀ t ∈ v.wireTys, t.wire = true := by
+  intro v hv t ht
+  simp only [SpecV.illegal] at h
+  have h0 := nil_of_eraseDups h
+  have htop := nilL h0
+  have own : ∀ w ∈ s.services, ∀ what t, (what, t) ∈ [("caller", w.caller), ("event", w.event)] ++
+      w.commands.flatMap (fun c => [(c.name ++ " input", c.input), (c.name ++ " rejection", c.rejection)]) ++
+      w.queries.flatMap (fun q => [(q.name ++ " input", q.input), (q.name ++ " output", q.output)]) ++
+      w.sources.map (fun (n, t) => (n ++ " event", t)) → t.wire = true := fun w hw what t hp => by
+    have hs := nilL (List.flatMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL htop))))) w hw)
+    have hwire := List.filterMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL hs))))))))))
+    exact none_of_ite (hwire (what, t) hp)
+  simp only [ServiceV.wireTys, List.mem_cons, List.mem_append, List.mem_flatMap, List.mem_map] at ht
+  rcases ht with (((rfl | rfl | ⟨c, hc, ht⟩) | ⟨q, hq, ht⟩) | ⟨sub, hsub, rfl⟩) | ⟨⟨x, d⟩, hd, ht⟩
+  · exact own v hv "caller" _ (by simp)
+  · exact own v hv "event" _ (by simp)
+  · rcases ht with rfl | rfl | ht
+    · exact own v hv (c.name ++ " input") _ (by simp only [List.mem_append, List.mem_flatMap]; exact .inl (.inl (.inr ⟨c, hc, by simp⟩)))
+    · exact own v hv (c.name ++ " rejection") _ (by simp only [List.mem_append, List.mem_flatMap]; exact .inl (.inl (.inr ⟨c, hc, by simp⟩)))
+    · simp at ht
+  · rcases ht with rfl | rfl | ht
+    · exact own v hv (q.name ++ " input") _ (by simp only [List.mem_append, List.mem_flatMap]; exact .inl (.inr ⟨q, hq, by simp⟩))
+    · exact own v hv (q.name ++ " output") _ (by simp only [List.mem_append, List.mem_flatMap]; exact .inl (.inr ⟨q, hq, by simp⟩))
+    · simp at ht
+  · -- A subscription's event is a source's, which its declaring service or external checks.
+    have hs := nilL (List.flatMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL htop))))) v hv)
+    have hunk := List.filterMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL (nilL (nilL (nilL hs)))))))) sub hsub
+    have hany := none_of_ite hunk
+    obtain ⟨⟨n, u⟩, hm, hnu⟩ := List.any_eq_true.1 hany
+    simp only [Bool.and_eq_true, beq_iff_eq] at hnu
+    obtain ⟨⟨e⟩, -⟩ := Option.isSome_iff_exists.1 hnu.2
+    rw [← e]
+    rcases List.mem_append.1 hm with hm | hm
+    · obtain ⟨w, hw, hm⟩ := List.mem_flatMap.1 hm
+      obtain ⟨⟨n', u'⟩, hm', he⟩ := List.mem_map.1 hm
+      simp only [Prod.mk.injEq] at he
+      obtain ⟨rfl, rfl⟩ := he
+      exact own w hw (n' ++ " event") _ (List.mem_append_right _ (List.mem_map.2 ⟨(n', u'), hm', rfl⟩))
+    · obtain ⟨x, hx, hm⟩ := List.mem_flatMap.1 hm
+      obtain ⟨d, hd, hdu⟩ := List.mem_filterMap.1 hm
+      cases d with
+      | source n' u' =>
+        simp only [Option.some.injEq, Prod.mk.injEq] at hdu
+        obtain ⟨rfl, rfl⟩ := hdu
+        have hext := List.filter_eq_nil_iff.1 (List.map_eq_nil_iff.1 (nilR (nilL (nilL (List.flatMap_eq_nil_iff.1
+          (nilR (nilL (nilL (nilL htop)))) x hx))))) _ hd
+        simpa [DeclaredV.wireTypes, DeclaredV.types] using hext
+      | _ => simp at hdu
+  · have hdecl := List.filter_eq_nil_iff.1 (List.map_eq_nil_iff.1 (List.flatMap_eq_nil_iff.1 (nilR h0) v hv)) _ hd
+    simp only [Bool.not_eq_true', Bool.not_eq_false, List.all_eq_true] at hdecl
+    cases d with
+    | externalCommand _ i o j =>
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at ht
+      exact hdecl t (by simp [DeclaredV.wireTypes, DeclaredV.types, ht])
+    | externalQuery _ i o _ =>
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at ht
+      exact hdecl t (by simp [DeclaredV.wireTypes, DeclaredV.types, ht])
+    | _ => simp at ht
+
 /-- A check with no finding establishes `Checked` of every service, at the sites of the program the spec came from:
 each fact's failure would be a finding. -/
 theorem check_ok {T : List TypeDecl} {P : List AnySite} {E : List AnyEffectSite} {s : SpecV} {handles : List HandleSite}
@@ -210,6 +280,7 @@ theorem check_ok {T : List TypeDecl} {P : List AnySite} {E : List AnyEffectSite}
     (h : SpecV.illegal T s handles captures ServiceV.sentHandles = []) : ∀ v ∈ s.services, Checked P E T v := by
   intro v hv
   simp only [SpecV.illegal] at h
+  replace h := nilL (nil_of_eraseDups h)
   have hs := nilL (List.flatMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL h))))) v hv)
   have hsent := List.filterMap_eq_nil_iff.1 (List.flatMap_eq_nil_iff.1 (nilR (nilL h)) v hv)
   have hneg := List.filterMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL hs))))
@@ -253,6 +324,7 @@ theorem handles_ok {T : List TypeDecl} {s : SpecV} {handles : List HandleSite} {
     ∀ x ∈ handles, x.Named s := by
   intro x hx
   simp only [SpecV.illegal] at h
+  replace h := nilL (nil_of_eraseDups h)
   have hu := List.filterMap_eq_nil_iff.1 (nilR (nilL (nilL h))) x hx
   cases hn : x.name with
   | none => simp [hn] at hu
