@@ -1,0 +1,21 @@
+# The shop bench's budgets, fixed before the first measurement (run-log 235). test/bench/budget reads this file.
+# A "check" line fails the run when the value is over; a "report" line is printed against its budget only, since wall
+# time depends on the machine (these were set for an Apple M2 laptop, z3 on PATH, --jobs 4, an empty cache).
+#
+# Questions: the scripts the solver ran from an empty cache. 120 s of prove at --jobs 4 is 480 solver-seconds; the
+# 3-service bench's questions average 0.12 s of wall time each at --jobs 4, so about 1500 questions fit.
+check prove.questions 1500
+check generate.questions 1500
+# Every question decides at the default resource limit.
+check prove.undecided 0
+check generate.undecided 0
+# The largest script and all of prove's scripts together, in bytes. z3 read a 12 MB response script in about 0.9 s
+# (run-log 224), so 16 MiB keeps one script's reading near a second, and 512 MiB keeps prove's reading near 10 s at
+# --jobs 4.
+check script.max_bytes 16777216
+check prove.script_bytes 536870912
+# Wall time in seconds.
+report check.seconds 5
+report prove.cold.seconds 120
+report prove.cached.seconds 10
+report generate.seconds 300

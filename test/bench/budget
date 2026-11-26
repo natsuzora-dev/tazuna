@@ -1,0 +1,69 @@
+#!/bin/sh
+# Measures a bench spec against the budgets in its directory's `budget` file: check, prove from an empty cache and
+# again from the cache, and generate from an empty cache, as a user runs them. A z3 wrapper first on PATH counts the
+# scripts the solver runs and their sizes. Exits 1 when a "check" budget is exceeded; "report" budgets (wall time) are
+# only printed.
+# Usage: test/bench/budget <spec directory, e.g. shop> [jobs, default 4]
+# Needs the engine and the launcher built (scripts/check builds both) and z3 on PATH.
+set -eu
+here=$(cd "$(dirname "$0")" && pwd)
+repo=$(cd "$here/../.." && pwd)
+spec=$here/$1
+jobs=${2:-4}
+z3=$(command -v z3)
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+cp -R "$spec/src" "$work/"
+printf 'import { main } from "%s";\nmain();\n' "$repo/gleam/build/dev/javascript/tazuna/tazuna.mjs" >"$work/run.mjs"
+mkdir "$work/bin"
+# One line per script: its bytes. The engine runs z3 with -smt2 and the script's path.
+printf '#!/bin/sh\nwc -c <"$2" >>"$SCRIPT_LOG"\nexec "%s" "$@"\n' "$z3" >"$work/bin/z3"
+chmod +x "$work/bin/z3"
+
+# run <name> <command and arguments>: the wall time goes to <name>.seconds, stdout to <name>.jsonl, the script sizes
+# to <name>.scripts.
+run() {
+  name=$1
+  shift
+  : >"$work/$name.scripts"
+  code=0
+  (cd "$work" && SCRIPT_LOG="$work/$name.scripts" PATH="$work/bin:$PATH" \
+    TAZUNA_ENGINE="$repo/lean/.lake/build/bin/tazuna-engine" /usr/bin/time -p node run.mjs "$@" \
+    >"$name.jsonl" 2>"$name.time") || code=$?
+  sed -n 's/^real //p' "$work/$name.time" >"$work/$name.seconds"
+  printf '%s: exit %s\n' "$name" "$code"
+}
+run check check m
+run prove.cold prove m --jobs "$jobs"
+run prove.cached prove m --jobs "$jobs"
+rm -rf "$work/build/tazuna/prove-cache"
+run generate generate m inputs --jobs "$jobs"
+
+value() {
+  case $1 in
+    *.seconds) sed -n 1p "$work/$1" ;;
+    prove.questions) wc -l <"$work/prove.cold.scripts" | tr -d ' ' ;;
+    generate.questions) wc -l <"$work/generate.scripts" | tr -d ' ' ;;
+    prove.undecided) grep -c '"kind":"Undecided\.' "$work/prove.cold.jsonl" || true ;;
+    generate.undecided) grep -c '"kind":"Undecided\.' "$work/generate.jsonl" || true ;;
+    script.max_bytes) sort -n "$work/prove.cold.scripts" "$work/generate.scripts" | tail -1 | tr -d ' ' ;;
+    prove.script_bytes) awk '{ s += $1 } END { print s + 0 }' "$work/prove.cold.scripts" ;;
+    *) echo "unknown budget $1" >&2; exit 3 ;;
+  esac
+}
+over=0
+while read -r how name limit; do
+  case $how in check | report) ;; *) continue ;; esac
+  v=$(value "$name")
+  verdict=within
+  if awk -v v="$v" -v l="$limit" 'BEGIN { exit !(v > l) }'; then
+    verdict=over
+    [ "$how" = check ] && over=1
+  fi
+  printf '%s %s: %s (budget %s, %s)\n' "$how" "$name" "$v" "$limit" "$verdict"
+done <"$spec/budget"
+for name in prove.cold generate; do
+  printf '%s kinds:\n' "$name"
+  grep -o '"kind":"[^"]*"' "$work/$name.jsonl" | sort | uniq -c
+done
+exit "$over"
