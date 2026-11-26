@@ -339,13 +339,6 @@ def serviceItems (only : String → Bool) : ServiceItems := Id.run do
 
 end
 
-/-- Whether every clock line of the run from `s` is timely (`Step.TimelyRun`). -/
-def timelyRun (T : List TypeDecl) (v : ServiceV) : State v → List (Input v) → Bool
-  | _, [] => true
-  | s, x :: xs => (match x with
-    | .clock time => Step.timely s time
-    | _ => true) && timelyRun T v (step T v s x).state xs
-
 /-- The words an assumption is named by in a response line. -/
 def responseAssumes : List String := [Step.Assumption.validInputs.text, Step.Assumption.timelyClock.text]
 
@@ -356,7 +349,7 @@ def _root_.Tazuna.Ir.ResponseV.text {e : Ty} (resp : ResponseV e) : String := "r
 dropped) is checked, not proved. -/
 def responsePlay (T : List TypeDecl) (v : ServiceV) (resp : ResponseV v.event) (xs : List (Input v)) :
     Except String (List Wire) :=
-  if resp.violatedBy T (State.init v) xs && timelyRun T v (State.init v) xs then
+  if resp.violatedBy T (State.init v) xs && decide (Step.TimelyRun T (State.init v) xs) then
     match traceOf T v xs with
     | .ok ws => .ok ws.tail
     | .error _ => .error "does not write as a trace"

@@ -482,8 +482,8 @@ theorem unrollKind_ok {S : SymState v} {sel : Term} {inp : SymInput v (shapes v)
     {x : (SymInput v (shapes v) senv.nT × EncodedStep v) × Term × Term × SymState v}
     (h : unrollKind L T P v senv S sel inp = .ok x) :
     ∃ t valid wf, encodeStep L T P v senv S inp = .ok t ∧ inp.validT L S.fresh = .ok valid ∧ inp.wf L = some wf ∧
-      x = ((inp, t), andT (.eq sel (.int inp.pick)) t.out.case,
-        .or (.not (andT (.eq sel (.int inp.pick)) t.out.case))
+      x = ((inp, t), selectsT sel (inp, t),
+        .or (.not (selectsT sel (inp, t)))
           (andT wf (andT t.codes (andT t.sites (andT t.cond (andT (t.out.after S inp).1 valid))))),
         (t.out.after S inp).2) := by
   unfold unrollKind at h
@@ -540,11 +540,11 @@ theorem unroll_inputs_decode (hc : v.caller.isData = true) {d : Nat} {B : Unroll
     cases hu : unrollKind L T P v senv S (.var bs) inp with
     | error _ => simp [hu] at hro
     | ok x0 => simp [hu] at hro; rw [hro]
-  have hpick : ∀ y ∈ oks, y.2.1 = andT (.eq (.var bs) (.int y.1.1.pick)) y.1.2.out.case := fun y hy => by
+  have hpick : ∀ y ∈ oks, y.2.1 = selectsT (.var bs) y.1 := fun y hy => by
     obtain ⟨inp, -, hu⟩ := hok y hy
     obtain ⟨t, -, -, -, -, -, rfl⟩ := unrollKind_ok senv hu
     rfl
-  obtain ⟨y, hy⟩ : ∃ y, (oks.map (·.1)).find? (fun k => ((andT (.eq (.var bs) (.int k.1.pick)) k.2.out.case).denote M).toBool) = some y :=
+  obtain ⟨y, hy⟩ : ∃ y, (oks.map (·.1)).find? (fun k => ((selectsT (.var bs) k).denote M).toBool) = some y :=
     Option.isSome_iff_exists.1 (List.find?_isSome.2 ⟨x.1, List.mem_map_of_mem hxo, by rw [← hpick x hxo]; exact hxe⟩)
   have hyp := List.find?_some hy
   obtain ⟨x', hx'o, rfl⟩ := List.mem_map.1 (List.mem_of_find?_eq_some hy)
@@ -555,7 +555,7 @@ theorem unroll_inputs_decode (hc : v.caller.isData = true) {d : Nat} {B : Unroll
   have hwfH : Holds M wf := by
     simp only [holds_or, holds_not, holds_andT] at hassert
     rcases hassert with h | h
-    · exact (h ((holds_andT _ _).1 hyp)).elim
+    · exact (h hyp).elim
     · exact h.1
   obtain ⟨⟨p, hpk, c, rfl⟩, j, hterms, hflat⟩ := hk.2 _ hik
   have hdata := (unrollKinds_shape hc hpk c).2.2

@@ -449,7 +449,7 @@ theorem unrollOne_at (S : SymState v) (i b : Nat) {s : State v} (hR : StateRel M
     cases hu : unrollKind L T P v senv S (.var b) inp with
     | error _ => simp [hu] at hro
     | ok x0 => simp [hu] at hro; rw [hro]
-  have hpick : ∀ y ∈ oks, y.2.1 = andT (.eq (.var b) (.int y.1.1.pick)) y.1.2.out.case := fun y hy => by
+  have hpick : ∀ y ∈ oks, y.2.1 = selectsT (.var b) y.1 := fun y hy => by
     obtain ⟨inp, -, hu⟩ := hok y hy
     obtain ⟨t, -, -, -, -, -, rfl⟩ := unrollKind_ok senv hu
     rfl
@@ -460,7 +460,7 @@ theorem unrollOne_at (S : SymState v) (i b : Nat) {s : State v} (hR : StateRel M
   rw [List.find?_map] at hy
   obtain ⟨y, hyf, hyeq⟩ := Option.map_eq_some_iff.1 hy
   have hym := List.mem_of_find?_eq_some hyf
-  have hyp : Holds M (andT (.eq (.var b) (.int y.1.1.pick)) y.1.2.out.case) := by
+  have hyp : Holds M (selectsT (.var b) y.1) := by
     have h := List.find?_some hyf
     simp only [Function.comp_def] at h
     exact h
@@ -478,7 +478,7 @@ theorem unrollOne_at (S : SymState v) (i b : Nat) {s : State v} (hR : StateRel M
   obtain ⟨rfl, rfl⟩ := Prod.mk.inj hyeq
   simp only at hdec
   simp only [holds_or, holds_not, holds_andT] at hassert
-  obtain ⟨-, hcodes, hsites, hcond, hokH, -⟩ := hassert.resolve_left fun h => h ((holds_andT _ _).1 hyp)
+  obtain ⟨-, hcodes, hsites, hcond, hokH, -⟩ := hassert.resolve_left fun h => h hyp
   have hcase := ((holds_andT _ _).1 hyp).2
   have ex := step_encode chk senv hR hinv hdec henc
   have hrel := ((ex.2 hcodes hsites hcase).2.1) hcond

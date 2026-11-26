@@ -339,10 +339,18 @@ theorem step_supp (hv : v.Equivariant) {s : State v}
       · rename_i s' effs hr
         exact finish_supp T hv hs _ (fun a ha => clock_begin hv hs hb time hr ha) _
 
-/-- Inputs each valid at the state the run has reached when it comes. -/
-def ValidRun : State v → List (Input v) → Prop
+/-- `p` at every step of the run from `s`: at the state the run has reached when each input comes. -/
+def EachStep (p : State v → Input v → Prop) : State v → List (Input v) → Prop
   | _, [] => True
-  | s, x :: xs => x.Valid s ∧ ValidRun (step T v s x).state xs
+  | s, x :: xs => p s x ∧ EachStep p (step T v s x).state xs
+
+instance EachStep.decidable {p : State v → Input v → Prop} [hp : ∀ s x, Decidable (p s x)] :
+    (s : State v) → (xs : List (Input v)) → Decidable (EachStep T p s xs)
+  | _, [] => .isTrue trivial
+  | s, x :: xs => @instDecidableAnd _ _ (hp s x) (EachStep.decidable _ xs)
+
+/-- Inputs each valid at the state the run has reached when it comes. -/
+abbrev ValidRun : State v → List (Input v) → Prop := EachStep T fun s x => x.Valid s
 
 /-- Whether a clock line at `time` passes no timer that waits: every instance's timer is due at `time` or later. -/
 def timely (s : State v) (time : Int) : Bool :=
@@ -350,14 +358,15 @@ def timely (s : State v) (time : Int) : Bool :=
     | some (d, _) => decide (time ≤ d)
     | none => true
 
-/-- Clock lines each timely at the state the run has reached when they come; other inputs ask nothing. Without it the
-environment breaks every timed response by moving the clock past the timer that would answer in time, since a timer
-fired late carries the late time (timed automata block time from passing a deadline in the same way). -/
-def TimelyRun : State v → List (Input v) → Prop
-  | _, [] => True
-  | s, x :: xs => (match x with
-    | .clock time => timely s time = true
-    | _ => True) ∧ TimelyRun (step T v s x).state xs
+/-- Whether the input is timely at `s`: a clock line passes no timer that waits; other inputs ask nothing. -/
+def timelyAt (s : State v) : Input v → Bool
+  | .clock time => timely s time
+  | _ => true
+
+/-- Clock lines each timely at the state the run has reached when they come. Without it the environment breaks every
+timed response by moving the clock past the timer that would answer in time, since a timer fired late carries the late
+time (timed automata block time from passing a deadline in the same way). -/
+abbrev TimelyRun : State v → List (Input v) → Prop := EachStep T fun s x => timelyAt s x = true
 
 /-- An assumption a proof rests on beyond the spec's invariants: what it says of a run, and the words a line's
 `assumes` names it by, kept together so the two cannot part. -/

@@ -44,15 +44,6 @@ def kindHitsT (pred : Term → Except Refusal (Term × Term)) (out : StepOut v) 
     pure (andT out.reached h, .or (.not out.reached) c)
   | none => pure (ff, tt)
 
-/-- `kindHitsT` of the first kind the step picks, as `UnrollStep.takenT` reads. -/
-def kindsHitsT (pred : Term → Except Refusal (Term × Term)) (picks : SymInput v (shapes v) n × EncodedStep v → Term) :
-    List (SymInput v (shapes v) n × EncodedStep v) → Except Refusal (Term × Term)
-  | [] => pure (ff, tt)
-  | k :: ks => do
-    let (h, c) ← kindHitsT pred k.2.out
-    let (h', c') ← kindsHitsT pred picks ks
-    pure (.ite (picks k) h h', .ite (picks k) c c')
-
 section
 variable (L : Layout)
 
@@ -63,14 +54,6 @@ def kindTimelyT (S : SymState v) : SymInput v (shapes v) n → Except Refusal Te
     let dues ← dueAll L v.machines S.machines (.sub time (.int 1))
     pure (.not (minDueT dues).1)
   | _ => pure tt
-
-/-- `kindTimelyT` of the first kind the step picks. -/
-def kindsTimelyT (st : UnrollStep v n) : List (SymInput v (shapes v) n × EncodedStep v) → Except Refusal Term
-  | [] => pure tt
-  | k :: ks => do
-    let t ← kindTimelyT L st.before k.1
-    let t' ← kindsTimelyT st ks
-    pure (.ite (st.picks k) t t')
 
 end
 
@@ -92,10 +75,12 @@ variable (L : Layout) (T : List TypeDecl) (v : ServiceV)
 functions are exact at every event it applies, and a clock line is timely). -/
 def stepRespT (fa fq : Code (Ty.fn [v.event] Ty.bool)) (st : UnrollStep v n) :
     Except Refusal ((Term × Term × Term) × Term) := do
-  let (o, co) ← kindsHitsT (predT fa) st.picks st.kinds
-  let (a, ca) ← kindsHitsT (predT fq) st.picks st.kinds
-  let tm ← kindsTimelyT L st st.kinds
-  pure ((o, a, st.after.now), andT co (andT ca tm))
+  let os ← st.kindTerms fun k => kindHitsT (predT fa) k.2.out
+  let as ← st.kindTerms fun k => kindHitsT (predT fq) k.2.out
+  let tms ← st.kindTerms fun k => kindTimelyT L st.before k.1
+  pure ((st.pickedT ff (os.map fun p => (p.1, p.2.1)), st.pickedT ff (as.map fun p => (p.1, p.2.1)), st.after.now),
+    andT (st.pickedT tt (os.map fun p => (p.1, p.2.2)))
+      (andT (st.pickedT tt (as.map fun p => (p.1, p.2.2))) (st.pickedT tt (tms.map fun p => (p.1, p.2)))))
 
 /-- The response's goal on an unrolled run's steps: the functions' sources fit, every step's condition holds, and the
 moments violate the response. -/
@@ -115,10 +100,9 @@ section
 variable (L : Layout) (T : List TypeDecl) {v : ServiceV}
 
 /-- The response's functions fit the slots at every event each step of the run applies. -/
-def RespFits (resp : ResponseV v.event) : State v → List (Input v) → Prop
-  | _, [] => True
-  | s, x :: xs => (∀ ev ∈ (step T v s x).events, resp.after.appFits L.count (ev, ()) ∧
-      resp.then_.appFits L.count (ev, ())) ∧ RespFits resp (step T v s x).state xs
+abbrev RespFits (resp : ResponseV v.event) : State v → List (Input v) → Prop :=
+  Step.EachStep T fun s x => ∀ ev ∈ (step T v s x).events, resp.after.appFits L.count (ev, ()) ∧
+    resp.then_.appFits L.count (ev, ())
 
 end
 
@@ -223,26 +207,6 @@ theorem kindHitsT_iff {pred : Term → Except Refusal (Term × Term)} {p : v.eve
     rw [hnil]
     simp [tt, ff, Holds, Term.denote, Val.toBool]
 
-/-- `kindsHitsT` is the first picked kind's `kindHitsT`. -/
-theorem kindsHitsT_find {pred : Term → Except Refusal (Term × Term)}
-    {picks : SymInput v (shapes v) n × EncodedStep v → Term} :
-    (ks : List (SymInput v (shapes v) n × EncodedStep v)) → {k : SymInput v (shapes v) n × EncodedStep v} →
-    ks.find? (fun k => (picks k).denote M |>.toBool) = some k → {h c : Term} → kindsHitsT pred picks ks = .ok (h, c) →
-    ∃ hk ck, kindHitsT pred k.2.out = .ok (hk, ck) ∧ (Holds M h ↔ Holds M hk) ∧ (Holds M c ↔ Holds M ck)
-  | [], _, hf, _, _, _ => by cases hf
-  | k' :: ks, k, hf, h, c, henc => by
-    obtain ⟨⟨h1, c1⟩, e1, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨h2, c2⟩, e2, henc⟩ := bind_ok.1 henc
-    cases pure_ok.1 henc
-    simp only [List.find?_cons] at hf
-    simp only [holds_ite]
-    cases hb : (picks k').denote M |>.toBool
-    · rw [hb] at hf
-      simpa using kindsHitsT_find ks hf e2
-    · rw [hb] at hf
-      cases hf
-      exact ⟨h1, c1, e1, by simp, by simp⟩
-
 theorem timely_iff_dues (s : State v) (time : Int) :
     Step.timely s time = true ↔ Step.dues s.machines.toSigma (time - 1) = [] := by
   simp only [Step.timely, Step.dues, List.all_eq_true, List.flatMap_eq_nil_iff, List.filterMap_eq_nil_iff]
@@ -251,19 +215,10 @@ theorem timely_iff_dues (s : State v) (time : Int) :
   | none => simp
   | some p => obtain ⟨d, _⟩ := p; simp; omega
 
-/-- Whether a clock line of the run's step is timely (`Step.TimelyRun`'s per-step part). -/
-def stepTimely (s : State v) : Input v → Prop
-  | .clock time => Step.timely s time = true
-  | _ => True
-
-theorem timelyRun_cons (s : State v) (x : Input v) (xs : List (Input v)) :
-    Step.TimelyRun T s (x :: xs) ↔ stepTimely s x ∧ Step.TimelyRun T (step T v s x).state xs := by
-  cases x <;> exact Iff.rfl
-
 theorem kindTimelyT_iff {hc : v.caller.isData = true} {S : SymState v} {s : State v}
     (hR : StateRel M L T (shapes v) S s) {inp : SymInput v (shapes v) n} {x : Input v} (hx : inp.decode M L hc = some x)
     {t : Term} (henc : kindTimelyT L S inp = .ok t) :
-    Holds M t ↔ stepTimely s x := by
+    Holds M t ↔ Step.timelyAt s x = true := by
   cases inp with
   | clock tm =>
     obtain ⟨time, rfl, htm⟩ := decode_clock hx
@@ -277,33 +232,15 @@ theorem kindTimelyT_iff {hc : v.caller.isData = true} {S : SymState v} {s : Stat
     rw [holds_not, timely_iff_dues]
     simp only [Holds, hhas, Val.toBool, Option.isSome_iff_ne_none, ne_eq, List.min?_eq_none_iff, Decidable.not_not]
   | command i a b =>
-    obtain ⟨_, _, rfl, -⟩ := decode_command hx; cases pure_ok.1 henc; exact iff_of_true holds_tt trivial
+    obtain ⟨_, _, rfl, -⟩ := decode_command hx; cases pure_ok.1 henc; exact iff_of_true holds_tt rfl
   | query i a b =>
-    obtain ⟨_, _, rfl, -⟩ := decode_query hx; cases pure_ok.1 henc; exact iff_of_true holds_tt trivial
+    obtain ⟨_, _, rfl, -⟩ := decode_query hx; cases pure_ok.1 henc; exact iff_of_true holds_tt rfl
   | event i a =>
-    obtain ⟨_, rfl, -⟩ := decode_event hx; cases pure_ok.1 henc; exact iff_of_true holds_tt trivial
+    obtain ⟨_, rfl, -⟩ := decode_event hx; cases pure_ok.1 henc; exact iff_of_true holds_tt rfl
   | answer k j to w =>
-    obtain ⟨_, _, _, rfl, -⟩ := decode_answer hx; cases pure_ok.1 henc; exact iff_of_true holds_tt trivial
+    obtain ⟨_, _, _, rfl, -⟩ := decode_answer hx; cases pure_ok.1 henc; exact iff_of_true holds_tt rfl
   | unmatched t' to w =>
-    obtain ⟨_, _, _, rfl, -⟩ := decode_answer hx; cases pure_ok.1 henc; exact iff_of_true holds_tt trivial
-
-theorem kindsTimelyT_find {st : UnrollStep v n} :
-    (ks : List (SymInput v (shapes v) n × EncodedStep v)) → {k : SymInput v (shapes v) n × EncodedStep v} →
-    ks.find? (fun k => (st.picks k).denote M |>.toBool) = some k → {t : Term} → kindsTimelyT L st ks = .ok t →
-    ∃ tk, kindTimelyT L st.before k.1 = .ok tk ∧ (Holds M t ↔ Holds M tk)
-  | [], _, hf, _, _ => by cases hf
-  | k' :: ks, k, hf, t, henc => by
-    obtain ⟨t1, e1, henc⟩ := bind_ok.1 henc
-    obtain ⟨t2, e2, henc⟩ := bind_ok.1 henc
-    cases pure_ok.1 henc
-    simp only [List.find?_cons] at hf
-    simp only [holds_ite]
-    cases hb : (st.picks k').denote M |>.toBool
-    · rw [hb] at hf
-      simpa using kindsTimelyT_find ks hf e2
-    · rw [hb] at hf
-      cases hf
-      exact ⟨t1, e1, by simp⟩
+    obtain ⟨_, _, _, rfl, -⟩ := decode_answer hx; cases pure_ok.1 henc; exact iff_of_true holds_tt rfl
 
 /-- A step's moment terms relate to its moment: opens and answers as the response reads them, and its time. -/
 def MomentRel (M : Model) (resp : ResponseV v.event) (t : Term × Term × Term) (m : Moment v.event) : Prop :=
@@ -336,23 +273,26 @@ theorem stepRespT_iff (ha : resp.after.code L = .ok (fa, ca)) (hq : resp.then_.c
     {x : Input v} (hat : StepAt L T M hc st s x) {mt : Term × Term × Term} {cond : Term}
     (henc : stepRespT L v fa fq st = .ok (mt, cond)) :
     (Holds M cond ↔ (∀ ev ∈ (step T v s x).events, resp.after.appFits L.count (ev, ()) ∧
-        resp.then_.appFits L.count (ev, ())) ∧ stepTimely s x) ∧
+        resp.then_.appFits L.count (ev, ())) ∧ Step.timelyAt s x = true) ∧
       (Holds M cond → MomentRel M resp mt (step T v s x).moment) := by
   obtain ⟨⟨k, hk, hdec, hrel⟩, hno, hafter, hbefore⟩ := hat
-  obtain ⟨⟨o, co⟩, e1, henc⟩ := bind_ok.1 henc
-  obtain ⟨⟨a, cA⟩, e2, henc⟩ := bind_ok.1 henc
-  obtain ⟨tm, e3, henc⟩ := bind_ok.1 henc
+  obtain ⟨os, e1, henc⟩ := bind_ok.1 henc
+  obtain ⟨as, e2, henc⟩ := bind_ok.1 henc
+  obtain ⟨tms, e3, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
-  have hfind : st.kinds.find? (fun k => (st.picks k).denote M |>.toBool) = some k := hk
   have hpA : PredExact M L v (predT fa) (fun ev => Step.toB (resp.after.fn (ev, ())))
       (fun ev => resp.after.appFits L.count (ev, ())) := fun _ _ _ h ev hr =>
     predT_encode v.event_data resp.after ha hca ev hr h
   have hpQ : PredExact M L v (predT fq) (fun ev => Step.toB (resp.then_.fn (ev, ())))
       (fun ev => resp.then_.appFits L.count (ev, ())) := fun _ _ _ h ev hr =>
     predT_encode v.event_data resp.then_ hq hcq ev hr h
-  obtain ⟨hk1, ck1, f1, ho, hco⟩ := kindsHitsT_find st.kinds hfind e1
-  obtain ⟨hk2, ck2, f2, hA, hcA⟩ := kindsHitsT_find st.kinds hfind e2
-  obtain ⟨tk, f3, htm⟩ := kindsTimelyT_find st.kinds hfind e3
+  obtain ⟨⟨hk1, ck1⟩, f1, ho⟩ := kindTerms_taken st e1 hk (fun p => p.1) ff
+  obtain ⟨⟨_, _⟩, f1', hco⟩ := kindTerms_taken st e1 hk (fun p => p.2) tt
+  rw [f1] at f1'; cases f1'
+  obtain ⟨⟨hk2, ck2⟩, f2, hA⟩ := kindTerms_taken st e2 hk (fun p => p.1) ff
+  obtain ⟨⟨_, _⟩, f2', hcA⟩ := kindTerms_taken st e2 hk (fun p => p.2) tt
+  rw [f2] at f2'; cases f2'
+  obtain ⟨tk, f3, htm⟩ := kindTerms_taken st e3 hk (fun t => t) tt
   have x1 := kindHitsT_iff hpA hdec hrel hno f1
   have x2 := kindHitsT_iff hpQ hdec hrel hno f2
   have x3 := kindTimelyT_iff hbefore hdec f3
@@ -376,7 +316,7 @@ theorem stepsRespT_iff (ha : resp.after.code L = .ok (fa, ca)) (hq : resp.then_.
         Forall2 (MomentRel M resp) (ms.map (·.1)) ((run T v s xs).2.map Result.moment))
   | _, [], [], _, ms, h => by
     cases pure_ok.1 h
-    simp [holds_allT, RespFits, Step.TimelyRun, run, Forall2]
+    simp [holds_allT, Step.EachStep, run, Forall2]
   | _, [], _ :: _, h, _, _ => h.elim
   | _, _ :: _, [], h, _, _ => h.elim
   | s, st :: sts, x :: xs, ⟨_, hat, hrun⟩, ms, h => by
@@ -388,8 +328,8 @@ theorem stepsRespT_iff (ha : resp.after.code L = .ok (fa, ca)) (hq : resp.then_.
     have ih := stepsRespT_iff ha hq hca hcq _ sts xs hrun e2
     simp only [List.map_cons, holds_allT, List.mem_cons, forall_eq_or_imp] at ih ⊢
     refine ⟨?_, fun ⟨h1, h2⟩ => ?_⟩
-    · rw [x1.1, ih.1, timelyRun_cons]
-      simp only [RespFits]
+    · rw [x1.1, ih.1]
+      simp only [Step.EachStep]
       constructor
       · rintro ⟨⟨hf, ht⟩, hf', ht'⟩; exact ⟨⟨hf, hf'⟩, ht, ht'⟩
       · rintro ⟨⟨hf, hf'⟩, ht, ht'⟩; exact ⟨⟨hf, ht⟩, hf', ht'⟩
@@ -475,27 +415,25 @@ theorem slotHitsT_sound : (S : List (Slot 1)) → Sound (fun _ => True) (slotHit
   | [] => trivial
   | (_, xs) :: S => sound_bind (hp xs[0]) fun _ _ => sound_bind (slotHitsT_sound S) fun _ _ => trivial
 
-theorem kindsHitsT_sound (picks : SymInput v (shapes v) n × EncodedStep v → Term) :
-    (ks : List (SymInput v (shapes v) n × EncodedStep v)) → Sound (fun _ => True) (kindsHitsT pred picks ks)
-  | [] => trivial
-  | k :: ks => by
-    refine sound_bind (p := fun _ => True) ?_ fun _ _ => sound_bind (kindsHitsT_sound picks ks) fun _ _ => trivial
-    unfold kindHitsT
-    split
-    · exact sound_bind (slotHitsT_sound hp _) fun _ _ => trivial
-    · trivial
+theorem kindHitsT_sound (out : StepOut v) : Sound (fun _ => True) (kindHitsT pred out) := by
+  unfold kindHitsT
+  split
+  · exact sound_bind (slotHitsT_sound hp _) fun _ _ => trivial
+  · trivial
 
 end
 
-theorem kindsTimelyT_sound {L : Layout} {v : ServiceV} {n : Nat} (hL : SortedLayout L)
-    (hm : ∀ m ∈ v.machines, MachineGot L m) (st : UnrollStep v n) :
-    (ks : List (SymInput v (shapes v) n × EncodedStep v)) → Sound (fun _ => True) (kindsTimelyT L st ks)
-  | [] => trivial
-  | (inp, _) :: ks => by
-    refine sound_bind (p := fun _ => True) ?_ fun _ _ => sound_bind (kindsTimelyT_sound hL hm st ks) fun _ _ => trivial
-    cases inp with
-    | clock time => exact sound_bind (dueAll_sound hL _ hm _ _) fun _ _ => trivial
-    | _ => trivial
+theorem kindTimelyT_sound {L : Layout} {v : ServiceV} {n : Nat} (hL : SortedLayout L)
+    (hm : ∀ m ∈ v.machines, MachineGot L m) (S : SymState v) :
+    (inp : SymInput v (shapes v) n) → Sound (fun _ => True) (kindTimelyT L S inp)
+  | .clock _ => sound_bind (dueAll_sound hL _ hm _ _) fun _ _ => trivial
+  | .command .. | .query .. | .answer .. | .unmatched .. | .event .. => trivial
+
+/-- `kindTerms` refuses only where `h` does. -/
+theorem kindTerms_sound {v : ServiceV} {n : Nat} {α : Type} (st : UnrollStep v n)
+    {h : SymInput v (shapes v) n × EncodedStep v → Except Refusal α} (hh : ∀ k, Sound (fun _ => True) (h k)) :
+    Sound (fun _ => True) (st.kindTerms h) :=
+  sound_mapM _ fun k _ => sound_bind (hh k) fun _ _ => trivial
 
 /-- In each service's layout, built from a checked spec's program, a response's goal never refuses with a layout gap,
 on any unrolled run: every refusal is the spec's (a limit, a string outside SMT-LIB's). -/
@@ -509,8 +447,8 @@ theorem respGoalE_ofService (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.
   refine sound_bind (Fun.code_ofService c hv _ (chk.reach.responses resp hr).1 (root_response hr).1)
     fun ⟨fa, _⟩ ha => sound_bind (Fun.code_ofService c hv _ (chk.reach.responses resp hr).2 (root_response hr).2)
     fun ⟨fq, _⟩ hq => sound_bind (sound_mapM sts fun st _ => ?_) fun _ _ => trivial
-  exact sound_bind (kindsHitsT_sound (predT_sound ha hev) _ _) fun _ _ =>
-    sound_bind (kindsHitsT_sound (predT_sound hq hev) _ _) fun _ _ =>
-    sound_bind (kindsTimelyT_sound h.sorted hm st _) fun _ _ => trivial
+  exact sound_bind (kindTerms_sound st fun k => kindHitsT_sound (predT_sound ha hev) k.2.out) fun _ _ =>
+    sound_bind (kindTerms_sound st fun k => kindHitsT_sound (predT_sound hq hev) k.2.out) fun _ _ =>
+    sound_bind (kindTerms_sound st fun k => kindTimelyT_sound h.sorted hm st.before k.1) fun _ _ => trivial
 
 end Tazuna.Smt

@@ -3934,7 +3934,7 @@ def respGoalCheck (solver : Solver) : IO Bool := do
       | .sat vs, true =>
         match u.steps.mapM (·.decode (modelOf vs) L rfl) with
         | some xs =>
-          unless resp.violatedBy prelude (Step.State.init v) xs && Tazuna.Cli.timelyRun prelude v (Step.State.init v) xs do
+          unless resp.violatedBy prelude (Step.State.init v) xs && decide (Step.TimelyRun prelude (Step.State.init v) xs) do
             ok ← fail s!"{name}: the model's run does not violate the response with timely clock lines"
         | none => ok ← fail s!"{name}: the model's inputs do not decode"
       | a, _ => ok ← fail s!"{name}: {repr a}, want sat {want}"

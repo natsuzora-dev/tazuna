@@ -32,14 +32,42 @@ def unrollKinds (v : ServiceV) (shs : List (PendingShape v.event)) (n : Nat) (an
       (2, fun b => .answer k j (.var b) (.var (b + 1))) else []) ++
     (List.finRange v.subscribes.length).map (fun i => (1, fun b => .event i (.var b))) ++ [(1, fun b => .clock (.var b))]
 
-/-- The value an unrolled step's selector takes for the input's kind: its command, query or subscription, an answer
-(any shape and slot), or a clock line. -/
-def SymInput.pick {v : ServiceV} {shs : List (PendingShape v.event)} {n : Nat} : SymInput v shs n → Nat
-  | .command i _ _ => i
-  | .query i _ _ => v.commands.length + i
-  | .answer .. | .unmatched .. => v.commands.length + v.queries.length
-  | .event i _ => v.commands.length + v.queries.length + 1 + i
-  | .clock _ => v.commands.length + v.queries.length + 1 + v.subscribes.length
+/-- What an unrolled step's selector tells apart: a command, query or subscription by its index, an answer (any shape
+and slot), a clock line. -/
+inductive PickKind where
+  | command (i : Nat)
+  | query (i : Nat)
+  | answer
+  | event (i : Nat)
+  | clock
+
+/-- The selector's value for the kind. -/
+def PickKind.pick (v : ServiceV) : PickKind → Nat
+  | .command i => i
+  | .query i => v.commands.length + i
+  | .answer => v.commands.length + v.queries.length
+  | .event i => v.commands.length + v.queries.length + 1 + i
+  | .clock => v.commands.length + v.queries.length + 1 + v.subscribes.length
+
+def SymInput.kind : SymInput v shs n → PickKind
+  | .command i _ _ => .command i
+  | .query i _ _ => .query i
+  | .answer .. | .unmatched .. => .answer
+  | .event i _ => .event i
+  | .clock _ => .clock
+
+/-- The value an unrolled step's selector takes for the input kind. -/
+def SymInput.pick (x : SymInput v shs n) : Nat := x.kind.pick v
+
+def _root_.Tazuna.Ir.Input.kind : Input v → PickKind
+  | .command i _ _ => .command i
+  | .query i _ _ => .query i
+  | .answer .. => .answer
+  | .event i _ => .event i
+  | .clock _ => .clock
+
+/-- The value a step's selector takes for the input's kind, as `SymInput.pick` reads a kind. -/
+def _root_.Tazuna.Ir.Input.pick (x : Input v) : Nat := x.kind.pick v
 
 /-- The kinds with their terms at consecutive constants from `b` on, and the constant after the last. -/
 def placeKinds : List (Nat × (Nat → SymInput v shs n)) → Nat → List (SymInput v shs n) × Nat
@@ -112,11 +140,15 @@ structure UnrollStep (v : ServiceV) (n : Nat) where
   after : SymState v
   kinds : List (SymInput v (shapes v) n × EncodedStep v)
 
-/-- Whether the step takes the kind: the selector names its input's kind and the model is in the case its terms ask
-about (for an answer, that its slot holds the request). -/
+/-- Whether the selector `sel` takes the kind: it names the kind's input kind and the model is in the case the kind's
+terms ask about (for an answer, that its slot holds the request). -/
+def selectsT {v : ServiceV} {n : Nat} (sel : Term) (k : SymInput v (shapes v) n × EncodedStep v) : Term :=
+  andT (.eq sel (.int k.1.pick)) k.2.out.case
+
+/-- Whether the step takes the kind (`selectsT` of its selector). -/
 def UnrollStep.picks {v : ServiceV} {n : Nat} (st : UnrollStep v n) (k : SymInput v (shapes v) n × EncodedStep v) :
     Term :=
-  andT (.eq st.sel (.int k.1.pick)) k.2.out.case
+  selectsT st.sel k
 
 /-- An unrolled run's script, its steps (what a goal reads and decoding needs) and the input kinds whose encoding was
 refused, which the script therefore lacks. -/
@@ -219,7 +251,7 @@ def unrollKind (S : SymState v) (sel : Term) (inp : SymInput v (shapes v) senv.n
   match encodeStep L T P v senv S inp, inp.validT L S.fresh, need (.layout (.type v.records)) (inp.wf L) with
   | .ok t, .ok valid, .ok wf =>
     let (ok, after) := t.out.after S inp
-    let picks := andT (.eq sel (.int inp.pick)) t.out.case
+    let picks := selectsT sel (inp, t)
     .ok ((inp, t), picks, .or (.not picks) (andT wf (andT t.codes (andT t.sites (andT t.cond (andT ok valid))))), after)
   | .error r, _, _ | _, .error r, _ | _, _, .error r => .error (inp, r)
 

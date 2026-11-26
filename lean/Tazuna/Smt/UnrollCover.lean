@@ -14,14 +14,6 @@ open Tazuna.Ir
 section
 variable {v : ServiceV}
 
-/-- The value a step's selector takes for the input's kind, as `SymInput.pick` reads a kind. -/
-def _root_.Tazuna.Ir.Input.pick : Input v → Nat
-  | .command i _ _ => i
-  | .query i _ _ => v.commands.length + i
-  | .answer .. => v.commands.length + v.queries.length
-  | .event i _ => v.commands.length + v.queries.length + 1 + i
-  | .clock _ => v.commands.length + v.queries.length + 1 + v.subscribes.length
-
 /-- Whether the kind is the input's: the same command, query or subscription, a clock line, or an answer at a shape
 whose answers have the answer's type. -/
 def SymInput.isOf {shs : List (PendingShape v.event)} {n : Nat} (x : Input v) : SymInput v shs n → Bool
@@ -199,20 +191,20 @@ theorem isOf_of_picks {ans : Bool} {p : Nat × (Nat → SymInput v (shapes v) se
     (hvars : ∀ q (h : q < (kindVals L hc x (p.2 c)).length), M.vars (c + q) = (kindVals L hc x (p.2 c))[q])
     {b : Nat} (hb : M.vars b = .int (x.pick : Int)) {t : EncodedStep v}
     (ht : encodeStep L T P v senv S (p.2 c) = .ok t)
-    (hpk : Holds M (andT (.eq (.var b) (.int (p.2 c).pick)) t.out.case)) : (p.2 c).isOf x = true := by
+    (hpk : Holds M (selectsT (.var b) (p.2 c, t))) : (p.2 c).isOf x = true := by
   obtain ⟨hsel, hcase⟩ := (holds_andT _ _).1 hpk
   have he := pick_of_eq hsel hb
   simp only [unrollKinds, List.mem_append, List.mem_map, List.mem_cons, List.not_mem_nil, or_false] at hp
   rcases hp with (((⟨i, -, rfl⟩ | ⟨i, -, rfl⟩) | hp) | ⟨i, -, rfl⟩) | rfl
   · have := i.2
     cases x with
-    | command i' => simp only [Input.pick, SymInput.pick] at he; simp [SymInput.isOf, Fin.ext_iff, he]
-    | _ => simp only [Input.pick, SymInput.pick] at he; omega
+    | command i' => simp only [Input.pick, SymInput.pick, Input.kind, SymInput.kind, PickKind.pick] at he; simp [SymInput.isOf, Fin.ext_iff, he]
+    | _ => simp only [Input.pick, SymInput.pick, Input.kind, SymInput.kind, PickKind.pick] at he; omega
   · have := i.2
     cases x with
-    | query i' => simp only [Input.pick, SymInput.pick] at he; simp [SymInput.isOf, Fin.ext_iff]; omega
-    | command i' => have := i'.2; simp only [Input.pick, SymInput.pick] at he; omega
-    | _ => simp only [Input.pick, SymInput.pick] at he; omega
+    | query i' => simp only [Input.pick, SymInput.pick, Input.kind, SymInput.kind, PickKind.pick] at he; simp [SymInput.isOf, Fin.ext_iff]; omega
+    | command i' => have := i'.2; simp only [Input.pick, SymInput.pick, Input.kind, SymInput.kind, PickKind.pick] at he; omega
+    | _ => simp only [Input.pick, SymInput.pick, Input.kind, SymInput.kind, PickKind.pick] at he; omega
   · split at hp
     · simp only [List.mem_flatMap, List.mem_map] at hp
       obtain ⟨k, -, j, -, rfl⟩ := hp
@@ -231,23 +223,23 @@ theorem isOf_of_picks {ans : Bool} {p : Nat × (Nat → SymInput v (shapes v) se
         simp only [SymInput.isOf]
         rw [hty, hout, hrej]
         exact Ty_same_self _
-      | command i' => have := i'.2; simp only [Input.pick, SymInput.pick] at he; omega
-      | query i' => have := i'.2; simp only [Input.pick, SymInput.pick] at he; omega
-      | event i' => simp only [Input.pick, SymInput.pick] at he; omega
-      | clock => simp only [Input.pick, SymInput.pick] at he; omega
+      | command i' => have := i'.2; simp only [Input.pick, SymInput.pick, Input.kind, SymInput.kind, PickKind.pick] at he; omega
+      | query i' => have := i'.2; simp only [Input.pick, SymInput.pick, Input.kind, SymInput.kind, PickKind.pick] at he; omega
+      | event i' => simp only [Input.pick, SymInput.pick, Input.kind, SymInput.kind, PickKind.pick] at he; omega
+      | clock => simp only [Input.pick, SymInput.pick, Input.kind, SymInput.kind, PickKind.pick] at he; omega
     · cases hp
   · have := i.2
     cases x with
-    | event i' => simp only [Input.pick, SymInput.pick] at he; simp [SymInput.isOf, Fin.ext_iff]; omega
-    | command i' => have := i'.2; simp only [Input.pick, SymInput.pick] at he; omega
-    | query i' => have := i'.2; simp only [Input.pick, SymInput.pick] at he; omega
-    | _ => simp only [Input.pick, SymInput.pick] at he; omega
+    | event i' => simp only [Input.pick, SymInput.pick, Input.kind, SymInput.kind, PickKind.pick] at he; simp [SymInput.isOf, Fin.ext_iff]; omega
+    | command i' => have := i'.2; simp only [Input.pick, SymInput.pick, Input.kind, SymInput.kind, PickKind.pick] at he; omega
+    | query i' => have := i'.2; simp only [Input.pick, SymInput.pick, Input.kind, SymInput.kind, PickKind.pick] at he; omega
+    | _ => simp only [Input.pick, SymInput.pick, Input.kind, SymInput.kind, PickKind.pick] at he; omega
   · cases x with
     | clock => rfl
-    | command i' => have := i'.2; simp only [Input.pick, SymInput.pick] at he; omega
-    | query i' => have := i'.2; simp only [Input.pick, SymInput.pick] at he; omega
-    | event i' => have := i'.2; simp only [Input.pick, SymInput.pick] at he; omega
-    | _ => simp only [Input.pick, SymInput.pick] at he; omega
+    | command i' => have := i'.2; simp only [Input.pick, SymInput.pick, Input.kind, SymInput.kind, PickKind.pick] at he; omega
+    | query i' => have := i'.2; simp only [Input.pick, SymInput.pick, Input.kind, SymInput.kind, PickKind.pick] at he; omega
+    | event i' => have := i'.2; simp only [Input.pick, SymInput.pick, Input.kind, SymInput.kind, PickKind.pick] at he; omega
+    | _ => simp only [Input.pick, SymInput.pick, Input.kind, SymInput.kind, PickKind.pick] at he; omega
 
 end
 
@@ -592,7 +584,7 @@ theorem unrollOne_covers (hL : SortedLayout L) (S : SymState v) (i b : Nat) {s :
     | ok y => exact ⟨y, rfl, hoks ▸ List.mem_filterMap.2 ⟨_, List.mem_map_of_mem hi, by simp [hu]⟩⟩
   -- A kind the model picks is the input's, and decodes to it.
   have hpicked : ∀ inp ∈ inps, ∀ t, encodeStep L T P v senv S inp = .ok t →
-      Holds M (andT (.eq (.var b) (.int inp.pick)) t.out.case) → inp.decode M L hc = some x := by
+      Holds M (selectsT (.var b) (inp, t)) → inp.decode M L hc = some x := by
     intro inp hi t ht hpk
     obtain ⟨p, hpk', c, rfl, hv, -⟩ := hplaced inp hi
     exact decode_of_isOf hc hpk' c hvs' hv (isOf_of_picks hc senv hpk' c hR hno hvs hv hb ht hpk)
@@ -601,7 +593,7 @@ theorem unrollOne_covers (hL : SortedLayout L) (S : SymState v) (i b : Nat) {s :
     obtain ⟨inp, hi, hu⟩ := hok y hy
     obtain ⟨t, valid, wf, ht, hvt, hwf, rfl⟩ := unrollKind_ok senv hu
     simp only [holds_or, holds_not]
-    by_cases hpk : Holds M (andT (.eq (.var b) (.int inp.pick)) t.out.case)
+    by_cases hpk : Holds M (selectsT (.var b) (inp, t))
     · right
       obtain ⟨p, hpk', c, rfl, hv, hs⟩ := hplaced inp hi
       have hio := isOf_of_picks hc senv hpk' c hR hno hvs hv hb ht hpk
@@ -624,11 +616,11 @@ theorem unrollOne_covers (hL : SortedLayout L) (S : SymState v) (i b : Nat) {s :
       show Val.beq (.int _) (.int _) = true
       simp [Val.beq]
   have hfound : ∃ inp ∈ inps, ∀ t, encodeStep L T P v senv S inp = .ok t →
-      Holds M (andT (.eq (.var b) (.int inp.pick)) t.out.case) := by
+      Holds M (selectsT (.var b) (inp, t)) := by
     have hone : ∀ inp : SymInput v (shapes v) senv.nT, inp.pick = x.pick → (∀ k j to w, inp ≠ .answer k j to w) →
         (∀ ty to w, inp ≠ .unmatched ty to w) → ∀ t, encodeStep L T P v senv S inp = .ok t →
-        Holds M (andT (.eq (.var b) (.int inp.pick)) t.out.case) := fun inp he ha hu t ht => by
-      rw [holds_andT, encodeStep_case_tt ht ha hu]
+        Holds M (selectsT (.var b) (inp, t)) := fun inp he ha hu t ht => by
+      rw [selectsT, holds_andT, encodeStep_case_tt ht ha hu]
       exact ⟨hpickEq inp he, holds_tt⟩
     cases x with
     | command i' caller input =>
@@ -681,14 +673,14 @@ theorem unrollOne_covers (hL : SortedLayout L) (S : SymState v) (i b : Nat) {s :
       rw [heq'] at hk0
       have h0' := hv 0 (List.getElem?_eq_some_iff.1 hk0).1
       rw [(List.getElem?_eq_some_iff.1 hk0).2, Nat.add_zero] at h0'
-      rw [holds_andT, encodeStep_answer_case ht]
+      rw [selectsT, holds_andT, encodeStep_answer_case ht]
       refine ⟨hpickEq _ rfl, ?_⟩
       simpa [Holds, Term.denote, h0'] using hhit
   obtain ⟨inp0, hi0, hpk0⟩ := hfound
   obtain ⟨y0, hu0, hy0⟩ := hall inp0 hi0
   obtain ⟨t0, _, _, ht0, _, _, hy0e⟩ := unrollKind_ok senv hu0
   have hpick0 : Holds M y0.2.1 := by rw [hy0e]; exact hpk0 t0 ht0
-  have hpick1 : Holds M (andT (.eq (.var b) (.int y0.1.1.pick)) y0.1.2.out.case) := by
+  have hpick1 : Holds M (selectsT (.var b) y0.1) := by
     rw [hy0e]; exact hpk0 t0 ht0
   refine ⟨fun a ha => ?_, ?_⟩
   · simp only [List.mem_append, List.mem_map, List.mem_singleton] at ha
@@ -697,7 +689,7 @@ theorem unrollOne_covers (hL : SortedLayout L) (S : SymState v) (i b : Nat) {s :
     · exact (holds_anyT _).2 ⟨_, List.mem_map_of_mem hy0, hpick0⟩
   · simp only [UnrollStep.decode, UnrollStep.taken, UnrollStep.picks, Option.bind_eq_bind]
     obtain ⟨k', hk'⟩ : ∃ k', (oks.map (·.1)).find? (fun k =>
-        ((andT (.eq (.var b) (.int k.1.pick)) k.2.out.case).denote M).toBool) = some k' :=
+        ((selectsT (.var b) k).denote M).toBool) = some k' :=
       Option.isSome_iff_exists.1 (List.find?_isSome.2 ⟨_, List.mem_map_of_mem hy0, hpick1⟩)
     rw [hk']
     obtain ⟨y, hy, rfl⟩ := List.mem_map.1 (List.mem_of_find?_eq_some hk')
@@ -713,9 +705,7 @@ section
 variable (L : Layout) (T : List TypeDecl) (P : List AnySite) (v : ServiceV) (hc : v.caller.isData = true)
 
 /-- Every step of the run is one an unrolled step can take (`RunStep`). -/
-def RunFits : State v → List (Input v) → Prop
-  | _, [] => True
-  | s, x :: xs => RunStep L T P v hc s x ∧ RunFits (step T v s x).state xs
+abbrev RunFits : State v → List (Input v) → Prop := Step.EachStep T (RunStep L T P v hc)
 
 /-- The values of an unrolled run's constants, from step `i` with its selector at the constant `b`, in the model of the
 run on the inputs `xs`. -/
