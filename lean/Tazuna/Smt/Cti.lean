@@ -82,6 +82,7 @@ theorem cti_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E
   obtain ⟨wf, -, hq⟩ := bind_ok.1 hq
   obtain ⟨iwf, -, hq⟩ := bind_ok.1 hq
   obtain ⟨below, hbelow, hq⟩ := bind_ok.1 hq
+  obtain ⟨names, -, hq⟩ := bind_ok.1 hq
   obtain ⟨⟨inv, ci0⟩, hinvc, hq⟩ := bind_ok.1 hq
   obtain ⟨⟨rules, ci⟩, hrules, hq⟩ := bind_ok.1 hq
   obtain ⟨⟨checks, ck⟩, hchecks, hq⟩ := bind_ok.1 hq
@@ -91,7 +92,7 @@ theorem cti_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E
   rcases List.mem_cons.1 hmem with rfl | hmem
   · cases hg
   obtain ⟨g', -, rfl⟩ := List.mem_map.1 hmem
-  have hA := fun a (h : a ∈ [wf, iwf, below, t.out.case, andT t.codes (andT t.sites (andT ci0 (andT ci ck))),
+  have hA := fun a (h : a ∈ [wf, iwf, below, names, t.out.case, andT t.codes (andT t.sites (andT ci0 (andT ci ck))),
     andT (allT (rules.map (·.2))) (allT (checks.toList.map instHoldT)), t.cond, t.out.breaks inp.command? g']) =>
     hM a (by simpa [Question.script, TypedScript.script] using h)
   have hbelowH := hA below (by simp)

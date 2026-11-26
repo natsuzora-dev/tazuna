@@ -83,7 +83,7 @@ theorem begins_coded {P : List AnySite} {E : List AnyEffectSite} {T : List TypeD
     (senv : StepEnv L (shapes v)) {s : State v} {x : Input v}
     (hq : ∀ inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v),
       StepLine L T P v senv (StepFits L T P v s x) inp)
-    (hinv : Step.Inv P s) (hheld : Step.invariants s = []) (hkeys : Step.KeysOk T s)
+    (hinv : Step.Inv P s) (hsupp : Step.StateSupp s) (hheld : Step.invariants s = []) (hkeys : Step.KeysOk T s)
     (hW : Within L (shapes v) s) (hx : (inputVals L chk.callerData x).isSome) {a : Step.Acc v}
     (hb : Step.Begins T s x a) : QueueCoded L a := by
   obtain ⟨ivs, hivs⟩ := Option.isSome_iff_exists.1 hx
@@ -91,7 +91,7 @@ theorem begins_coded {P : List AnySite} {E : List AnyEffectSite} {T : List TypeD
   rcases covered chk senv hkeys hW x hivs with ⟨inp, hmem, _, M, hM, hS, hxd, hcase⟩ | h
   · obtain ⟨gs, qs, hqs, hor⟩ := hq inp hmem
     rcases hor with hun | hfit
-    · obtain ⟨t, ht, hcodes, hsites, hcond⟩ := bound_cond senv inp hqs hS hinv hheld hord hxd hcase
+    · obtain ⟨t, ht, hcodes, hsites, hcond⟩ := bound_cond chk senv inp hqs hS hinv hsupp hheld hord hxd hcase
         fun q hq' hn => (hun q hq' hn).noModel_at (questions_tys L T P v senv hqs q hq') M fun n h => varSorted_of_sorted (hM n h)
       exact ((step_encode chk senv (decode_state hS) hinv hxd ht).2 hcodes hsites (hcase t ht)).2.2 hcond a hb
     · obtain ⟨t, ht, -⟩ := bind_ok.1 hqs
@@ -128,7 +128,7 @@ theorem run_lines (c : CheckedSpec) (hv : v ∈ c.spec.services) (hL : SortedLay
       ∀ {r}, Diamond.Runs (Step.timerSys v) fuel (s, []) r → Diamond.Agree Step.TimerEq r (Step.fireResult s (fuel + 1))) := by
   obtain ⟨hinv, hs, hk⟩ := run_keeps c hv (Step.ShownRun.valid c.T hxs)
   refine ⟨fun hx hW hvals hsteps _ ha hpairs hfit => ?_, fun _ fuel hfit _ hr => timers_lines htimers fuel _ hfit hr⟩
-  exact cascade_lines c hv hL senv (begins_keeps c hv hinv hs hk hx ha) (begins_coded (c.checked v hv) senv hsteps hinv
+  exact cascade_lines c hv hL senv (begins_keeps c hv hinv hs hk hx ha) (begins_coded (c.checked v hv) senv hsteps hinv hs
     (Tazuna.Ir.run_invariants c.T _ xs hinit) hk hW hvals ha) hpairs hfit
 
 end

@@ -359,14 +359,14 @@ the slots, on any input, leaves a state within them. -/
 theorem within_step {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v))
     (hin : inputsFit L v = true)
     (hb : ∀ inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v), BoundUnsat L T P v senv inp)
-    {s : State v} (hinv : Step.Inv P s) (hheld : Step.invariants s = []) (hkeys : Step.KeysOk T s)
-    (hW : Within L (shapes v) s) (x : Input v) : Within L (shapes v) (step T v s x).state := by
+    {s : State v} (hinv : Step.Inv P s) (hsupp : Step.StateSupp s) (hheld : Step.invariants s = [])
+    (hkeys : Step.KeysOk T s) (hW : Within L (shapes v) s) (x : Input v) : Within L (shapes v) (step T v s x).state := by
   have hord : ∀ m ∈ v.machines, m.key.ordered T = true := fun m hm => (chk.keys m hm).2
   rcases inputs_fit chk hin hW x with hx | ⟨-, h⟩
   · obtain ⟨ivs, hivs⟩ := Option.isSome_iff_exists.1 hx
     rcases covered chk senv hkeys hW x hivs with ⟨inp, hmem, _, M, hM, hS, hxd, hcase⟩ | h
     · obtain ⟨gs, qs, hqs, hun⟩ := hb inp hmem
-      obtain ⟨t, ht, hcodes, hsites, hcond⟩ := bound_cond senv inp hqs hS hinv hheld hord hxd hcase
+      obtain ⟨t, ht, hcodes, hsites, hcond⟩ := bound_cond chk senv inp hqs hS hinv hsupp hheld hord hxd hcase
         fun q hq' hn => (hun q hq' hn).noModel_at (questions_tys L T P v senv hqs q hq') M
           fun n h => varSorted_of_sorted (hM n h)
       have E := (step_encode chk senv (decode_state hS) hinv hxd ht).2 hcodes hsites (hcase t ht)
@@ -374,45 +374,47 @@ theorem within_step {E : List AnyEffectSite} (chk : Checked P E T v) (senv : Ste
     · rw [h.2.2]; exact hW
   · rw [h]; exact hW
 
-/-- Every state a run reaches from the initial state is within the slots, where the initial state is, every input
+/-- Every state a run on valid inputs reaches from the initial state is within the slots, where the initial state is, every input
 fits, and every input kind's bound question has no model. -/
-theorem run_within {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v))
+theorem run_within {E : List AnyEffectSite} (chk : Checked P E T v) (he : v.Equivariant) (senv : StepEnv L (shapes v))
     (hin : inputsFit L v = true)
     (hb : ∀ inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v), BoundUnsat L T P v senv inp)
-    (hinit : Step.invariants (Step.State.init v) = []) (h0 : initFits L v = true) (is : List (Input v)) :
+    (hinit : Step.invariants (Step.State.init v) = []) (h0 : initFits L v = true) (is : List (Input v))
+    (hvalid : Step.ValidRun T (Step.State.init v) is) :
     Within L (shapes v) (run T v (Step.State.init v) is).1 := by
   have hord : ∀ m ∈ v.machines, m.key.ordered T = true := fun m hm => (chk.keys m hm).2
-  suffices h : ∀ (xs : List (Input v)) (s : State v), Step.Inv P s → Step.invariants s = [] → Step.KeysOk T s →
-      Within L (shapes v) s → Within L (shapes v) (run T v s xs).1 from
-    h is _ Step.init_inv hinit (Step.init_keys T hord) (within_init h0)
+  suffices h : ∀ (xs : List (Input v)) (s : State v), Step.Inv P s → Step.StateSupp s → Step.invariants s = [] →
+      Step.KeysOk T s → Step.ValidRun T s xs → Within L (shapes v) s → Within L (shapes v) (run T v s xs).1 from
+    h is _ Step.init_inv (Step.init_supp he) hinit (Step.init_keys T hord) hvalid (within_init h0)
   intro xs
   induction xs with
-  | nil => intro s _ _ _ hW; exact hW
+  | nil => intro s _ _ _ _ _ hW; exact hW
   | cons x xs ih =>
-    intro s hinv hheld hkeys hW
-    exact ih _ (step_inv T chk.reach s hinv x) (step_invariants T s x hheld) (step_keys T s hkeys x)
-      (within_step chk senv hin hb hinv hheld hkeys hW x)
+    intro s hinv hsupp hheld hkeys ⟨hx, hxs⟩ hW
+    exact ih _ (step_inv T chk.reach s hinv x) (Step.step_supp T he hsupp hinv.below x hx) (step_invariants T s x hheld)
+      (step_keys T s hkeys x) hxs (within_step chk senv hin hb hinv hsupp hheld hkeys hW x)
 
 /-- T4 for every run: where every input kind's lines about the fault `f` read proved, the initial state fits the
-slots and every value an input can carry fits them, no step of any run from an initial state whose invariants hold
-faults with `f`. The bound questions keep every state a run reaches within the slots (`run_within`), where the lines'
+slots and every value an input can carry fits them, no step of any run on valid inputs from an initial state whose
+invariants hold faults with `f`. The bound questions keep every state a run reaches within the slots (`run_within`), where the lines'
 questions cover every step. -/
-theorem proved_sound {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v)) (f : Fault)
-    (hf : f ≠ .answerUnmatched) (hinit : Step.invariants (Step.State.init v) = []) (h0 : initFits L v = true)
+theorem proved_sound {E : List AnyEffectSite} (chk : Checked P E T v) (he : v.Equivariant) (senv : StepEnv L (shapes v))
+    (f : Fault) (hf : f ≠ .answerUnmatched) (hinit : Step.invariants (Step.State.init v) = []) (h0 : initFits L v = true)
     (hin : inputsFit L v = true)
     (hq : ∀ inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v), FaultLine L T P v senv f False inp)
-    (is : List (Input v)) (x : Input v) :
+    (is : List (Input v)) (hvalid : Step.ValidRun T (Step.State.init v) is) (x : Input v) :
     (step T v (run T v (Step.State.init v) is).1 x).outcome ≠ .fault f := by
   have hord : ∀ m ∈ v.machines, m.key.ordered T = true := fun m hm => (chk.keys m hm).2
   have hb : ∀ inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v), BoundUnsat L T P v senv inp := fun inp hm => by
     obtain ⟨gs, qs, hqs, -, hor⟩ := hq inp hm
     exact ⟨gs, qs, hqs, hor.resolve_right id⟩
-  have hW := run_within chk senv hin hb hinit h0 is
+  have hW := run_within chk he senv hin hb hinit h0 is hvalid
+  have hsupp := Step.run_supp T he chk.reach _ Step.init_inv (Step.init_supp he) is hvalid
   rcases inputs_fit chk hin hW x with hx | ⟨hu, -⟩
   · obtain ⟨ivs, hivs⟩ := Option.isSome_iff_exists.1 hx
     rcases covered chk senv (run_keys T _ (Step.init_keys T hord) is) hW x hivs with ⟨inp, hmem, hcov⟩ | h
     · obtain ⟨gs, qs, hqs, htg, hor⟩ := hq inp hmem
-      refine verdict_covered chk senv f hf hinit inp hqs (fun q hq' h => ?_) is x hcov
+      refine verdict_covered chk senv f hf hinit inp hqs (fun q hq' h => ?_) is hsupp x hcov
       rcases h with h | h
       · exact hor.resolve_right id q hq' h
       · exact htg q hq' h

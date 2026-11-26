@@ -848,6 +848,19 @@ theorem stateTys_avail (c : CheckedSpec) (v : ServiceV) :
   · exact avail_stepTy c v (List.mem_append_left _ (List.mem_append_right _ (List.mem_map_of_mem hm)))
 
 section
+variable {L : Layout} {r e : Ty}
+
+theorem namesMachinesT_isSome (n : Term) : (ms : List (MachineV r e)) → (∀ m ∈ ms, L.Has m.table ∧ m.table.embeddable = true) →
+    (xs : PerMachine (fun _ => Term) ms) → (namesMachinesT L n ms xs).isSome = true
+  | [], _, .nil => rfl
+  | m :: ms, h, .cons x xs => by
+    obtain ⟨c, hc⟩ := Option.isSome_iff_exists.1 (namesT_isSome n m.table (h m (by simp)).1 (h m (by simp)).2 x)
+    obtain ⟨d, hd⟩ := Option.isSome_iff_exists.1 (namesMachinesT_isSome n ms (fun m' hm' => h m' (by simp [hm'])) xs)
+    simp [namesMachinesT, hc, hd]
+
+end
+
+section
 variable {c : CheckedSpec} {v : ServiceV} (hv : v ∈ c.spec.services) (T : List TypeDecl)
   (senv : StepEnv (Layout.ofService c.program.defs v) (shapes v))
 include hv
@@ -867,6 +880,15 @@ theorem questions_ofService (inp : SymInput v (shapes v) senv.nT)
   obtain ⟨b, hb⟩ := pendingBelowT_ofService c.program.defs chk (SymState.vars 0 : SymState v).pending
     (SymState.vars 0 : SymState v).nextId
   refine sound_bind_ok hb ?_
+  obtain ⟨⟨her, -⟩, hms, -, -, -⟩ := stateTys_iff.1 chk.stateTys
+  have hs := stepTys_has c.program.defs chk
+  refine sound_bind (sound_need fun hn => by
+    obtain ⟨c1, h1⟩ := Option.isSome_iff_exists.1 (namesT_isSome (SymState.vars 0 : SymState v).fresh v.records
+      (hs _ (by simp [stepTys])) her (SymState.vars 0 : SymState v).records)
+    obtain ⟨c2, h2⟩ := Option.isSome_iff_exists.1 (namesMachinesT_isSome (SymState.vars 0 : SymState v).fresh v.machines
+      (fun m hm => ⟨hs _ (by simp only [stepTys]; exact List.mem_append_left _ (List.mem_append_right _ (List.mem_map_of_mem hm))),
+        (hms m hm).1⟩) (SymState.vars 0 : SymState v).machines)
+    simp [namesStateT, h1, h2] at hn) fun _ _ => ?_
   refine sound_bind h.invariants fun ⟨inv, ci0⟩ hinv => ?_
   refine sound_bind (encodeInvariants_sound h.sorted hinv (avail_of_got h.records) h.rules _) fun ⟨rules, ci⟩ _ => ?_
   refine sound_bind (encodeInstChecks_sound h.sorted T v.machines (fun m hm => (h.machines m hm).1) _ _ _)
@@ -956,14 +978,6 @@ theorem tablesEqT_sound (hL : SortedLayout L) : (ms : List (MachineV r e)) → (
     simp only [tablesEqT]
     exact sound_bind (eqFn_sound hL m.table (h m (by simp))) fun _ _ =>
       sound_bind (tablesEqT_sound hL ms (fun m' hm' => h m' (by simp [hm'])) xs ys) fun _ _ => trivial
-
-theorem namesMachinesT_isSome (n : Term) : (ms : List (MachineV r e)) → (∀ m ∈ ms, L.Has m.table ∧ m.table.embeddable = true) →
-    (xs : PerMachine (fun _ => Term) ms) → (namesMachinesT L n ms xs).isSome = true
-  | [], _, .nil => rfl
-  | m :: ms, h, .cons x xs => by
-    obtain ⟨c, hc⟩ := Option.isSome_iff_exists.1 (namesT_isSome n m.table (h m (by simp)).1 (h m (by simp)).2 x)
-    obtain ⟨d, hd⟩ := Option.isSome_iff_exists.1 (namesMachinesT_isSome n ms (fun m' hm' => h m' (by simp [hm'])) xs)
-    simp [namesMachinesT, hc, hd]
 
 end
 

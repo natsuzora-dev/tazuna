@@ -303,28 +303,29 @@ def FaultLine (L : Layout) (T : List TypeDecl) (P : List AnySite) (v : ServiceV)
     ((∀ q ∈ qs, q.target = none → Unsat L q.ask) ∨ F)
 
 /-- T4: where every input kind's lines about the fault `f` read proved, or within the bounds where the step fits the
-slots, no step of a run from an initial state whose invariants hold faults with `f`, wherever the state the run
+slots, no step of a run on valid inputs from an initial state whose invariants hold faults with `f`, wherever the state the run
 reached and the input fit the slots. An answer that names no request is the one fault no question is about: it is
 the outside's mistake, not the spec's. -/
-theorem fault_sound {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v)) (f : Fault)
-    (hf : f ≠ .answerUnmatched) (hinit : Step.invariants (Step.State.init v) = [])
-    (is : List (Input v)) (x : Input v)
+theorem fault_sound {E : List AnyEffectSite} (chk : Checked P E T v) (he : v.Equivariant) (senv : StepEnv L (shapes v))
+    (f : Fault) (hf : f ≠ .answerUnmatched) (hinit : Step.invariants (Step.State.init v) = [])
+    (is : List (Input v)) (hvalid : Step.ValidRun T (Step.State.init v) is) (x : Input v)
     (hq : ∀ inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v),
       FaultLine L T P v senv f (StepFits L T P v (run T v (Step.State.init v) is).1 x) inp)
     (hs : Within L (shapes v) (run T v (Step.State.init v) is).1) (hx : (inputVals L chk.callerData x).isSome) :
     (step T v (run T v (Step.State.init v) is).1 x).outcome ≠ .fault f := by
   obtain ⟨ivs, hivs⟩ := Option.isSome_iff_exists.1 hx
   have hord : ∀ m ∈ v.machines, m.key.ordered T = true := fun m hm => (chk.keys m hm).2
+  have hsupp := Step.run_supp T he chk.reach _ Step.init_inv (Step.init_supp he) is hvalid
   rcases covered chk senv (run_keys T _ (Step.init_keys T hord) is) hs x hivs
     with ⟨inp, hmem, hcov⟩ | h
   · obtain ⟨gs, qs, hqs, htg, hor⟩ := hq inp hmem
     rcases hor with hb | hfit
-    · refine verdict_covered chk senv f hf hinit inp hqs (fun q hq' h => ?_) is x hcov
+    · refine verdict_covered chk senv f hf hinit inp hqs (fun q hq' h => ?_) is hsupp x hcov
       rcases h with h | h
       · exact hb q hq' h
       · exact htg q hq' h
     · obtain ⟨hc, M, hM, hS, hxd, hcase⟩ := hcov
-      exact question_within chk senv inp hqs hS (run_inv T chk.reach _ Step.init_inv is)
+      exact question_within chk senv inp hqs hS (run_inv T chk.reach _ Step.init_inv is) hsupp
         (Tazuna.Ir.run_invariants T _ is hinit) hxd hcase hfit f hf fun q hq' hg =>
           (htg q hq' hg).noModel_at (questions_tys L T P v senv hqs q hq') M fun n h => varSorted_of_sorted (hM n h)
   · exact h.1 f hf

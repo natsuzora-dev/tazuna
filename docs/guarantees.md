@@ -47,15 +47,17 @@ It prints one `init` line per service invariant, from evaluating the initial sta
 For each target it prints one line per input kind: each command, each answer to a pending request, each subscribed event, and the clock.
 
 A step line asks the solver for a state of the right shape where every invariant holds, and an input, whose step breaks the target.
+The right shape includes that every id the service made in the state is below its counter, so an id the step makes is new.
+`run_supp` proves every state a run reaches on inputs that satisfy `validInputs` has that shape, which is why step lines print it in `assumes`.
 With no such model, the line reads `Prove.proved` or `Prove.withinBounds`.
 
-`proved_sound` (T4): where every input kind's lines about a fault read proved, no step of any run from the initial state faults with it.
+`proved_sound` (T4): where every input kind's lines about a fault read proved, no step of any run from the initial state on inputs that satisfy `validInputs` faults with it.
 `run_within` gives its induction over the run: each step from a state within the slots leaves a state within them, and an answer that fits no slot names no pending request of its type, so it changes nothing.
-`fault_sound` (T4): where every input kind's lines about a fault read proved or within the bounds, no step of a run from the initial state faults with it, wherever the state the run reached and the input fit the slots.
+`fault_sound` (T4): where every input kind's lines about a fault read proved or within the bounds, no step of a run from the initial state on inputs that satisfy `validInputs` faults with it, wherever the state the run reached and the input fit the slots.
 Both proofs are by induction, so they also need the initial state's invariants to hold, which the `init` lines check.
 `Fault.answerUnmatched` is no target, because an answer that names no request is the outside's mistake.
 
-A step line's `assumes` lists the invariants the induction took as holding that this run did not prove: the violated ones, the undecided ones, and the ones `--only` left out.
+A step line's `assumes` lists `validInputs` and the invariants the induction took as holding that this run did not prove: the violated ones, the undecided ones, and the ones `--only` left out.
 
 `cti_sound`, for `Prove.violated` with `"from":"validState"`: the state keeps the step invariant and every invariant, and the step Lean computes from it is the one the solver's terms describe.
 `step_settled`: `after` is the state the step reaches before its invariant check.
@@ -118,7 +120,7 @@ Three assumptions appear in `assumes`, in these words.
 
 | Text in `assumes` | Lines that print it |
 | --- | --- |
-| `ids the service made are used only after they appeared on an out line` | pair lines, responses, `Generate.unreached` |
+| `ids the service made are used only after they appeared on an out line` | step lines, pair lines, responses, `Generate.unreached` |
 | `no step of the run faults` | responses, `Generate.unreached` |
 | `no clock line moves time past a timer that waits` | responses |
 

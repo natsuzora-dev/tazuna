@@ -481,7 +481,7 @@ theorem question_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
     (senv : StepEnv L (shapes v)) (inp : SymInput v (shapes v) senv.nT)
     {gs : List Target} {qs : List (Question v (shapes v) senv.nT)} (hq : questions L T P v senv inp = .ok (gs, qs))
     {s : State v} (hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some s)
-    (hinv : Step.Inv P s) (hheld : Step.invariants s = [])
+    (hinv : Step.Inv P s) (hsupp : Step.StateSupp s) (hheld : Step.invariants s = [])
     {hc : v.caller.isData = true} {x : Input v} (hx : inp.decode M L hc = some x)
     (hcase : ∀ t, encodeStep L T P v senv (SymState.vars 0) inp = .ok t → Holds M t.out.case)
     (f : Fault) (hf : f ≠ .answerUnmatched)
@@ -493,6 +493,7 @@ theorem question_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
   obtain ⟨wf, hwf, hq⟩ := bind_ok.1 hq
   obtain ⟨iwf, hiwf, hq⟩ := bind_ok.1 hq
   obtain ⟨below, hbelow, hq⟩ := bind_ok.1 hq
+  obtain ⟨names, hnames, hq⟩ := bind_ok.1 hq
   obtain ⟨⟨inv, ci0⟩, hinvc, hq⟩ := bind_ok.1 hq
   obtain ⟨⟨rules, ci⟩, hrules, hq⟩ := bind_ok.1 hq
   obtain ⟨⟨checks, ck⟩, hchecks, hq⟩ := bind_ok.1 hq
@@ -502,15 +503,18 @@ theorem question_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
   have hR := decode_state hS
   have hwfH : Holds M wf := wf_of_decodeState (need_ok.1 hwf) hS
   have hbelowH : Holds M below := (pendingBelow_iff hR.pending hR.nextId hbelow).2 hinv.below
+  have hnamesH : Holds M names :=
+    stateSupp_names hR hsupp chk.recordsComparable chk.machinesComparable (need_ok.1 hnames)
   have hiwfH : Holds M iwf := SymInput.wf_of_decode (need_ok.1 hiwf) hx
   have hcaseH := hcase t ht
   obtain ⟨a, ha, hna⟩ := hun _ (List.mem_cons_self ..) (.inl rfl)
   simp only [Question.script, TypedScript.script, List.cons_append, List.nil_append, List.mem_cons, List.not_mem_nil,
     or_false] at ha
-  rcases ha with rfl | rfl | rfl | rfl | rfl
+  rcases ha with rfl | rfl | rfl | rfl | rfl | rfl
   · exact hna hwfH
   · exact hna hiwfH
   · exact hna hbelowH
+  · exact hna hnamesH
   · exact hna hcaseH
   obtain ⟨hside, hcondOf⟩ := bound_holds hna
   obtain ⟨hcodes, hsites, hci0, hci, hck⟩ : Holds M t.codes ∧ Holds M t.sites ∧ Holds M ci0 ∧ Holds M ci ∧ Holds M ck := by
@@ -539,10 +543,11 @@ theorem question_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
     (List.mem_cons_of_mem _ (List.mem_map.2 ⟨g, List.mem_filter.2 ⟨mem_dedup hg, hkeep⟩, rfl⟩)) (.inr ⟨g, rfl, hn⟩)
   simp only [Question.script, TypedScript.script, List.cons_append, List.nil_append, List.mem_cons, List.not_mem_nil,
     or_false] at ha
-  rcases ha with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
+  rcases ha with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
   · exact hna hwfH
   · exact hna hiwfH
   · exact hna hbelowH
+  · exact hna hnamesH
   · exact hna hcaseH
   · exact hna hside
   · exact hna hheldH
@@ -557,10 +562,11 @@ variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
 /-- What an input kind's bound question says where it has no model: wherever the symbolic state decodes to a state of
 the right shape whose invariants hold and the symbolic input to an input, in the case the questions ask about, the step's codes, the cascade's codes and
 the step's condition hold, so the step stays within the slots. -/
-theorem bound_cond {P : List AnySite} (senv : StepEnv L (shapes v)) (inp : SymInput v (shapes v) senv.nT)
+theorem bound_cond {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v)) (inp : SymInput v (shapes v) senv.nT)
     {gs : List Target} {qs : List (Question v (shapes v) senv.nT)} (hq : questions L T P v senv inp = .ok (gs, qs))
     {s : State v} (hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some s)
-    (hinv : Step.Inv P s) (hheld : Step.invariants s = []) (hord : ∀ m ∈ v.machines, m.key.ordered T = true)
+    (hinv : Step.Inv P s) (hsupp : Step.StateSupp s) (hheld : Step.invariants s = [])
+    (hord : ∀ m ∈ v.machines, m.key.ordered T = true)
     {hc : v.caller.isData = true} {x : Input v} (hx : inp.decode M L hc = some x)
     (hcase : ∀ t, encodeStep L T P v senv (SymState.vars 0) inp = .ok t → Holds M t.out.case)
     (hun : ∀ q ∈ qs, q.target = none → ∃ a ∈ q.script.asserts, ¬ Holds M a) :
@@ -570,6 +576,7 @@ theorem bound_cond {P : List AnySite} (senv : StepEnv L (shapes v)) (inp : SymIn
   obtain ⟨wf, hwf, hq⟩ := bind_ok.1 hq
   obtain ⟨iwf, hiwf, hq⟩ := bind_ok.1 hq
   obtain ⟨below, hbelow, hq⟩ := bind_ok.1 hq
+  obtain ⟨names, hnames, hq⟩ := bind_ok.1 hq
   obtain ⟨⟨inv, ci0⟩, hinvc, hq⟩ := bind_ok.1 hq
   obtain ⟨⟨rules, ci⟩, hrules, hq⟩ := bind_ok.1 hq
   obtain ⟨⟨checks, ck⟩, hchecks, hq⟩ := bind_ok.1 hq
@@ -580,10 +587,11 @@ theorem bound_cond {P : List AnySite} (senv : StepEnv L (shapes v)) (inp : SymIn
   obtain ⟨a, ha, hna⟩ := hun _ (List.mem_cons_self ..) rfl
   simp only [Question.script, TypedScript.script, List.cons_append, List.nil_append, List.mem_cons, List.not_mem_nil,
     or_false] at ha
-  rcases ha with rfl | rfl | rfl | rfl | rfl
+  rcases ha with rfl | rfl | rfl | rfl | rfl | rfl
   · exact (hna (wf_of_decodeState (need_ok.1 hwf) hS)).elim
   · exact (hna (SymInput.wf_of_decode (need_ok.1 hiwf) hx)).elim
   · exact (hna ((pendingBelow_iff hR.pending hR.nextId hbelow).2 hinv.below)).elim
+  · exact (hna (stateSupp_names hR hsupp chk.recordsComparable chk.machinesComparable (need_ok.1 hnames))).elim
   · exact (hna (hcase t ht)).elim
   obtain ⟨hside, hcondOf⟩ := bound_holds hna
   obtain ⟨hcodes, hsites, hci0, hci, hck⟩ : Holds M t.codes ∧ Holds M t.sites ∧ Holds M ci0 ∧ Holds M ci ∧ Holds M ck := by
@@ -662,7 +670,7 @@ theorem question_within {P : List AnySite} {E : List AnyEffectSite} (chk : Check
     (senv : StepEnv L (shapes v)) (inp : SymInput v (shapes v) senv.nT)
     {gs : List Target} {qs : List (Question v (shapes v) senv.nT)} (hq : questions L T P v senv inp = .ok (gs, qs))
     {s : State v} (hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some s)
-    (hinv : Step.Inv P s) (hheld : Step.invariants s = [])
+    (hinv : Step.Inv P s) (hsupp : Step.StateSupp s) (hheld : Step.invariants s = [])
     {hc : v.caller.isData = true} {x : Input v} (hx : inp.decode M L hc = some x)
     (hcase : ∀ t, encodeStep L T P v senv (SymState.vars 0) inp = .ok t → Holds M t.out.case)
     (hfit : StepFits L T P v s x) (f : Fault) (hf : f ≠ .answerUnmatched)
@@ -674,6 +682,7 @@ theorem question_within {P : List AnySite} {E : List AnyEffectSite} (chk : Check
   obtain ⟨wf, hwf, hq⟩ := bind_ok.1 hq
   obtain ⟨iwf, hiwf, hq⟩ := bind_ok.1 hq
   obtain ⟨below, hbelow, hq⟩ := bind_ok.1 hq
+  obtain ⟨names, hnames, hq⟩ := bind_ok.1 hq
   obtain ⟨⟨inv, ci0⟩, hinvc, hq⟩ := bind_ok.1 hq
   obtain ⟨⟨rules, ci⟩, hrules, hq⟩ := bind_ok.1 hq
   obtain ⟨⟨checks, ck⟩, hchecks, hq⟩ := bind_ok.1 hq
@@ -683,6 +692,8 @@ theorem question_within {P : List AnySite} {E : List AnyEffectSite} (chk : Check
   have hR := decode_state hS
   have hwfH : Holds M wf := wf_of_decodeState (need_ok.1 hwf) hS
   have hbelowH : Holds M below := (pendingBelow_iff hR.pending hR.nextId hbelow).2 hinv.below
+  have hnamesH : Holds M names :=
+    stateSupp_names hR hsupp chk.recordsComparable chk.machinesComparable (need_ok.1 hnames)
   have hiwfH : Holds M iwf := SymInput.wf_of_decode (need_ok.1 hiwf) hx
   have hcaseH := hcase t ht
   have henc := step_encode chk senv (decode_state hS) hinv hx ht
@@ -717,10 +728,11 @@ theorem question_within {P : List AnySite} {E : List AnyEffectSite} (chk : Check
     (List.mem_cons_of_mem _ (List.mem_map.2 ⟨g, List.mem_filter.2 ⟨mem_dedup hg, hkeep⟩, rfl⟩)) ⟨g, rfl, hn⟩
   simp only [Question.script, TypedScript.script, List.cons_append, List.nil_append, List.mem_cons, List.not_mem_nil,
     or_false] at ha
-  rcases ha with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
+  rcases ha with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
   · exact hna hwfH
   · exact hna hiwfH
   · exact hna hbelowH
+  · exact hna hnamesH
   · exact hna hcaseH
   · exact hna hside
   · exact hna hheldH
@@ -739,7 +751,8 @@ def Covered (L : Layout) (T : List TypeDecl) (P : List AnySite) (v : ServiceV) (
 
 /-- T4 at the states and inputs the questions cover: where the solver answers unsat to an input kind's bound
 question and to its questions about the targets the fault `f` falls under, no step of a run from an initial state
-whose invariants hold faults with `f` at a state and input those questions cover. The proved invariants are assumed of
+whose invariants hold, at a state whose names are below its counter, faults with `f` at a state and input those
+questions cover. The proved invariants are assumed of
 the state before each step, which is sound because every state such a run reaches has them (`run_invariants`: a step
 that breaks one leaves the state it began with). -/
 theorem verdict_covered {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v))
@@ -748,10 +761,11 @@ theorem verdict_covered {P : List AnySite} {E : List AnyEffectSite} (chk : Check
     (hq : questions L T P v senv inp = .ok (gs, qs))
     (hun : ∀ q ∈ qs, (q.target = none ∨ ∃ g, q.target = some g ∧ g.covers f = true) →
       Unsat L q.ask)
-    (is : List (Input v)) (x : Input v) (hcov : Covered L T P v senv inp (run T v (Step.State.init v) is).1 x) :
+    (is : List (Input v)) (hsupp : Step.StateSupp (run T v (Step.State.init v) is).1) (x : Input v)
+    (hcov : Covered L T P v senv inp (run T v (Step.State.init v) is).1 x) :
     (step T v (run T v (Step.State.init v) is).1 x).outcome ≠ .fault f := by
   obtain ⟨hc, M, hM, hS, hx, hcase⟩ := hcov
-  exact question_sound chk senv inp hq hS (run_inv T chk.reach _ Step.init_inv is)
+  exact question_sound chk senv inp hq hS (run_inv T chk.reach _ Step.init_inv is) hsupp
     (Tazuna.Ir.run_invariants T _ is hinit) hx hcase f hf fun q hq' hrel => (hun q hq' hrel).noModel_at (questions_tys L T P v senv hq q hq') M fun n h => varSorted_of_sorted (hM n h)
 
 end

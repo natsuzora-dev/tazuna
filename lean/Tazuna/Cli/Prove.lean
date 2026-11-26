@@ -396,7 +396,7 @@ proved or within the bounds. -/
 def lineOf (unproved : String → List Target) (past : String → String → Option (List Json)) :
     Report → Option (Kind × List (String × Json))
   | .unsat s step (some g) =>
-    let common := [("service", Json.str s), ("target", Json.str g.text), ("step", Json.str step), assumes s g] ++
+    let common := [("service", Json.str s), ("target", Json.str g.text), ("step", Json.str step), assumes s step g] ++
       widenedField g
     some <| match past s step with
       | none => (.prove .proved, common)
@@ -404,7 +404,7 @@ def lineOf (unproved : String → List Target) (past : String → String → Opt
   | .unsat _ _ none | .boundReached .. => none
   | .violated s step g fields =>
     some (.prove .violated, [("service", Json.str s), ("target", Json.str g.text), ("step", Json.str step)] ++ fields ++
-      [assumes s g] ++ widenedField g)
+      [assumes s step g] ++ widenedField g)
   | .undecided k s step g fields =>
     some (k, [("service", Json.str s)] ++ (g.map fun g => ("target", Json.str g.text)).toList ++
       [("step", Json.str step)] ++ fields ++ g.toList.flatMap widenedField)
@@ -413,15 +413,17 @@ where
   widenedField : Target → List (String × Json)
     | .pair _ _ (w :: ws) => [("widened", Json.arr ((w :: ws).map Json.str).toArray)]
     | _ => []
-  /-- What a line's question assumes: the invariants on the state before the step; none for a timer machine's
-  question, whose context is any key, state, records and time; for a pair's, the assumption `run_lines` rests on
-  (`Step.Assumption.validInputs`), which keeps every name of a state below its counter, as the question's state has
-  them, and no invariant. -/
-  assumes (s : String) (g : Target) : String × Json :=
+  /-- What a line's question assumes: for a step's, valid inputs (`Step.Assumption.validInputs`), which keep every
+  name of a state below its counter as the question's state has them (`fault_sound`), and the invariants on the state
+  before the step; for the initial state's, no input assumption, as no input led there; none for a timer machine's
+  question, whose context is any key, state, records and time; for a pair's, valid inputs, which `run_lines` rests on,
+  and no invariant. -/
+  assumes (s step : String) (g : Target) : String × Json :=
     let held : List String := match g with
       | .timer _ => []
       | .pair .. => [Step.Assumption.validInputs.text]
-      | _ => ((unproved s).filter fun g' => g'.isInvariant && g' != g).map (·.text)
+      | _ => (if step == "init" then [] else [Step.Assumption.validInputs.text]) ++
+        ((unproved s).filter fun g' => g'.isInvariant && g' != g).map (·.text)
     ("assumes", Json.arr (held.map Json.str).toArray)
 
 /-- A line of the report once its question is a job: known at once, left out by `--only`, or the answer its own job
