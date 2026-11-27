@@ -298,7 +298,7 @@ theorem check_ok {T : List TypeDecl} {P : List AnySite} {E : List AnyEffectSite}
       (List.mem_append_left _ (List.mem_append_right _ (List.mem_flatMap.2 ⟨q, hq, by simp⟩)))))
   · exact none_of_ite (hstate ("records", v.records) (by simp))
   · exact none_of_ite (hstate (m.name ++ " state", m.state) (List.mem_cons_of_mem _ (List.mem_map_of_mem hm)))
-  · have := not_of_ite (hneg ("items", v.bounds.items, 0) (by simp)); simp only at this; omega
+  · have := not_of_ite (hneg ("others_at_most", v.bounds.items, 0) (by simp)); simp only at this; omega
   · have := not_of_ite (hneg ("cascade", v.bounds.cascade, 0) (by simp)); simp only at this; omega
   · have := not_of_ite (hneg ("steps", v.bounds.steps, 1) (by simp)); simp only at this; omega
   · obtain ⟨k, hk, rfl⟩ := List.getElem_of_mem hc

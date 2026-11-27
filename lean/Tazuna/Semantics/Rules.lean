@@ -459,7 +459,7 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) (c
         (Illegal.creates, s!"{v.name}: a create bound reads no table field of the records"))
     let b := v.bounds
     -- Each bound with its least legal value: `steps` 1, since a search of no depth would read as a verdict.
-    let negative := ([("items", (b.items : Int), (0 : Int)), ("cascade", b.cascade, 0), ("steps", b.steps, 1)] ++
+    let negative := ([("others_at_most", (b.items : Int), (0 : Int)), ("cascade", b.cascade, 0), ("steps", b.steps, 1)] ++
         (v.bounds.creates.zip reads).map (fun (c, ts) => ("create " ++ ", ".intercalate ts, c.atMost, 0))).filterMap
       fun (what, n, least) => if n < least then
         some (Illegal.bounds, if least = 0 then s!"{v.name}: the {what} bound is negative"

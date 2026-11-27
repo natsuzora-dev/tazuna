@@ -332,10 +332,10 @@ pub fn subscribe(
   panic as "tazuna's built-ins run only in the engine"
 }
 
-/// How far checking goes: records per table (`creates`), items per bag and per table no create bounds, internal steps per input, steps per run (at least 1). `cascade` is also part of the meaning: an input that needs more internal steps than `cascade` faults, in `test` and `verify` as in `prove`.
+/// How far checking goes: records per table (`creates`); items per bag and per table no create bounds (`others_at_most`), which covers bags in records and values, tables in values, each machine's table of instances and the pending requests; internal steps per input; steps per run (at least 1). prove and generate name each bag and table type a bound gave slots, a machine's table by the machine. `cascade` is also part of the meaning: an input that needs more internal steps than `cascade` faults, in `test` and `verify` as in `prove`.
 pub fn bounds(
   creates _creates: List(Create(records)),
-  items _items: Int,
+  others_at_most _others_at_most: Int,
   cascade _cascade: Int,
   steps _steps: Int,
 ) -> Bounds(records) {

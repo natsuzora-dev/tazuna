@@ -14,6 +14,10 @@ pub type Caller {
   User
 }
 
+pub type Watch {
+  Watching
+}
+
 fn apply(ctx: tazuna.ApplyCtx(Records), e: Event) -> Records {
   let r = ctx.records
   case e {
@@ -31,6 +35,19 @@ fn add() -> tazuna.Command(Records, Event, Caller, Int, tazuna.Never) {
   )
 }
 
+/// Its table of instances has no create, so the bounds name it by the machine.
+fn watch() -> tazuna.Machine(Records, Event) {
+  tazuna.machine(
+    name: "watch",
+    instances: fn(r: Records) { table.keys(r.tasks) },
+    initial: Watching,
+    on: fn(_c, _e) { tazuna.Stay },
+    timer: fn(_c) { None },
+    effect: fn(_c) { None },
+    invariants: fn(_c) { [] },
+  )
+}
+
 fn tasks() -> tazuna.Service {
   tazuna.service(
     name: "tasks",
@@ -38,7 +55,7 @@ fn tasks() -> tazuna.Service {
     apply: apply,
     subscribes: [],
     declares: [tazuna.declare_command(add())],
-    machines: [],
+    machines: [watch()],
     reactions: [],
     invariants: fn(r: Records) { [#("at most 2", table.size(r.tasks) <= 2)] },
     responses: [
@@ -56,7 +73,7 @@ fn tasks() -> tazuna.Service {
     ],
     bounds: tazuna.bounds(
       creates: [tazuna.create(table: fn(r: Records) { r.tasks }, at_most: 2)],
-      items: 1,
+      others_at_most: 1,
       cascade: 1,
       steps: 5,
     ),

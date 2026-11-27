@@ -74,7 +74,7 @@ fn counter() -> tazuna.Service {
     reactions: [notify()],
     invariants: fn(r: Records) { [#("not negative", r.total >= 0)] },
     responses: [],
-    bounds: tazuna.bounds(creates: [], items: 1, cascade: 1, steps: 5),
+    bounds: tazuna.bounds(creates: [], others_at_most: 1, cascade: 1, steps: 5),
     scenarios: [],
   )
 }

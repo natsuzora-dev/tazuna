@@ -71,7 +71,7 @@ fn marks() -> tazuna.Service {
     reactions: [twice()],
     invariants: fn(_r: Records) { [] },
     responses: [],
-    bounds: tazuna.bounds(creates: [], items: 2, cascade: 2, steps: 3),
+    bounds: tazuna.bounds(creates: [], others_at_most: 2, cascade: 2, steps: 3),
     scenarios: [],
   )
 }

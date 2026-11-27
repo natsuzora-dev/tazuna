@@ -45,7 +45,7 @@ fn cubes() -> tazuna.Service {
       [#("no cube sum", r.a * r.a * r.a + r.b * r.b * r.b != r.c * r.c * r.c)]
     },
     responses: [],
-    bounds: tazuna.bounds(creates: [], items: 1, cascade: 1, steps: 5),
+    bounds: tazuna.bounds(creates: [], others_at_most: 1, cascade: 1, steps: 5),
     scenarios: [],
   )
 }

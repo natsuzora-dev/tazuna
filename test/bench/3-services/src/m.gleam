@@ -192,7 +192,7 @@ fn s1() -> tazuna.Service {
     ],
     bounds: tazuna.bounds(
       creates: [tazuna.create(table: fn(r: R1) { r.items }, at_most: 2)],
-      items: 2,
+      others_at_most: 2,
       cascade: 2,
       steps: 5,
     ),
@@ -371,7 +371,7 @@ fn s2() -> tazuna.Service {
     ],
     bounds: tazuna.bounds(
       creates: [tazuna.create(table: fn(r: R2) { r.items }, at_most: 2)],
-      items: 2,
+      others_at_most: 2,
       cascade: 2,
       steps: 5,
     ),
@@ -550,7 +550,7 @@ fn s3() -> tazuna.Service {
     ],
     bounds: tazuna.bounds(
       creates: [tazuna.create(table: fn(r: R3) { r.items }, at_most: 2)],
-      items: 2,
+      others_at_most: 2,
       cascade: 2,
       steps: 5,
     ),

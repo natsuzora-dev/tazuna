@@ -14,7 +14,7 @@ For what one kind of line means, run `gleam run -m tazuna -- explain <kind>`; th
 `prove` and `generate` ask the Z3 solver about a fixed number of slots per collection, taken from the service's `bounds`:
 
 - `creates` gives the slots of each table field of the records.
-- `items` gives the slots of each bag and of the pending requests.
+- `others_at_most` gives the slots of every other bag and table: bags anywhere, tables inside values, each machine's table of instances, and the pending requests.
 - A list type gets as many slots as its longest literal in the spec.
 - `cascade` limits the internal steps of one input.
 - `steps` limits the inputs of a run that `generate` unrolls.

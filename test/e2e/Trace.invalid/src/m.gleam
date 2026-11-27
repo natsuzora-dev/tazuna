@@ -135,7 +135,7 @@ fn counter() -> tazuna.Service {
     reactions: [],
     invariants: fn(r: Records) { [#("under 50", r.total < 50)] },
     responses: [],
-    bounds: tazuna.bounds(creates: [], items: 3, cascade: 3, steps: 5),
+    bounds: tazuna.bounds(creates: [], others_at_most: 3, cascade: 3, steps: 5),
     scenarios: [basic()],
   )
 }

@@ -539,7 +539,7 @@ pub fn service() -> tazuna.Service {
           at_most: 3,
         ),
       ],
-      items: 2,
+      others_at_most: 2,
       cascade: 2,
       steps: 4,
     ),

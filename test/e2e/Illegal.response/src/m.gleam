@@ -57,7 +57,7 @@ fn tasks(name: String) -> tazuna.Service {
     ],
     bounds: tazuna.bounds(
       creates: [tazuna.create(table: fn(r: Records) { r.tasks }, at_most: 3)],
-      items: 3,
+      others_at_most: 3,
       cascade: 3,
       steps: 5,
     ),

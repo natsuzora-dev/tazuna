@@ -50,7 +50,7 @@ fn watcher() -> tazuna.Service {
         tazuna.create(table: fn(r: Records) { r.seen }, at_most: 2),
         tazuna.create(table: fn(r: Records) { r.last }, at_most: 2),
       ],
-      items: 1,
+      others_at_most: 1,
       cascade: 1,
       steps: 5,
     ),
@@ -167,7 +167,7 @@ fn asker() -> tazuna.Service {
     reactions: [both()],
     invariants: fn(_r: AskRecords) { [] },
     responses: [],
-    bounds: tazuna.bounds(creates: [], items: 2, cascade: 3, steps: 3),
+    bounds: tazuna.bounds(creates: [], others_at_most: 2, cascade: 3, steps: 3),
     scenarios: [],
   )
 }

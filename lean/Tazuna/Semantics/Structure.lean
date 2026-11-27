@@ -164,6 +164,7 @@ structure CreateV (r : Ty) where
 /-- The bounds as the spec writes them, in Gleam's Int. -/
 structure BoundsV (r : Ty) where
   creates : List (CreateV r)
+  /-- `others_at_most`: the items of each bag and of each table no create bounds. -/
   items : Int
   cascade : Int
   steps : Int

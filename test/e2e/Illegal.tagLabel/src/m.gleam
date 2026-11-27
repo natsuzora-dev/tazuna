@@ -40,7 +40,7 @@ fn svc() -> tazuna.Service {
     reactions: [],
     invariants: fn(_r: Records) { [] },
     responses: [],
-    bounds: tazuna.bounds(creates: [], items: 1, cascade: 1, steps: 1),
+    bounds: tazuna.bounds(creates: [], others_at_most: 1, cascade: 1, steps: 1),
     scenarios: [],
   )
 }

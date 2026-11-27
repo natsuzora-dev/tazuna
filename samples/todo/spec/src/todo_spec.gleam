@@ -262,7 +262,7 @@ fn todo_service() -> tazuna.Service {
       creates: [
         tazuna.create(table: fn(records: Records) { records.tasks }, at_most: 2),
       ],
-      items: 1,
+      others_at_most: 1,
       cascade: 2,
       steps: 3,
     ),

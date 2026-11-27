@@ -427,7 +427,7 @@ pub fn service() -> tazuna.Service {
         ),
         tazuna.create(table: fn(records: Records) { records.sales }, at_most: 2),
       ],
-      items: 2,
+      others_at_most: 2,
       cascade: 1,
       steps: 4,
     ),

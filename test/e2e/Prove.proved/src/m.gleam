@@ -51,7 +51,7 @@ fn counter() -> tazuna.Service {
         deadline: fn(_r: Records, _trigger: Event) { None },
       ),
     ],
-    bounds: tazuna.bounds(creates: [], items: 1, cascade: 1, steps: 5),
+    bounds: tazuna.bounds(creates: [], others_at_most: 1, cascade: 1, steps: 5),
     scenarios: [],
   )
 }
