@@ -303,6 +303,12 @@ datatypes whose sorts hold values (Section 4.2.3), so every field sort of a scri
 def SelSorted (dts : List Datatype) (M : Model) : Prop :=
   ∀ d k j s v, fieldSrt? dts d k j = some s → (∃ w, Val.InSrt dts s w) → Val.InSrt dts s (M.selOther d k j v)
 
+/-- The model's values are those of an SMT-LIB structure for the datatypes `dts` and the variables' sorts `vars`: each
+variable holds a value of its sort, the items of a collection's free slots included, and each selector on another
+constructor gives one of its field's sort (`SelSorted`). `Unsat` lists the model's other values. -/
+def WellSorted (dts : List Datatype) (vars : List Srt) (M : Model) : Prop :=
+  (∀ n σ, vars[n]? = some σ → Val.InSrt dts σ (M.vars n)) ∧ SelSorted dts M
+
 -- SMT-LIB leaves a selector on a field its constructor lacks to the model, and the default stands for that value.
 set_option linter.tazuna.silentDefault false in
 mutual

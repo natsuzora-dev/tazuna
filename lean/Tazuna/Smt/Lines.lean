@@ -141,7 +141,17 @@ theorem forward_of_line {r e : Ty} {m : MachineV r e}
     | 1, _ => exact sorted_of_embed hs
     | 2, _ => exact sorted_of_embed hr
     | 3, _ => exact ⟨now, rfl⟩
-  exact (timer_sound m hq ht hM (layoutSel_coverModel L _) ⟨key, st, records, now, decode_embed _ _ _ hk, decode_embed _ _ _ hs,
+  have hsrt : Forall2 (SrtVal L) (timerTys m) [zk, zs, zr, .int now] :=
+    ⟨embedV_srtVal hk, embedV_srtVal hs, embedV_srtVal hr, srtVal_int ⟨now, rfl⟩, trivial⟩
+  have hdata : ∀ t ∈ timerTys m, t.isData = true := by
+    simp only [timerTys, List.mem_cons, List.not_mem_nil, or_false]
+    rintro t (rfl | rfl | rfl | rfl)
+    · exact m.key_data
+    · exact m.state_data
+    · exact m.records_data
+    · rfl
+  exact (timer_sound m hq ht hM (layoutSorted_coverModel hsrt hdata) ⟨key, st, records, now, decode_embed _ _ _ hk,
+    decode_embed _ _ _ hs,
     decode_embed _ _ _ hr, rfl⟩).2 hb
 
 theorem firesAt_of_lines {r e : Ty} {records : r.den0} {now : Int} : {ms : List (MachineV r e)} →

@@ -1,5 +1,6 @@
 import Tazuna.Smt.Pair
 import Tazuna.Smt.Cover
+import Tazuna.Smt.NoGap
 
 /-! What a pair line's answers say of a state: the two effects of its kinds commute from every step in progress whose
 state fits the slots and whose two effects some value codes (`pairs_at`). The state's values and the two effects'
@@ -106,20 +107,72 @@ theorem effSorted_of_rel {e : Ty} {x : OwnEffectV e} {z : Val}
         obtain ⟨-, rfl, rfl, -, -, hΓ, vi, va, rfl, hi, hcap⟩ := hh
         exact ⟨sorted_of_relD _ _ _ hi, hΓ ▸ sorted_capRel hcap, trivial⟩
 
+/-- An own effect some value codes is coded by one of its effect datatype's sort: its fields fixed (`fixV`), which
+keeps them related. -/
+theorem effFix (hL : SortedLayout L) {e : Ty} {x : OwnEffectV e} {z : Val} (h : RelV L (.dsl .effect [e]) x.effect z) :
+    ∃ z', RelV L (.dsl .effect [e]) x.effect z' ∧
+      ∀ dts σ, L.datatypes? = some dts → L.srt? (.dsl .effect [e]) = some σ → Val.InSrt dts σ z' := by
+  obtain ⟨d, n, hf, hr⟩ := h
+  rcases hr with ⟨k, key, vals, -, -, hh⟩ | ⟨k, key, vals, hk, -, hh⟩
+  · cases x <;> exact hh.elim
+  have hfs : (L.effectFields e)[(L.effectsOf e).length + k]? = some key.fields := by
+    rw [Layout.effectFields, List.getElem?_append_right (by simp)]
+    simp [hk]
+  refine ⟨.ctor d ((L.effectsOf e).length + k) (fixVs L key.fields vals), ⟨d, n, hf, .inr ⟨k, key, _, hk, rfl, ?_⟩⟩,
+    fun dts σ hd hs => ?_⟩
+  · cases key with
+    | command e' name c i j a =>
+      cases x with
+      | query => exact hh.elim
+      | command name' c' i' j' value onAnswer =>
+        obtain ⟨h1, h2, rfl, h4, h5, h6, vi, va, rfl, hi, dg, ng, valsg, hfg, rfl, hrs⟩ := hh
+        refine ⟨h1, h2, rfl, h4, h5, h6, _, _, rfl, fixV_relD _ _ _ hi, dg, ng, _, hfg, ?_, fixVs_relDs _ _ _ hrs⟩
+        simp [fixV, ← h6, hfg, Val.args]
+    | query e' name c i o a =>
+      cases x with
+      | command => exact hh.elim
+      | query name' c' i' o' value onAnswer =>
+        obtain ⟨h1, h2, rfl, h4, h5, h6, vi, va, rfl, hi, dg, ng, valsg, hfg, rfl, hrs⟩ := hh
+        refine ⟨h1, h2, rfl, h4, h5, h6, _, _, rfl, fixV_relD _ _ _ hi, dg, ng, _, hfg, ?_, fixVs_relDs _ _ _ hrs⟩
+        simp [fixV, ← h6, hfg, Val.args]
+  · obtain ⟨d', n', hf', rfl⟩ := srt_dt hs (by simp) (by simp) (by simp) (by simp) (by simp)
+    rw [hf] at hf'
+    cases hf'
+    obtain ⟨D, hD1, hD2⟩ := find_datatype hd hf
+    have hdata : Ty.isDatas key.fields = true := by
+      simpa [Ty.isData] using (effectFields_sorted hL (List.mem_of_getElem? hfs)).2
+    simp only [Layout.datatype?] at hD1
+    split at hD1
+    · rename_i hnil; rw [hnil] at hfs; simp at hfs
+    · simp only [Option.pure_def, Option.bind_eq_bind, Option.bind_eq_some_iff, Option.some.injEq] at hD1
+      obtain ⟨fss, hfss, rfl⟩ := hD1
+      have hss := mapM_getElem? hfss ((L.effectsOf e).length + k)
+      rw [hfs, Option.bind_some] at hss
+      have hsome : (key.fields.mapM L.srt?).isSome := by
+        have := mapM_isSome (fun x => x.mapM L.srt?) (L.effectFields e)
+        rw [hfss] at this
+        exact List.all_eq_true.1 this.symm _ (List.mem_of_getElem? hfs)
+      obtain ⟨ss, hss''⟩ := Option.isSome_iff_exists.1 hsome
+      have hss' : fss[(L.effectsOf e).length + k]? = some ss := hss.trans hss''
+      exact inSrt_ctor hD2 hss' (fixVs_inSrts hd key.fields hdata vals ss hss'')
+
 /-- A model of a pair question's variables: the state's values, then the two effects'. -/
-theorem pair_model {s : State v} (hkeys : Step.KeysOk T s) (hW : Within L (shapes v) s) {x1 x2 : OwnEffectV v.event}
+theorem pair_model (hL : SortedLayout L) {s : State v} (hkeys : Step.KeysOk T s) (hW : Within L (shapes v) s)
+    {x1 x2 : OwnEffectV v.event}
     (he1 : ∃ z, RelV L (.dsl .effect [v.event]) x1.effect z) (he2 : ∃ z, RelV L (.dsl .effect [v.event]) x2.effect z) :
-    ∃ M : Model, (∀ n (h : n < (pairTys v).length), VarSorted L (pairTys v)[n] (M.vars n)) ∧ LayoutSel L M ∧
+    ∃ M : Model, (∀ n (h : n < (pairTys v).length), VarSorted L (pairTys v)[n] (M.vars n)) ∧
+      LayoutSorted L (pairTys v) M ∧
       (SymState.vars (v := v) 0).decode M L T (shapes v) = some s ∧
       RelV L (.dsl .effect [v.event]) x1.effect (M.vars (pairVar v)) ∧
       RelV L (.dsl .effect [v.event]) x2.effect (M.vars (pairVar v + 1)) := by
   obtain ⟨pv, hpv, hsome⟩ := hW
   obtain ⟨vals, hvals⟩ := Option.isSome_iff_exists.1 hsome
-  obtain ⟨z1, hz1⟩ := he1
-  obtain ⟨z2, hz2⟩ := he2
+  obtain ⟨z1, hz1, hi1⟩ := effFix hL he1.choose_spec
+  obtain ⟨z2, hz2, hi2⟩ := effFix hL he2.choose_spec
   have hs1 := effSorted_of_rel hz1
   have hs2 := effSorted_of_rel hz2
   have hsorted := embedState_sorted hvals
+  have hsrt := embedState_srtVal hvals
   have hlen : vals.length = (stateTys v (shapes v)).length := (forall2_length hsorted).symm
   have hst : ∀ j (hj : j < vals.length), (coverModel L (vals ++ [z1, z2])).vars (0 + j) = vals[j] := fun j hj =>
     coverModel_vars (by rw [Nat.zero_add, List.getElem?_append_left hj, List.getElem?_eq_getElem hj])
@@ -127,9 +180,31 @@ theorem pair_model {s : State v} (hkeys : Step.KeysOk T s) (hW : Within L (shape
     coverModel_vars (by rw [pairVar, stateWidth, ← hlen, List.getElem?_append_right (Nat.le_refl _)]; simp)
   have hv2 : (coverModel L (vals ++ [z1, z2])).vars (pairVar v + 1) = z2 :=
     coverModel_vars (by rw [pairVar, stateWidth, ← hlen, List.getElem?_append_right (by omega)]; simp)
-  refine ⟨coverModel L (vals ++ [z1, z2]), fun n hn => ?_, layoutSel_coverModel L _,
-    decode_embedState 0 T s pv hpv (fun sm h => (hkeys sm h).2) vals hvals hst, by rw [hv1]; exact hz1, by rw [hv2]; exact hz2⟩
   have hpl : (pairTys v).length = (stateTys v (shapes v)).length + 2 := by simp [pairTys]
+  have hLS : LayoutSorted L (pairTys v) (coverModel L (vals ++ [z1, z2])) := by
+    refine layoutSorted_of (fun _ h => selSorted_coverModel L _ h) fun n t ht dts σ hD hs => ?_
+    by_cases hlt : n < (stateTys v (shapes v)).length
+    · have hget : (stateTys v (shapes v))[n]? = some t := by
+        rw [← ht]; simp only [pairTys]; rw [List.getElem?_append_left hlt]
+      obtain ⟨w, hw, hsw⟩ := forall2_getElem? hsrt hget
+      rw [coverModel_vars (by rw [List.getElem?_append_left (hlen ▸ hlt), hw])]
+      exact hsw (stateTys_data v t (List.mem_of_getElem? hget)) dts σ hD hs
+    · have hn : n < (pairTys v).length := (List.getElem?_eq_some_iff.1 ht).1
+      have ht' : t = .dsl .effect [v.event] := by
+        simp only [pairTys] at ht
+        rw [List.getElem?_append_right (by omega)] at ht
+        have : n - (stateTys v (shapes v)).length < 2 := by omega
+        rcases Nat.lt_succ_iff_lt_or_eq.1 this with h | h
+        · simpa [show n - (stateTys v (shapes v)).length = 0 by omega] using ht.symm
+        · simpa [h] using ht.symm
+      subst ht'
+      rcases Nat.lt_succ_iff_lt_or_eq.1 (show n < (stateTys v (shapes v)).length + 2 by omega) with h | h
+      · have hn : n = pairVar v := by unfold pairVar stateWidth; omega
+        rw [hn, hv1]; exact hi1 dts σ hD hs
+      · have hn : n = pairVar v + 1 := by unfold pairVar stateWidth; omega
+        rw [hn, hv2]; exact hi2 dts σ hD hs
+  refine ⟨coverModel L (vals ++ [z1, z2]), fun n hn => ?_, hLS,
+    decode_embedState 0 T s pv hpv (fun sm h => (hkeys sm h).2) vals hvals hst, by rw [hv1]; exact hz1, by rw [hv2]; exact hz2⟩
   by_cases hlt : n < (stateTys v (shapes v)).length
   · have hget : (pairTys v)[n] = (stateTys v (shapes v))[n] := List.getElem_append_left hlt
     obtain ⟨w, hw, hsw⟩ := forall2_getElem? hsorted (List.getElem?_eq_getElem hlt)
@@ -164,7 +239,7 @@ theorem pairs_at {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E 
     (he2 : ∃ z, RelV L (.dsl .effect [v.event]) x2.effect z)
     (hreach1 : x1.effect.Reach P) (hreach2 : x2.effect.Reach P) :
     Step.PairCommutes T a0 x1 x2 := by
-  obtain ⟨M, hM, hsel, hS, hx1, hx2⟩ := pair_model hkeys hW he1 he2
+  obtain ⟨M, hM, hsel, hS, hx1, hx2⟩ := pair_model hL hkeys hW he1 he2
   obtain ⟨p, hp, ht1, ht2⟩ := pair_kinds senv hx1 hx2
   exact pair_sound chk hL senv (hall p hp) hM hsel hS hinv.below hsupp hqk hsa hx1 hx2 hreach1 hreach2 ht1 ht2
 

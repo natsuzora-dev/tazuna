@@ -310,6 +310,16 @@ def unrollBase (d : Nat) : Except Refusal (UnrollBase v senv.nT) := do
   let vars ← r.1.mapM fun ty => need (lacks ty) (L.srt? ty)
   pure ⟨dts, r.1, vars, r.2.1, r.2.2.1, r.2.2.2⟩
 
+/-- The runs declare each variable at its type's sort. -/
+theorem unrollBase_vars {d : Nat} {B : UnrollBase v senv.nT} (hB : unrollBase L T P v senv d = .ok B) :
+    B.tys.mapM L.srt? = some B.vars := by
+  simp only [unrollBase] at hB
+  obtain ⟨_, -, hB⟩ := bind_ok.1 hB
+  obtain ⟨_, -, hB⟩ := bind_ok.1 hB
+  obtain ⟨vars, hvars, hB⟩ := bind_ok.1 hB
+  cases pure_ok.1 hB
+  exact mapM_need hvars
+
 /-- The runs declare the layout's datatypes. -/
 theorem unrollBase_dts {d : Nat} {B : UnrollBase v senv.nT} (hB : unrollBase L T P v senv d = .ok B) :
     L.datatypes? = some B.datatypes := by

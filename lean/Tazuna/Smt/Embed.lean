@@ -43,14 +43,14 @@ theorem mapM_isSome_iff {α β : Type} (f : α → Option β) : (xs : List α) �
     | none => simp [hx]
     | some y => cases h : xs.mapM f <;> simp_all
 
-theorem fillSlots_isSome (n w : Nat) (zs : List (List Val)) : (fillSlots n w zs).isSome ↔ zs.length ≤ n := by
+theorem fillSlots_isSome (n : Nat) (item : List Val) (zs : List (List Val)) : (fillSlots n item zs).isSome ↔ zs.length ≤ n := by
   unfold fillSlots; split <;> simp_all
 
 theorem count_of_find {L : Layout} {t : Ty} {d n : Nat} (h : L.find? t = some (d, n)) : L.count t = n := by
   simp [Layout.count, h]
 
-theorem bind_fill_isSome {α : Type} (g : α → Option (List Val)) (xs : List α) (n w : Nat) (f : List (Bool × List Val) → Val) :
-    (((xs.mapM g).bind (fillSlots n w)).map f).isSome ↔ (∀ x ∈ xs, (g x).isSome) ∧ xs.length ≤ n := by
+theorem bind_fill_isSome {α : Type} (g : α → Option (List Val)) (xs : List α) (n : Nat) (item : List Val)
+    (f : List (Bool × List Val) → Val) : (((xs.mapM g).bind (fillSlots n item)).map f).isSome ↔ (∀ x ∈ xs, (g x).isSome) ∧ xs.length ≤ n := by
   rw [Option.isSome_map]
   cases h : xs.mapM g with
   | none =>
@@ -91,7 +91,7 @@ theorem embed_iff : (t : Ty) → Layout.HasWith L D t → t.embeddable = true �
     obtain ⟨⟨d, n⟩, hl⟩ := Option.isSome_iff_exists.1 hl
     obtain ⟨⟨dt, m⟩, hp⟩ := Option.isSome_iff_exists.1 hp
     simp only [embedV, hl, hp, FitsV, count_of_find hl]
-    refine (bind_fill_isSome (fun x => (embedV L t x).map ([·])) xs n 1 (slotsVal d dt)).trans ?_
+    refine (bind_fill_isSome (fun x => (embedV L t x).map ([·])) xs n _ (slotsVal d dt)).trans ?_
     refine ⟨fun ⟨a, b⟩ => ⟨b, fun x hx => ?_⟩, fun ⟨a, b⟩ => ⟨fun x hx => ?_, a⟩⟩
     · exact (embed_iff t ht he x).1 (by simpa using a x hx)
     · simpa using (embed_iff t ht he x).2 (b x hx)
@@ -99,7 +99,7 @@ theorem embed_iff : (t : Ty) → Layout.HasWith L D t → t.embeddable = true �
     obtain ⟨⟨d, n⟩, hl⟩ := Option.isSome_iff_exists.1 hl
     obtain ⟨⟨dt, m⟩, hp⟩ := Option.isSome_iff_exists.1 hp
     simp only [embedV, hl, hp, FitsV, count_of_find hl]
-    refine (bind_fill_isSome (fun x => (embedV L t x).map ([·])) xs n 1 (slotsVal d dt)).trans ?_
+    refine (bind_fill_isSome (fun x => (embedV L t x).map ([·])) xs n _ (slotsVal d dt)).trans ?_
     refine ⟨fun ⟨a, b⟩ => ⟨b, fun x hx => ?_⟩, fun ⟨a, b⟩ => ⟨fun x hx => ?_, a⟩⟩
     · exact (embed_iff t ht he x).1 (by simpa using a x hx)
     · simpa using (embed_iff t ht he x).2 (b x hx)
@@ -108,7 +108,7 @@ theorem embed_iff : (t : Ty) → Layout.HasWith L D t → t.embeddable = true �
     obtain ⟨⟨d, n⟩, hl⟩ := Option.isSome_iff_exists.1 hl
     obtain ⟨⟨dt, m⟩, hp⟩ := Option.isSome_iff_exists.1 hp
     simp only [embedV, hl, hp, FitsV, count_of_find hl]
-    refine (bind_fill_isSome (fun e => (embedV L k e.1).bind fun a => (embedV L w e.2).map fun b => [a, b]) x.1 n 2
+    refine (bind_fill_isSome (fun e => (embedV L k e.1).bind fun a => (embedV L w e.2).map fun b => [a, b]) x.1 n _
       (slotsVal d dt)).trans ?_
     have hpair : ∀ e : k.den × w.den, (((embedV L k e.1).bind fun a => (embedV L w e.2).map fun b => [a, b]).isSome ↔
         FitsV L k e.1 ∧ FitsV L w e.2) := by

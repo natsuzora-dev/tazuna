@@ -187,15 +187,16 @@ captured values fit, is no earlier than the time it is set at; where the bound q
 whose values fit. -/
 theorem timer_sound (m : MachineV r e) {bq tq : TypedScript} (hq : timerQuestions L m = .ok (bq, tq))
     (ht : Unsat L tq) (hM : ∀ n (h : n < (timerTys m).length), Sorted L (timerTys m)[n] (M.vars n))
-    (hsel : LayoutSel L M) (x : TimerVals L m M) :
+    (hsel : LayoutSorted L (timerTys m) M) (x : TimerVals L m M) :
     ((m.after.fits L.count).1 → m.after.appFits L.count x.ctx →
       ∀ y ∈ Step.timerAt x.now (m.after.fn x.ctx), x.now ≤ y.1) ∧
     (Unsat L bq → ∀ y ∈ Step.timerAt x.now (m.after.fn x.ctx), x.now ≤ y.1) := by
   obtain ⟨⟨back, c, c0⟩, he, hq'⟩ := bind_ok.1 hq
   obtain ⟨wfs, hwfs, hq'⟩ := bind_ok.1 hq'
-  obtain ⟨vars, -, hq'⟩ := bind_ok.1 hq'
+  obtain ⟨vars, hvars, hq'⟩ := bind_ok.1 hq'
   obtain ⟨dts, hdts, hq'⟩ := bind_ok.1 hq'
   cases pure_ok.1 hq'
+  have hW := hsel _ _ (need_ok.1 hdts) (mapM_need hvars)
   have hk := decode_rel _ _ _ x.hkey
   have hs := decode_rel _ _ _ x.hstate
   have hr := decode_rel _ _ _ x.hrecords
@@ -204,7 +205,7 @@ theorem timer_sound (m : MachineV r e) {bq tq : TypedScript} (hq : timerQuestion
   have hfwd : Holds M c0 → Holds M c → ∀ y ∈ Step.timerAt x.now (m.after.fn x.ctx), x.now ≤ y.1 := by
     intro hc0 hc y hy
     refine Int.not_lt.1 fun hlt => ?_
-    obtain ⟨a, ha, hna⟩ := ht.noModel M (fun n h => varSorted_of_sorted (hM n h)) (hsel _ (need_ok.1 hdts))
+    obtain ⟨a, ha, hna⟩ := ht.noModel M (fun n h => varSorted_of_sorted (hM n h)) hW
     simp only [TypedScript.script, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at ha
     rcases ha with ha | rfl | rfl | rfl
     · exact hna (hw a ha)
@@ -214,7 +215,7 @@ theorem timer_sound (m : MachineV r e) {bq tq : TypedScript} (hq : timerQuestion
   refine ⟨fun hf ha => ?_, fun hb => ?_⟩
   · have hc0 := henc.1.2 hf
     exact hfwd hc0 (((henc.2 hc0).1).2 ha)
-  · obtain ⟨a, ha, hna⟩ := hb.noModel M (fun n h => varSorted_of_sorted (hM n h)) (hsel _ (need_ok.1 hdts))
+  · obtain ⟨a, ha, hna⟩ := hb.noModel M (fun n h => varSorted_of_sorted (hM n h)) hW
     simp only [TypedScript.script, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at ha
     rcases ha with ha | rfl
     · exact (hna (hw a ha)).elim

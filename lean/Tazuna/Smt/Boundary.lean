@@ -500,10 +500,11 @@ theorem bind_isSome {α β : Type} {x : Option α} {f : α → Option β} (h : (
 theorem collItems_isSome {α : Type} {c : Ty} {item : List Ty} {xs : List α} {d n : Nat}
     (hc : L.find? c = some (d, n)) (ht : (L.find? (.tuple (Ty.bool :: item))).isSome = true)
     (hi : ∀ u ∈ item, L.Has u ∧ u.sorted = true) {e : α → Option (List Val)} {g : α → Option (SlotItems item.length)}
-    (heg : ∀ x ∈ xs, (e x).isSome = true → (g x).isSome = true) (he : ((xs.mapM e).bind (fillSlots n item.length)).isSome = true) :
+    (heg : ∀ x ∈ xs, (e x).isSome = true → (g x).isSome = true) {fv : List Val}
+    (he : ((xs.mapM e).bind (fillSlots n fv)).isSome = true) :
     ((xs.mapM g).bind (collT L c item)).isSome = true := by
   obtain ⟨zs, hzs, hfill⟩ := bind_isSome he
-  have hle := (fillSlots_isSome n item.length zs).1 hfill
+  have hle := (fillSlots_isSome n fv zs).1 hfill
   rw [mapM_some_length e xs zs hzs] at hle
   obtain ⟨ys, hys⟩ := Option.isSome_iff_exists.1
     ((mapM_isSome_iff g xs).2 fun x hx => heg x hx ((mapM_isSome_iff e xs).1 (by simp [hzs]) x hx))

@@ -32,20 +32,20 @@ theorem embed_of_relV : (t : Ty) → t.embeddable = true → (x : t.den) → (z 
     exact embedVs_of_relVs ts he x vals hr
   | .list t, he, xs, _, ⟨d, n, dt, m, sv, hl, hp, hn, _, _, h2⟩ => by
     simp only [embedV, hl, hp]
-    refine (bind_fill_isSome (fun x => (embedV L t x).map ([·])) xs n 1 (slotsVal d dt)).2 ⟨fun x hx => ?_, ?_⟩
+    refine (bind_fill_isSome (fun x => (embedV L t x).map ([·])) xs n _ (slotsVal d dt)).2 ⟨fun x hx => ?_, ?_⟩
     · obtain ⟨_, -, z, rfl, hz⟩ := forall2_mem_left h2 x hx
       simpa using embed_of_relV t he x z hz
     · have := forall2_length h2; have := occupied_length_le sv; omega
   | .bag t, he, xs, _, ⟨d, n, dt, m, sv, hl, hp, hn, _, _, ys, hys, h2⟩ => by
     simp only [embedV, hl, hp]
-    refine (bind_fill_isSome (fun x => (embedV L t x).map ([·])) xs n 1 (slotsVal d dt)).2 ⟨fun x hx => ?_, ?_⟩
+    refine (bind_fill_isSome (fun x => (embedV L t x).map ([·])) xs n _ (slotsVal d dt)).2 ⟨fun x hx => ?_, ?_⟩
     · obtain ⟨_, -, z, rfl, hz⟩ := forall2_mem_left h2 x (hys.mem_iff.2 hx)
       simpa using embed_of_relV t he x z hz
     · have := forall2_length h2; have := occupied_length_le sv; have := hys.length_eq; omega
   | .table k w, he, x, _, ⟨d, n, dt, m, sv, hl, hp, hn, _, _, ys, hys, h2⟩ => by
     simp only [Ty.embeddable, Bool.and_eq_true] at he
     simp only [embedV, hl, hp]
-    refine (bind_fill_isSome (fun e => (embedV L k e.1).bind fun a => (embedV L w e.2).map fun b => [a, b]) x.1 n 2
+    refine (bind_fill_isSome (fun e => (embedV L k e.1).bind fun a => (embedV L w e.2).map fun b => [a, b]) x.1 n _
       (slotsVal d dt)).2 ⟨fun e hx => ?_, ?_⟩
     · obtain ⟨_, -, zk, zv, rfl, hzk, hzv⟩ := forall2_mem_left h2 e (hys.mem_iff.2 hx)
       obtain ⟨a, ha⟩ := Option.isSome_iff_exists.1 (embed_of_relV k he.1 e.1 zk hzk)
@@ -367,7 +367,8 @@ theorem within_step {E : List AnyEffectSite} (chk : Checked P E T v) (senv : Ste
     rcases covered chk senv hkeys hW x hivs with ⟨inp, hmem, _, M, hM, hsel, hS, hxd, hcase⟩ | h
     · obtain ⟨gs, qs, hqs, hun⟩ := hb inp hmem
       obtain ⟨t, ht, hcodes, hsites, hcond⟩ := bound_cond chk senv inp hqs hS hinv hsupp hheld hxd hcase
-        fun q hq' hn => (hun q hq' hn).noModel_at (questions_tys L T P v senv hqs q hq') (questions_dts L T P v senv hqs q hq') M
+        fun q hq' hn => (hun q hq' hn).noModel_at (questions_tys L T P v senv hqs q hq') (questions_dts L T P v senv hqs q hq')
+          (questions_vars L T P v senv hqs q hq') M
           (fun n h => varSorted_of_sorted (hM n h)) hsel
       have E := (step_encode chk senv (decode_state hS) hinv hxd ht).2 hcodes hsites (hcase t ht)
       exact within_stepRel chk.embeddable (E.2.1 hcond) hW

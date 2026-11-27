@@ -692,16 +692,16 @@ theorem Script.abs_some {s s' : Script} (h : s.abs = some s') :
 /-- The variable of literal `n - base` among `lits`, where `n` is one. -/
 def litAtOf (lits : List String) (base n : Nat) : Option String := if base ≤ n then lits[n - base]? else none
 
-/-- Strings as codes keep models: where every assertion of a script holds in a model whose selectors on other
-constructors give values of their fields' sorts, every assertion of its abstract variant holds in a model whose
-declared variables hold the model's values with strings as codes, by one coding `c` and the script's sorts, whose
-literals' variables hold Ints, and whose selectors on other constructors give values of their fields' sorts. -/
+/-- Strings as codes keep models: where every assertion of a script holds in an SMT-LIB structure for its
+declarations (`WellSorted`), every assertion of its abstract variant holds in one for the variant's, whose declared
+variables hold the model's values with strings as codes, by one coding `c` and the script's sorts, and whose literals'
+variables hold Ints. -/
 theorem abs_model {s s' : Script} (h : s.abs = some s') (M : Model) (hM : ∀ a ∈ s.asserts, (a.denote M).toBool = true)
-    (hS : SelSorted s.datatypes M) :
+    (hS : WellSorted s.datatypes s.vars M) :
     ∃ (M' : Model) (c : String → Int),
       (∀ n σ, s.vars[n]? = some σ → M'.vars n = scodeV s.datatypes c σ (M.vars n)) ∧
       (∀ n, s.vars.length ≤ n → ∃ i, M'.vars n = .int i) ∧
-      SelSorted s'.datatypes M' ∧ ∀ a ∈ s'.asserts, (a.denote M').toBool = true := by
+      WellSorted s'.datatypes s'.vars M' ∧ ∀ a ∈ s'.asserts, (a.denote M').toBool = true := by
   obtain ⟨ps, hps, hall, rfl⟩ := Script.abs_some h
   rw [(Term.scodesC_ok s.asserts {} SCodeCache.ok_empty).1] at hps
   let lits := s.lits
@@ -715,8 +715,20 @@ theorem abs_model {s s' : Script} (h : s.abs = some s') (M : Model) (hM : ∀ a 
   have h0 : "" ∈ S := List.mem_cons_self ..
   have hlits : ∀ x ∈ lits, x ∈ S := fun x hx => List.mem_cons_of_mem _ (List.mem_append_left _ hx)
   have hslt : ∀ x ∈ Term.sltStrss M s.asserts, x ∈ S := fun x hx => List.mem_cons_of_mem _ (List.mem_append_right _ hx)
-  refine ⟨scodedModel s.datatypes s.vars litAt S M, codeOf S, fun n σ hn => by simp [scodedModel, hn],
-    fun n hn => by simp [scodedModel, List.getElem?_eq_none hn], selSorted_scoded hS, ?_⟩
+  have hv : ∀ n σ, s.vars[n]? = some σ → (scodedModel s.datatypes s.vars litAt S M).vars n =
+      scodeV s.datatypes (codeOf S) σ (M.vars n) := fun n σ hn => by simp [scodedModel, hn]
+  have hi : ∀ n, s.vars.length ≤ n → ∃ i, (scodedModel s.datatypes s.vars litAt S M).vars n = .int i :=
+    fun n hn => by simp [scodedModel, List.getElem?_eq_none hn]
+  refine ⟨scodedModel s.datatypes s.vars litAt S M, codeOf S, hv, hi, ⟨fun n σ hn => ?_, selSorted_scoded hS.2⟩, ?_⟩
+  · by_cases hlt : n < s.vars.length
+    · rw [List.getElem?_append_left (by simpa using hlt), List.getElem?_map] at hn
+      obtain ⟨σ₀, h₀, rfl⟩ := Option.map_eq_some_iff.1 hn
+      rw [hv n σ₀ h₀]
+      exact scodeV_inSrt σ₀ _ (hS.1 n σ₀ h₀)
+    · rw [List.getElem?_append_right (by simpa using hlt), List.getElem?_map] at hn
+      obtain ⟨_, -, rfl⟩ := Option.map_eq_some_iff.1 hn
+      obtain ⟨i, e⟩ := hi n (by omega)
+      rw [e]; trivial
   intro a ha
   rcases List.mem_append.1 ha with ha | ha
   · -- an assertion's variant

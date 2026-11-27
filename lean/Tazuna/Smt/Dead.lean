@@ -114,17 +114,21 @@ theorem unshown_at (chk : Checked P E T v) (he : v.Equivariant) (senv : StepEnv 
     ⟨inp, hmem, hc, M, hM, hsel, hS, hxd, hcase⟩ | ⟨-, -, -, hq | hf⟩
   · obtain ⟨a, ha, hshow, hor⟩ := hl inp hmem
     have hun : ∀ q : TypedScript, q.tys = stateTys v (shapes v) ++ inp.tys → L.datatypes? = some q.datatypes →
-        Unsat L q → ∃ c ∈ q.script.asserts, ¬ Holds M c := fun q ht hd hu =>
-      hu.noModel_at ht hd M (fun n h => varSorted_of_sorted (hM n h)) hsel
-    refine step_unshown chk senv ha (fun q hq => hun q ?_ ?_ (hshow q hq)) hS (run_inv T chk.reach _ Step.init_inv is)
+        q.tys.mapM L.srt? = some q.vars → Unsat L q → ∃ c ∈ q.script.asserts, ¬ Holds M c := fun q ht hd hv hu =>
+      hu.noModel_at ht hd hv M (fun n h => varSorted_of_sorted (hM n h)) hsel
+    refine step_unshown chk senv ha (fun q hq => hun q ?_ ?_ ?_ (hshow q hq)) hS (run_inv T chk.reach _ Step.init_inv is)
       hsupp (Tazuna.Ir.run_invariants T _ is hinit) hxd hcase
-      (hor.imp (fun hu => hun _ (stepAsk_tys L T P v senv ha _) (stepAsk_dts L T P v senv ha _) hu) hF) hno
+      (hor.imp (fun hu => hun _ (stepAsk_tys L T P v senv ha _) (stepAsk_dts L T P v senv ha _)
+        (stepAsk_vars L T P v senv ha _) hu) hF) hno
     all_goals
       simp only [showsAsk] at hq
       split at hq
       · cases hq
       · cases hq
-        first | exact stepAsk_tys L T P v senv ha _ | exact stepAsk_dts L T P v senv ha _
+        first
+          | exact stepAsk_tys L T P v senv ha _
+          | exact stepAsk_dts L T P v senv ha _
+          | exact stepAsk_vars L T P v senv ha _
   · obtain ⟨i, c, y, rfl⟩ := hq
     exact query_unshown hg _ i c y
   · exact (hno _ hf).elim

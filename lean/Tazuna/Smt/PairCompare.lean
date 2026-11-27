@@ -170,14 +170,6 @@ theorem pendingOf_alike {R : PBij} {e : Ty} : (shs : List (PendingShape e)) → 
   | _ :: shs, i, j, .inr _, .inr _, h => pendingOf_alike shs i j h
   | _ :: _, _, _, .inl _, .inr _, h | _ :: _, _, _, .inr _, .inl _, h => h.elim
 
-theorem pendingEntry_data {e : Ty} (shs : List (PendingShape e)) : (pendingEntry shs).isData = true := by
-  induction shs with
-  | nil => rfl
-  | cons sh shs ih =>
-    have h := sh.hdata
-    simp only [pendingEntry, Ty.isData, List.map_cons, Ty.isDatass, Bool.and_eq_true] at ih h ⊢
-    exact ⟨h, ih⟩
-
 /-- The requests a step writes from the wire id `n0` have the ids from `n0` on. -/
 theorem writes_ids {ds : List (String × DeclaredV)} {e : Ty} : {effs : List (Sender × EffectV e)} → {n0 : Nat} →
     {ps : List (Step.Pending e)} → Forall2 (Step.Writes ds) (effs.zipIdx n0) ps →

@@ -1,5 +1,6 @@
 import Tazuna.Smt.Verdict
 import Tazuna.Smt.CheckedState
+import Tazuna.Smt.SrtVal
 
 /-! The questions cover every step within the slots: a state a run reaches whose values fit its slots and an input
 whose values fit theirs are some well-sorted model's, in the case one of the input kind's questions asks about. For
@@ -76,13 +77,14 @@ noncomputable def layoutField (L : Layout) (d k j : Nat) : Val := by
 -- The model reads only the variables a script declares; the others' value is never asked.
 set_option linter.tazuna.silentDefault false in
 /-- A model whose variables hold the values `ws` in order, and whose selectors on other constructors give values of
-their fields' sorts (`layoutSel_coverModel`). -/
+their fields' sorts (`selSorted_coverModel`). -/
 noncomputable def coverModel (L : Layout) (ws : List Val) : Model :=
   { vars := fun n => ws.getD n (.bool false), divZero := fun _ => 0, modZero := fun _ => 0,
     selOther := fun d k j _ => layoutField L d k j, defs := fun _ => .bool false, funs := fun _ _ => 0 }
 
-theorem layoutSel_coverModel (L : Layout) (ws : List Val) : LayoutSel L (coverModel L ws) := by
-  intro dts hd e k j s v hf hinh
+theorem selSorted_coverModel (L : Layout) (ws : List Val) {dts : List Datatype} (hd : L.datatypes? = some dts) :
+    SelSorted dts (coverModel L ws) := by
+  intro e k j s v hf hinh
   have h : ∃ s w, fieldSrt? dts e k j = some s ∧ Val.InSrt dts s w := ⟨s, hinh.choose, hf, hinh.choose_spec⟩
   simp only [coverModel, layoutField, hd, h, dite_true]
   obtain ⟨hf', hw⟩ := h.choose_spec.choose_spec
@@ -115,6 +117,74 @@ theorem embedState_sorted {shs : List (PendingShape v.event)} {s : State v} {pv 
 
 theorem coverModel_vars {ws : List Val} {j : Nat} {w : Val} (h : ws[j]? = some w) : (coverModel L ws).vars j = w := by
   simp [coverModel, h]
+
+/-- A model is an SMT-LIB structure for the layout's questions over `tys` where its selectors on other constructors
+are and each variable holds a value of its type's sort. -/
+theorem layoutSorted_of {tys : List Ty} (hS : ∀ dts, L.datatypes? = some dts → SelSorted dts M)
+    (hv : ∀ n t, tys[n]? = some t → ∀ dts σ, L.datatypes? = some dts → L.srt? t = some σ → Val.InSrt dts σ (M.vars n)) :
+    LayoutSorted L tys M := by
+  intro dts vars hd hvars
+  refine ⟨fun n σ hn => ?_, hS dts hd⟩
+  rw [mapM_getElem? hvars n] at hn
+  cases ht : tys[n]? with
+  | none => simp [ht] at hn
+  | some t => simp only [ht, Option.bind_some] at hn; exact hv n t ht dts σ hd hn
+
+theorem layoutSorted_coverModel {tys : List Ty} {ws : List Val} (h : Forall2 (SrtVal L) tys ws)
+    (hd : ∀ t ∈ tys, t.isData = true) : LayoutSorted L tys (coverModel L ws) :=
+  layoutSorted_of (fun _ h => selSorted_coverModel L ws h) fun n t ht dts σ hD hs => by
+    obtain ⟨w, hw, hsw⟩ := forall2_getElem? h ht
+    rw [coverModel_vars hw]
+    exact hsw (hd t (List.mem_of_getElem? ht)) dts σ hD hs
+
+theorem embedMachines_srtVal : {ms : List (MachineV v.records v.event)} → (sms : Step.Machines ms) → (ws : List Val) →
+    embedMachines L sms = some ws → Forall2 (SrtVal L) (ms.map (·.table)) ws
+  | _, .nil, _, h => by simp only [embedMachines, Option.some.injEq] at h; subst h; trivial
+  | _ :: _, .cons _ sms, _, h => by
+    simp only [embedMachines] at h
+    split at h
+    · obtain ⟨w, hw, h⟩ := bind_some.1 h
+      obtain ⟨ws', hws', rfl⟩ := map_some.1 h
+      exact ⟨embedV_srtVal hw, embedMachines_srtVal sms ws' hws'⟩
+    · cases h
+
+theorem embedState_srtVal {shs : List (PendingShape v.event)} {s : State v} {pv : PendingVal shs} {vals : List Val}
+    (h : embedState L s pv = some vals) : Forall2 (SrtVal L) (stateTys v shs) vals := by
+  obtain ⟨r, hrec, h⟩ := bind_some.1 h
+  obtain ⟨p, hp, h⟩ := bind_some.1 h
+  obtain ⟨ws, hws, rfl⟩ := map_some.1 h
+  exact ⟨embedV_srtVal hrec, srtVal_int ⟨_, rfl⟩, srtVal_int ⟨_, rfl⟩, srtVal_int ⟨_, rfl⟩,
+    embedV_srtVal hp, embedMachines_srtVal _ ws hws⟩
+
+/-- The state's types are data. -/
+theorem stateTys_data (v : ServiceV) : ∀ t ∈ stateTys v (shapes v), t.isData = true := by
+  intro t ht
+  simp only [stateTys, List.mem_append, List.mem_cons, List.mem_map, List.not_mem_nil, or_false] at ht
+  rcases ht with (rfl | rfl | rfl | rfl | rfl) | ⟨m, -, rfl⟩
+  · exact v.records_data
+  · rfl
+  · rfl
+  · rfl
+  · simp [pendingTable, Ty.isData, pendingEntry_data]
+  · exact m.table_data
+
+/-- The types of the inputs a step question asks about are data: the answer shapes are those whose answers are. -/
+theorem stepInputs_data {v : ServiceV} {shs : List (PendingShape v.event)} {n b : Nat} (hc : v.caller.isData = true)
+    {inp : SymInput v shs n} (h : inp ∈ stepInputs v shs n b) :
+    ∀ t ∈ inp.tys, t.isData = true := by
+  simp only [stepInputs, List.mem_append, List.mem_map, List.mem_flatMap, List.mem_cons, List.not_mem_nil,
+    or_false] at h
+  rcases h with ((⟨i, -, rfl⟩ | ⟨k, hk, j, -, rfl⟩) | ⟨i, -, rfl⟩) | rfl <;>
+    simp only [SymInput.tys, List.mem_cons, List.not_mem_nil, or_false]
+  · rintro t (rfl | rfl)
+    · exact hc
+    · exact CommandV.input_data _
+  · simp only [answerShapes, List.mem_filter] at hk
+    rintro t (rfl | rfl)
+    · rfl
+    · exact hk.2
+  · rintro t rfl; exact SubscriptionV.event_data _
+  · rintro t rfl; rfl
 
 theorem forall2_sorted_vars {tys : List Ty} {ws : List Val} (h : Forall2 (Sorted L) tys ws) :
     ∀ j (hj : j < tys.length), Sorted L tys[j] ((coverModel L ws).vars j) := by
@@ -237,14 +307,18 @@ theorem covered {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv
   have hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some s :=
     decode_embedState 0 T s pv hpv (fun sm h => (hkeys sm h).2) vals hvals hst
   have hsorted := embedState_sorted hvals
+  have hsrt := embedState_srtVal hvals
   have hc := chk.callerData
+  have hdata : ∀ inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v), ∀ t ∈ stateTys v (shapes v) ++ inp.tys,
+      t.isData = true := fun inp hin t ht => (List.mem_append.1 ht).elim (stateTys_data v t) (stepInputs_data hc hin t)
   cases x with
   | command i caller input =>
     obtain ⟨c, hc', h⟩ := bind_some.1 hx
     obtain ⟨w, hw, rfl⟩ := map_some.1 h
     refine .inl ⟨.command i (.var (stateWidth v)) (.var (stateWidth v + 1)),
       by simp [stepInputs], hc, M, forall2_sorted_vars (forall2_append hsorted ⟨sorted_of_embed hc', sorted_of_embed hw, trivial⟩),
-      layoutSel_coverModel L _, hS, ?_, fun t ht => by rw [encodeStep_case_tt ht (by simp) (by simp)]; exact holds_tt⟩
+      layoutSorted_coverModel (forall2_append hsrt ⟨embedV_srtVal hc', embedV_srtVal hw, trivial⟩)
+        (hdata _ (by simp [stepInputs])), hS, ?_, fun t ht => by rw [encodeStep_case_tt ht (by simp) (by simp)]; exact holds_tt⟩
     have h0 := hin 0 (by simp)
     have h1 := hin 1 (by simp)
     simp only [List.getElem_cons_zero, List.getElem_cons_succ, Nat.add_zero] at h0 h1
@@ -258,7 +332,7 @@ theorem covered {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv
     obtain ⟨w, hw, rfl⟩ := map_some.1 hx
     refine .inl ⟨.event i (.var (stateWidth v)), by simp [stepInputs], hc, M,
       forall2_sorted_vars (forall2_append hsorted ⟨sorted_of_embed hw, trivial⟩),
-        layoutSel_coverModel L _, hS, ?_,
+        layoutSorted_coverModel (forall2_append hsrt ⟨embedV_srtVal hw, trivial⟩) (hdata _ (by simp [stepInputs])), hS, ?_,
       fun t ht => by rw [encodeStep_case_tt ht (by simp) (by simp)]; exact holds_tt⟩
     have h0 := hin 0 (by simp)
     simp only [List.getElem_cons_zero, Nat.add_zero] at h0
@@ -268,7 +342,8 @@ theorem covered {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv
     cases hx
     refine .inl ⟨.clock (.var (stateWidth v)), by simp [stepInputs], hc, M,
       forall2_sorted_vars (forall2_append hsorted ⟨⟨_, rfl⟩, trivial⟩),
-        layoutSel_coverModel L _, hS, ?_,
+        layoutSorted_coverModel (forall2_append hsrt ⟨srtVal_int ⟨_, rfl⟩, trivial⟩)
+          (hdata _ (by simp [stepInputs])), hS, ?_,
       fun t ht => by rw [encodeStep_case_tt ht (by simp) (by simp)]; exact holds_tt⟩
     have h0 := hin 0 (by simp)
     simp only [List.getElem_cons_zero, Nat.add_zero] at h0
@@ -309,7 +384,8 @@ theorem covered {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv
           refine .inl ⟨.answer k j (.var (stateWidth v)) (.var (stateWidth v + 1)),
             by simp only [stepInputs, answerShapes]; simpa using htd, hc, M,
             forall2_sorted_vars (forall2_append hsorted ⟨⟨_, rfl⟩, sorted_of_embed hw, trivial⟩),
-        layoutSel_coverModel L _, hS, ?_,
+            layoutSorted_coverModel (forall2_append hsrt ⟨srtVal_int ⟨_, rfl⟩, embedV_srtVal hw, trivial⟩)
+              (hdata _ (by simp only [stepInputs, answerShapes]; simpa using htd)), hS, ?_,
             fun t ht => by rw [encodeStep_answer_case ht]; exact hhit⟩
           simp [SymInput.decode, decodeAnswer, Term.denote, h0, h1, natOf]
           exact ⟨htd, _, decode_embed _ _ _ hw, Ty.down_up _ _ _⟩
@@ -350,8 +426,8 @@ theorem fault_sound {E : List AnyEffectSite} (chk : Checked P E T v) (he : v.Equ
     · obtain ⟨hc, M, hM, hsel, hS, hxd, hcase⟩ := hcov
       exact question_fault chk senv inp hqs hS (run_inv T chk.reach _ Step.init_inv is) hsupp
         (Tazuna.Ir.run_invariants T _ is hinit) hxd hcase (.inr hfit) f hf fun q hq' hg =>
-          (htg q hq' hg).noModel_at (questions_tys L T P v senv hqs q hq') (questions_dts L T P v senv hqs q hq') M
-            (fun n h => varSorted_of_sorted (hM n h)) hsel
+          (htg q hq' hg).noModel_at (questions_tys L T P v senv hqs q hq') (questions_dts L T P v senv hqs q hq')
+            (questions_vars L T P v senv hqs q hq') M (fun n h => varSorted_of_sorted (hM n h)) hsel
   · exact h.1 f hf
 
 end

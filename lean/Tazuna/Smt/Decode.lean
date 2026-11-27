@@ -85,11 +85,77 @@ def decodeAlts (d : Nat) : (k : Nat) → (vs : List (List Ty)) → Val → Optio
     | _ => none
 end
 
-/-- The slots of a collection holding the item values `zs` first, then free slots up to `n`; none when the items
-outnumber the slots. -/
-def fillSlots (n w : Nat) (zs : List (List Val)) : Option (List (Bool × List Val)) :=
-  if zs.length ≤ n then some (zs.map (true, ·) ++ List.replicate (n - zs.length) (false, List.replicate w (.bool false)))
-  else none
+/-- The fields of a constructor value; none of another value. -/
+def Val.args : Val → List Val
+  | .ctor _ _ vals => vals
+  | _ => []
+
+-- A missing slot or field is fixed from any value: `fixV` puts it in its sort whatever it was.
+set_option linter.tazuna.silentDefault false in
+/-- The flag and items of each of `n` slots of a collection whose slot values are `vals`, the items through `fix`; a
+missing or malformed slot counts as free. -/
+def fixSlots (fix : List Val → List Val) : Nat → List Val → List (Bool × List Val)
+  | 0, _ => []
+  | n + 1, vals => (match vals.headD default with
+    | .ctor _ _ (.bool b :: zs) => (b, fix zs)
+    | _ => (false, fix [])) :: fixSlots fix n vals.tail
+
+-- A missing slot or field is fixed from any value: `fixV` puts it in its sort whatever it was.
+set_option linter.tazuna.silentDefault false in
+mutual
+/-- The value with each part outside the type's sort replaced by one inside it, where the layout has the type: a value
+the type's sort holds is its own, and an SMT-LIB model holds only such values (`fixV_inSrt`). A free slot's items get
+one this way too. -/
+def fixV : Ty → Val → Val
+  | .int, w | .date, w | .dsl .fresh _, w => match w with
+    | .int n => .int n
+    | _ => .int 0
+  | .str, w => match w with
+    | .str s => if inDomain s then .str s else .str ""
+    | _ => .str ""
+  | .id, w => match L.find? .id with
+    | some (d, _) => match w with
+      | .ctor _ 0 [.int m, .int i] => .ctor d 0 [.int m, .int i]
+      | .ctor _ 1 [.str s] => .ctor d 1 [.str (if inDomain s then s else "")]
+      | _ => .ctor d 1 [.str ""]
+    | none => w
+  | .adt 0 _ _, w => match w with
+    | .bool b => .bool b
+    | _ => .bool false
+  | .adt (i + 1) a vs, w => match L.find? (.adt (i + 1) a vs) with
+    | some (d, _) => match w with
+      | .ctor _ k vals => if k < vs.length then .ctor d k (fixAlts vs k vals) else .ctor d 0 (fixAlts vs 0 [])
+      | _ => .ctor d 0 (fixAlts vs 0 [])
+    | none => w
+  | .tuple ts, w => match L.find? (.tuple ts) with
+    | some (d, _) => .ctor d 0 (fixVs ts w.args)
+    | none => w
+  | .bag t, w => match L.find? (.bag t), L.find? (.tuple [Ty.bool, t]) with
+    | some (d, n), some (dt, _) => slotsVal d dt (fixSlots (fun zs => [fixV t (zs.headD default)]) n w.args)
+    | _, _ => w
+  | .list t, w => match L.find? (.list t), L.find? (.tuple [Ty.bool, t]) with
+    | some (d, n), some (dt, _) => slotsVal d dt (fixSlots (fun zs => [fixV t (zs.headD default)]) n w.args)
+    | _, _ => w
+  | .table k v, w => match L.find? (.table k v), L.find? (.tuple [Ty.bool, k, v]) with
+    | some (d, n), some (dt, _) =>
+      slotsVal d dt (fixSlots (fun zs => [fixV k (zs.headD default), fixV v (zs.tail.headD default)]) n w.args)
+    | _, _ => w
+  | _, w => w
+/-- The fields `vals` fixed at the types `ts`, one per type. -/
+def fixVs : List Ty → List Val → List Val
+  | [], _ => []
+  | t :: ts, vals => fixV t (vals.headD default) :: fixVs ts vals.tail
+/-- The fields `vals` fixed at the types of variant `k` of `vs`. -/
+def fixAlts : List (List Ty) → Nat → List Val → List Val
+  | [], _, _ => []
+  | fs :: _, 0, vals => fixVs fs vals
+  | _ :: vs, k + 1, vals => fixAlts vs k vals
+end
+
+/-- The slots of a collection holding the item values `zs` first, then free slots up to `n` holding the items `item`;
+none when the items outnumber the slots. -/
+def fillSlots (n : Nat) (item : List Val) (zs : List (List Val)) : Option (List (Bool × List Val)) :=
+  if zs.length ≤ n then some (zs.map (true, ·) ++ List.replicate (n - zs.length) (false, item)) else none
 
 mutual
 /-- The SMT value that codes a value, as `RelV` relates them. -/
@@ -108,16 +174,16 @@ def embedV : (t : Ty) → t.den → Option Val
     | none => none
   | .bag t, xs => match L.find? (.bag t), L.find? (.tuple [Ty.bool, t]) with
     | some (d, n), some (dt, _) =>
-      ((xs.mapM fun x => (embedV t x).map ([·])).bind (fillSlots n 1)).map (slotsVal d dt)
+      ((xs.mapM fun x => (embedV t x).map ([·])).bind (fillSlots n [fixV L t default])).map (slotsVal d dt)
     | _, _ => none
   | .list t, xs => match L.find? (.list t), L.find? (.tuple [Ty.bool, t]) with
     | some (d, n), some (dt, _) =>
-      ((xs.mapM fun x => (embedV t x).map ([·])).bind (fillSlots n 1)).map (slotsVal d dt)
+      ((xs.mapM fun x => (embedV t x).map ([·])).bind (fillSlots n [fixV L t default])).map (slotsVal d dt)
     | _, _ => none
   | .table k w, x => match L.find? (.table k w), L.find? (.tuple [Ty.bool, k, w]) with
     | some (d, n), some (dt, _) =>
       ((x.1.mapM fun e => (embedV k e.1).bind fun a => (embedV w e.2).map fun b => [a, b]).bind
-        (fillSlots n 2)).map (slotsVal d dt)
+        (fillSlots n [fixV L k default, fixV L w default])).map (slotsVal d dt)
     | _, _ => none
   | _, _ => none
 def embedVs : (ts : List Ty) → Ty.dens ts → Option (List Val)
@@ -191,7 +257,8 @@ theorem mapM_forall2 {α β : Type} {E : α → β → Prop} {f : β → Option 
     obtain ⟨a, ha, as', has, rfl⟩ := h
     exact ⟨hf b a ha, mapM_forall2 hf bs as' has⟩
 
-theorem occupied_fill (n w : Nat) (zs : List (List Val)) (sv : List (Bool × List Val)) (h : fillSlots n w zs = some sv) :
+theorem occupied_fill (n : Nat) (item : List Val) (zs : List (List Val)) (sv : List (Bool × List Val))
+    (h : fillSlots n item zs = some sv) :
     occupied sv = zs ∧ sv.length = n := by
   unfold fillSlots at h
   split at h
@@ -200,8 +267,8 @@ theorem occupied_fill (n w : Nat) (zs : List (List Val)) (sv : List (Bool × Lis
     simp [occupied, List.filterMap_append, Function.comp_def]
   · cases h
 
-theorem fill_width {n w : Nat} {zs : List (List Val)} {sv : List (Bool × List Val)} (hz : ∀ z ∈ zs, z.length = w)
-    (h : fillSlots n w zs = some sv) : ∀ p ∈ sv, p.2.length = w := by
+theorem fill_width {n w : Nat} {item : List Val} {zs : List (List Val)} {sv : List (Bool × List Val)}
+    (hz : ∀ z ∈ zs, z.length = w) (hi : item.length = w) (h : fillSlots n item zs = some sv) : ∀ p ∈ sv, p.2.length = w := by
   unfold fillSlots at h
   split at h
   · cases h
@@ -209,7 +276,7 @@ theorem fill_width {n w : Nat} {zs : List (List Val)} {sv : List (Bool × List V
     simp only [List.mem_append, List.mem_map, List.mem_replicate] at hp
     rcases hp with ⟨z, hz', rfl⟩ | ⟨_, rfl⟩
     · exact hz z hz'
-    · simp
+    · exact hi
   · cases h
 
 theorem bind_some {α β : Type} {o : Option α} {f : α → Option β} {b : β} :
@@ -393,8 +460,8 @@ theorem decode_embed : (t : Ty) → (x : t.den) → (v : Val) → embedV L t x =
       obtain ⟨sv, h1, rfl⟩ := map_some.1 h
       obtain ⟨zs, hzs, hsv⟩ := bind_some.1 h1
       have hw := fill_width (mapM_lengths (w := 1) (fun a z hz => by
-        obtain ⟨_, _, rfl⟩ := map_some.1 hz; rfl) _ _ hzs) hsv
-      obtain ⟨hocc, hn⟩ := occupied_fill n 1 zs sv hsv
+        obtain ⟨_, _, rfl⟩ := map_some.1 hz; rfl) _ _ hzs) rfl hsv
+      obtain ⟨hocc, hn⟩ := occupied_fill n _ zs sv hsv
       have hc := collView_slots (d := d) (dt := dt) sv hw
       rw [hn] at hc
       simp only [decodeV, hf, hft, hc]
@@ -411,8 +478,8 @@ theorem decode_embed : (t : Ty) → (x : t.den) → (v : Val) → embedV L t x =
       obtain ⟨sv, h1, rfl⟩ := map_some.1 h
       obtain ⟨zs, hzs, hsv⟩ := bind_some.1 h1
       have hw := fill_width (mapM_lengths (w := 1) (fun a z hz => by
-        obtain ⟨_, _, rfl⟩ := map_some.1 hz; rfl) _ _ hzs) hsv
-      obtain ⟨hocc, hn⟩ := occupied_fill n 1 zs sv hsv
+        obtain ⟨_, _, rfl⟩ := map_some.1 hz; rfl) _ _ hzs) rfl hsv
+      obtain ⟨hocc, hn⟩ := occupied_fill n _ zs sv hsv
       have hc := collView_slots (d := d) (dt := dt) sv hw
       rw [hn] at hc
       simp only [decodeV, hf, hft, hc]
@@ -430,8 +497,8 @@ theorem decode_embed : (t : Ty) → (x : t.den) → (v : Val) → embedV L t x =
       obtain ⟨zs, hzs, hsv⟩ := bind_some.1 h1
       have hw := fill_width (mapM_lengths (w := 2) (fun a z hz => by
         obtain ⟨_, _, h⟩ := bind_some.1 hz
-        obtain ⟨_, _, rfl⟩ := map_some.1 h; rfl) _ _ hzs) hsv
-      obtain ⟨hocc, hn⟩ := occupied_fill n 2 zs sv hsv
+        obtain ⟨_, _, rfl⟩ := map_some.1 h; rfl) _ _ hzs) rfl hsv
+      obtain ⟨hocc, hn⟩ := occupied_fill n _ zs sv hsv
       have hc := collView_slots (d := d) (dt := dt) sv hw
       rw [hn] at hc
       have hx : zs.mapM (fun

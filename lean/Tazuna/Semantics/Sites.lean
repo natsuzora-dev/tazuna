@@ -539,6 +539,14 @@ def shapes (v : ServiceV) : List (PendingShape v.event) :=
 names no type of the program; the variants tell it apart. -/
 def pendingEntry {e : Ty} (shs : List (PendingShape e)) : Ty := .adt 1000000 [] (shs.map PendingShape.fields)
 
+theorem pendingEntry_data {e : Ty} (shs : List (PendingShape e)) : (pendingEntry shs).isData = true := by
+  induction shs with
+  | nil => rfl
+  | cons sh shs ih =>
+    have h := sh.hdata
+    simp only [pendingEntry, Ty.isData, List.map_cons, Ty.isDatass, Bool.and_eq_true] at ih h ⊢
+    exact ⟨h, ih⟩
+
 /-- The table type that codes pending requests of the shapes: wire ids to entries. Wire ids are naturals, as the
 fresh counter's values are, so the keys have the counter's type. -/
 def pendingTable {e : Ty} (shs : List (PendingShape e)) : Ty := .table (.dsl .fresh []) (pendingEntry shs)

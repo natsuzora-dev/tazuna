@@ -474,6 +474,16 @@ def questions (inp : SymInput v (shapes v) senv.nT) :
     fun g => (a.t.out.breaks cmd g).const?.map Val.toBool != some false
   pure (targets, ⟨inp, none, a.bound⟩ :: targets.map fun g => ⟨inp, some g, a.ask (a.t.out.breaks cmd g)⟩)
 
+theorem mapM_need {α : Type} {w : Ty → Refusal} {f : Ty → Option α} : {tys : List Ty} → {xs : List α} →
+    tys.mapM (fun t => need (w t) (f t)) = .ok xs → tys.mapM f = some xs
+  | [], xs, h => by simp only [List.mapM_nil] at h ⊢; cases pure_ok.1 h; rfl
+  | t :: tys, xs, h => by
+    simp only [List.mapM_cons] at h ⊢
+    obtain ⟨x, hx, h⟩ := bind_ok.1 h
+    obtain ⟨ys, hys, h⟩ := bind_ok.1 h
+    cases pure_ok.1 h
+    simp [need_ok.1 hx, mapM_need hys]
+
 /-- Every question about an input kind has the state's variables and then the input's. -/
 theorem stepAsk_tys {inp : SymInput v (shapes v) senv.nT} {a : StepAsk v} (ha : stepAsk L T P v senv inp = .ok a)
     (X : List Term) : (a.script X).tys = stateTys v (shapes v) ++ inp.tys := by
@@ -501,6 +511,28 @@ theorem questions_dts {inp : SymInput v (shapes v) senv.nT} {gs : List Target} {
   rcases hq' with rfl | ⟨g, -, rfl⟩
   · exact stepAsk_dts L T P v senv ha _
   · exact stepAsk_dts L T P v senv ha _
+
+/-- Every question about an input kind declares each variable at its type's sort. -/
+theorem stepAsk_vars {inp : SymInput v (shapes v) senv.nT} {a : StepAsk v} (ha : stepAsk L T P v senv inp = .ok a)
+    (X : List Term) : (a.script X).tys.mapM L.srt? = some (a.script X).vars := by
+  simp only [stepAsk] at ha
+  iterate 8 obtain ⟨_, -, ha⟩ := bind_ok.1 ha
+  obtain ⟨vars, hvars, ha⟩ := bind_ok.1 ha
+  obtain ⟨_, -, ha⟩ := bind_ok.1 ha
+  cases pure_ok.1 ha
+  exact mapM_need hvars
+
+theorem questions_vars {inp : SymInput v (shapes v) senv.nT} {gs : List Target}
+    {qs : List (Question v (shapes v) senv.nT)} (hq : questions L T P v senv inp = .ok (gs, qs)) :
+    ∀ q ∈ qs, q.ask.tys.mapM L.srt? = some q.ask.vars := by
+  simp only [questions] at hq
+  obtain ⟨a, ha, hq⟩ := bind_ok.1 hq
+  cases pure_ok.1 hq
+  intro q hq'
+  simp only [List.mem_cons, List.mem_map] at hq'
+  rcases hq' with rfl | ⟨g, -, rfl⟩
+  · exact stepAsk_vars L T P v senv ha _
+  · exact stepAsk_vars L T P v senv ha _
 
 theorem questions_tys {inp : SymInput v (shapes v) senv.nT} {gs : List Target} {qs : List (Question v (shapes v) senv.nT)}
     (hq : questions L T P v senv inp = .ok (gs, qs)) : ∀ q ∈ qs, q.ask.tys = stateTys v (shapes v) ++ inp.tys := by

@@ -781,15 +781,16 @@ end
 
 /-- Names as codes keep models: where every assertion holds in a model, every assertion of the variant with names as
 codes holds in a model whose variables `n < k` hold the model's values with names as codes, by one coding `c`, and
-whose selectors on other constructors give values of their fields' sorts where the model's do, `d` being the id
+which is an SMT-LIB structure for the coded declarations where the model is one for `dts` and `vars`, `d` being the id
 datatype of `dts`. -/
 theorem code_model {d : Nat} {ts ts' : List Term} (hc : Term.codes d ts = some ts') (M : Model) (k : Nat)
-    (hM : ∀ a ∈ ts, (a.denote M).toBool = true) {dts : List Datatype} (hd : dts[d]? = some idDatatype)
-    (hS : SelSorted dts M) :
+    (hM : ∀ a ∈ ts, (a.denote M).toBool = true) {dts : List Datatype} {vars : List Srt} (hd : dts[d]? = some idDatatype)
+    (hS : WellSorted dts vars M) :
     ∃ (M' : Model) (c : String → Int), (∀ n < k, Coded d c (M.vars n) (M'.vars n)) ∧
-      SelSorted (dts.set d codedIdDatatype) M' ∧ ∀ a ∈ ts', (a.denote M').toBool = true := by
+      WellSorted (dts.set d codedIdDatatype) vars M' ∧ ∀ a ∈ ts', (a.denote M').toBool = true := by
   let S := ((List.range k).flatMap fun n => (M.vars n).names d) ++ Term.nameStrss d M ts
-  refine ⟨codedModel d S M, rank S, fun n hn => coded_codeV _ fun s hs => ?_, selSorted_codedModel hd hS, ?_⟩
+  refine ⟨codedModel d S M, rank S, fun n hn => coded_codeV _ fun s hs => ?_,
+    ⟨fun n σ hn => codeV_inSrt hd σ _ (hS.1 n σ hn), selSorted_codedModel hd hS.2⟩, ?_⟩
   · exact List.mem_append_left _ (List.mem_flatMap.2 ⟨n, List.mem_range.2 hn, hs⟩)
   · exact codes_holds ts ts' hc hM (fun s hs => List.mem_append_right _ hs)
 

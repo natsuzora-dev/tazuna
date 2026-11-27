@@ -8,6 +8,7 @@ every question over it unsat whatever it asked. A script declares its variables 
 its datatypes from `Layout.datatypes?`; where both are found, every data
 type's sort holds a value of `Sorted` (`sorted_exists`) and every effect type's a value of `EffSorted`
 (`varSorted_exists`): a constructor whose fields' sorts are found too, or a collection whose slots are all free.
+`fixV` makes such a value one of its SMT sort too, so some SMT-LIB structure for the declarations exists.
 `sorts_inhabited` gives the `sorts` field of `Unsat` for the scripts of each question family: an input kind's step and
 bound questions (`questions`), a pair of own kinds' (`pairQuestions`) and a timer machine's (`timerQuestions`). -/
 
@@ -127,22 +128,43 @@ theorem sortedVs_exists (hd : L.datatypes? = some dts) : (ts : List Ty) → (∀
     exact ⟨w :: ws, hw, hws⟩
 end
 
-/-- A data type's or an effect type's sort that a script can declare holds a value of the sort it declares. -/
+/-- A data type's or an effect type's sort that a script can declare holds a value of the sort it declares, which is
+one of its SMT sort too. -/
 theorem varSorted_exists (hL : SortedLayout L) (hd : L.datatypes? = some dts) {t : Ty} (hs : (L.srt? t).isSome = true)
-    (ht : t.isData = true ∨ ∃ e, t = .dsl .effect [e]) : ∃ w, VarSorted L t w := by
+    (ht : t.isData = true ∨ ∃ e, t = .dsl .effect [e]) :
+    ∃ w, VarSorted L t w ∧ ∀ dts' σ, L.datatypes? = some dts' → L.srt? t = some σ → Val.InSrt dts' σ w := by
   rcases ht with ht | ⟨e, rfl⟩
   · obtain ⟨w, hw⟩ := sorted_exists hd t hs ht
-    exact ⟨w, varSorted_of_sorted hw⟩
+    exact ⟨fixV L t w, varSorted_of_sorted (fixV_sorted t w hw), fixV_srtVal t w ht⟩
   obtain ⟨⟨d, n⟩, hf⟩ := srt_found hs (by simp) (by simp) (by simp) (by simp) (by simp)
   have hdt := datatype_of_find hd hf
+  have hsrt : ∀ σ, L.srt? (.dsl .effect [e]) = some σ → σ = .dt d := fun σ h => by
+    obtain ⟨d', n', hf', rfl⟩ := srt_dt h (by simp) (by simp) (by simp) (by simp) (by simp)
+    rw [hf] at hf'; cases hf'; rfl
   cases hfs : L.effectFields e with
-  | nil => exact ⟨.ctor d 0 [], d, n, 0, [], hf, rfl, .inr ⟨hfs, rfl, rfl⟩⟩
+  | nil =>
+    refine ⟨.ctor d 0 [], ⟨d, n, 0, [], hf, rfl, .inr ⟨hfs, rfl, rfl⟩⟩, fun dts' σ hd' hσ => ?_⟩
+    rw [hsrt σ hσ]
+    obtain ⟨D, hD1, hD2⟩ := find_datatype hd' hf
+    simp only [Layout.datatype?, hfs, Option.some.injEq] at hD1; subst hD1
+    exact inSrt_ctor hD2 rfl trivial
   | cons fs rest =>
     simp only [Layout.datatype?, hfs, Option.pure_def, Option.bind_eq_bind, List.mapM_cons] at hdt
-    have hsrt := mapM_some_mem (Option.isSome_of_isSome_bind (Option.isSome_of_isSome_bind hdt))
+    have hsrts := mapM_some_mem (Option.isSome_of_isSome_bind (Option.isSome_of_isSome_bind hdt))
     have hdata := (effectFields_sorted hL (e := e) (fs := fs) (by rw [hfs]; simp)).2
-    obtain ⟨ws, hws⟩ := sortedVs_exists hd fs hsrt (by simpa [Ty.isData] using hdata)
-    exact ⟨.ctor d 0 ws, d, n, 0, ws, hf, rfl, .inl ⟨fs, by simp [hfs], hws⟩⟩
+    have hdatas : Ty.isDatas fs = true := by simpa [Ty.isData] using hdata
+    obtain ⟨ws, hws⟩ := sortedVs_exists hd fs hsrts hdatas
+    refine ⟨.ctor d 0 (fixVs L fs ws), ⟨d, n, 0, _, hf, rfl, .inl ⟨fs, by simp [hfs], fixVs_sorted fs ws hws⟩⟩,
+      fun dts' σ hd' hσ => ?_⟩
+    rw [hsrt σ hσ]
+    obtain ⟨D, hD1, hD2⟩ := find_datatype hd' hf
+    simp only [Layout.datatype?, hfs, Option.pure_def, Option.bind_eq_bind, Option.bind_eq_some_iff,
+      Option.some.injEq] at hD1
+    obtain ⟨fss, hfss, rfl⟩ := hD1
+    simp only [List.mapM_cons, Option.bind_eq_bind, Option.bind_eq_some_iff, Option.pure_def,
+      Option.some.injEq] at hfss
+    obtain ⟨ss, hss, _, -, rfl⟩ := hfss
+    exact inSrt_ctor hD2 rfl (fixVs_inSrts hd' fs hdatas ws ss hss)
 
 /-- The sorts of a script's variables hold values wherever the script's declarations are found and each type is data
 or an effect: `Unsat`'s `sorts`. -/
@@ -150,52 +172,16 @@ theorem sorts_inhabited (hL : SortedLayout L) (hd : L.datatypes? = some dts) {ty
     (hv : tys.mapM L.srt? = some vars) (ht : ∀ t ∈ tys, t.isData = true ∨ ∃ e, t = .dsl .effect [e]) :
     SortsInhabited L tys := by
   have hs := mapM_some_mem (f := L.srt?) (xs := tys) (by simp [hv])
-  have hw : ∀ n (h : n < tys.length), ∃ w, VarSorted L tys[n] w := fun n h =>
+  have hw : ∀ n (h : n < tys.length), ∃ w, VarSorted L tys[n] w ∧
+      ∀ dts' σ, L.datatypes? = some dts' → L.srt? tys[n] = some σ → Val.InSrt dts' σ w := fun n h =>
     varSorted_exists hL hd (hs _ (List.getElem_mem h)) (ht _ (List.getElem_mem h))
   refine ⟨{ coverModel L [] with vars := fun n => if h : n < tys.length then (hw n h).choose else .bool false },
-    fun n h => ?_⟩
-  simp only [h, dite_true]
-  exact (hw n h).choose_spec
-
-theorem mapM_need {α : Type} {w : Ty → Refusal} {f : Ty → Option α} : {tys : List Ty} → {xs : List α} →
-    tys.mapM (fun t => need (w t) (f t)) = .ok xs → tys.mapM f = some xs
-  | [], xs, h => by simp only [List.mapM_nil] at h ⊢; cases pure_ok.1 h; rfl
-  | t :: tys, xs, h => by
-    simp only [List.mapM_cons] at h ⊢
-    obtain ⟨x, hx, h⟩ := bind_ok.1 h
-    obtain ⟨ys, hys, h⟩ := bind_ok.1 h
-    cases pure_ok.1 h
-    simp [need_ok.1 hx, mapM_need hys]
-
-/-- The state's types are data. -/
-theorem stateTys_data (v : ServiceV) : ∀ t ∈ stateTys v (shapes v), t.isData = true := by
-  intro t ht
-  simp only [stateTys, List.mem_append, List.mem_cons, List.mem_map, List.not_mem_nil, or_false] at ht
-  rcases ht with (rfl | rfl | rfl | rfl | rfl) | ⟨m, -, rfl⟩
-  · exact v.records_data
-  · rfl
-  · rfl
-  · rfl
-  · simp [pendingTable, Ty.isData, pendingEntry_data]
-  · exact m.table_data
-
-/-- The types of the inputs a step question asks about are data: the answer shapes are those whose answers are. -/
-theorem stepInputs_data {v : ServiceV} {shs : List (PendingShape v.event)} {n b : Nat} (hc : v.caller.isData = true)
-    {inp : SymInput v shs n} (h : inp ∈ stepInputs v shs n b) :
-    ∀ t ∈ inp.tys, t.isData = true := by
-  simp only [stepInputs, List.mem_append, List.mem_map, List.mem_flatMap, List.mem_cons, List.not_mem_nil,
-    or_false] at h
-  rcases h with ((⟨i, -, rfl⟩ | ⟨k, hk, j, -, rfl⟩) | ⟨i, -, rfl⟩) | rfl <;>
-    simp only [SymInput.tys, List.mem_cons, List.not_mem_nil, or_false]
-  · rintro t (rfl | rfl)
-    · exact hc
-    · exact CommandV.input_data _
-  · simp only [answerShapes, List.mem_filter] at hk
-    rintro t (rfl | rfl)
-    · rfl
-    · exact hk.2
-  · rintro t rfl; exact SubscriptionV.event_data _
-  · rintro t rfl; rfl
+    fun n h => ?_, layoutSorted_of (fun _ h => selSorted_coverModel L [] h) fun n t hn dts' σ hd' hσ => ?_⟩
+  · simp only [h, dite_true]
+    exact (hw n h).choose_spec.1
+  · obtain ⟨h, rfl⟩ := List.getElem?_eq_some_iff.1 hn
+    simp only [h, dite_true]
+    exact (hw n h).choose_spec.2 dts' σ hd' hσ
 
 /-- The sorts of an input kind's step and bound questions hold values: the input's types are data. -/
 theorem questions_sorts (hL : SortedLayout L) {T : List TypeDecl} {P : List AnySite} {v : ServiceV}

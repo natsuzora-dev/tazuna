@@ -33,9 +33,9 @@ def unrollVals (hc : v.caller.isData = true) : Input v → Option (List Val)
     (embedV L _ (Ty.up _ (v.queries.get i).input_data input)).map fun x => [c, x]
   | x => inputVals L hc x
 
-/-- Some value of the type's sort, where one exists. -/
+/-- Some value of the type's sort, where one exists, fixed into its SMT sort (`fixV`). -/
 noncomputable def someVal (t : Ty) : Val :=
-  open Classical in if h : ∃ w, Sorted L t w then h.choose else .bool false
+  open Classical in if h : ∃ w, Sorted L t w then fixV L t h.choose else .bool false
 
 /-- The values a kind's constants take in the model of a run whose step takes the input `x`: the input's where the
 kind is the input's and they fit; for another answer kind, the answer's wire id and some value; else some value of each sort. -/
@@ -323,11 +323,11 @@ end
 section
 variable {L : Layout} {v : ServiceV} (hc : v.caller.isData = true)
 
-/-- A value of the type's sort, wherever the sort holds one. -/
-def SortedIf (L : Layout) (t : Ty) (w : Val) : Prop := (∃ w', Sorted L t w') → Sorted L t w
+/-- A value of the type's sort and of its SMT sort, wherever the type's sort holds one. -/
+def SortedIf (L : Layout) (t : Ty) (w : Val) : Prop := (∃ w', Sorted L t w') → Sorted L t w ∧ SrtVal L t w
 
 theorem someVal_sorted (t : Ty) : SortedIf L t (someVal L t) := fun h => by
-  simp only [someVal, h, dite_true]; exact h.choose_spec
+  simp only [someVal, h, dite_true]; exact ⟨fixV_sorted t _ h.choose_spec, fixV_srtVal t _⟩
 
 theorem someVals_sorted : (ts : List Ty) → Forall2 (SortedIf L) ts (ts.map (someVal L))
   | [] => trivial
@@ -344,7 +344,7 @@ theorem kindVals_sorted {n : Nat} {ans : Bool} {p : Nat × (Nat → SymInput v (
     intro inp
     cases inp <;> cases x <;> first
       | exact someVals_sorted _
-      | exact ⟨fun _ => ⟨_, rfl⟩, someVals_sorted _⟩
+      | exact ⟨fun _ => ⟨⟨_, rfl⟩, srtVal_int ⟨_, rfl⟩⟩, someVals_sorted _⟩
   unfold kindVals
   split
   · rename_i vs hi hv
@@ -356,7 +356,7 @@ theorem kindVals_sorted {n : Nat} {ans : Bool} {p : Nat × (Nat → SymInput v (
         subst hi
         obtain ⟨wc, hwc, h⟩ := bind_some.1 hv
         obtain ⟨wa, hwa, rfl⟩ := map_some.1 h
-        exact ⟨fun _ => sorted_of_embed hwc, fun _ => sorted_of_embed hwa, trivial⟩
+        exact ⟨fun _ => ⟨sorted_of_embed hwc, embedV_srtVal hwc⟩, fun _ => ⟨sorted_of_embed hwa, embedV_srtVal hwa⟩, trivial⟩
       | _ => simp [SymInput.isOf] at hi
     · cases x with
       | query i' caller input =>
@@ -364,7 +364,7 @@ theorem kindVals_sorted {n : Nat} {ans : Bool} {p : Nat × (Nat → SymInput v (
         subst hi
         obtain ⟨wc, hwc, h⟩ := bind_some.1 hv
         obtain ⟨wa, hwa, rfl⟩ := map_some.1 h
-        exact ⟨fun _ => sorted_of_embed hwc, fun _ => sorted_of_embed hwa, trivial⟩
+        exact ⟨fun _ => ⟨sorted_of_embed hwc, embedV_srtVal hwc⟩, fun _ => ⟨sorted_of_embed hwa, embedV_srtVal hwa⟩, trivial⟩
       | _ => simp [SymInput.isOf] at hi
     · split at hp
       · simp only [List.mem_flatMap, List.mem_map] at hp
@@ -378,7 +378,7 @@ theorem kindVals_sorted {n : Nat} {ans : Bool} {p : Nat × (Nat → SymInput v (
           simp only [unrollVals, inputVals] at hv
           split at hv
           · obtain ⟨w, hw, rfl⟩ := map_some.1 hv
-            exact ⟨fun _ => ⟨_, rfl⟩, fun _ => sorted_of_embed hw, trivial⟩
+            exact ⟨fun _ => ⟨⟨_, rfl⟩, srtVal_int ⟨_, rfl⟩⟩, fun _ => ⟨sorted_of_embed hw, embedV_srtVal hw⟩, trivial⟩
           · cases hv
         | _ => simp [SymInput.isOf] at hi
       · cases hp
@@ -387,10 +387,10 @@ theorem kindVals_sorted {n : Nat} {ans : Bool} {p : Nat × (Nat → SymInput v (
         simp only [SymInput.isOf, beq_iff_eq] at hi
         subst hi
         obtain ⟨w, hw, rfl⟩ := map_some.1 hv
-        exact ⟨fun _ => sorted_of_embed hw, trivial⟩
+        exact ⟨fun _ => ⟨sorted_of_embed hw, embedV_srtVal hw⟩, trivial⟩
       | _ => simp [SymInput.isOf] at hi
     · cases x with
-      | clock time => cases hv; exact ⟨fun _ => ⟨_, rfl⟩, trivial⟩
+      | clock time => cases hv; exact ⟨fun _ => ⟨⟨_, rfl⟩, srtVal_int ⟨_, rfl⟩⟩, trivial⟩
       | _ => simp [SymInput.isOf] at hi
   · exact hdflt _
 
@@ -801,7 +801,7 @@ theorem forall2_flatMap {α β γ : Type} {R : β → γ → Prop} {f : α → L
     exact forall2_append (h a (by simp)) (forall2_flatMap l fun b hb => h b (by simp [hb]))
 
 theorem forall2_sorted_of {L : Layout} : {tys : List Ty} → {ws : List Val} → Forall2 (SortedIf L) tys ws →
-    (∀ t ∈ tys, ∃ w, Sorted L t w) → Forall2 (Sorted L) tys ws
+    (∀ t ∈ tys, ∃ w, Sorted L t w) → Forall2 (fun t w => Sorted L t w ∧ SrtVal L t w) tys ws
   | [], [], _, _ => trivial
   | _ :: _, _ :: _, ⟨h1, h2⟩, he => ⟨h1 (he _ (by simp)), forall2_sorted_of h2 fun t ht => he t (by simp [ht])⟩
 
@@ -819,7 +819,7 @@ theorem unrollOne_vals (S : SymState v) (shown : List (Term × Term)) (i b : Nat
   rw [hp] at hat
   dsimp only at hat
   simp only [unrollOne, stepVals, hp]
-  refine ⟨⟨fun _ => ⟨_, rfl⟩, forall2_flatMap inps fun y hy => ?_⟩, fun t ht => ?_⟩
+  refine ⟨⟨fun _ => ⟨⟨_, rfl⟩, srtVal_int ⟨_, rfl⟩⟩, forall2_flatMap inps fun y hy => ?_⟩, fun t ht => ?_⟩
   · obtain ⟨⟨p, hpk, c, rfl⟩, -⟩ := hat.2 y hy
     exact kindVals_sorted chk.callerData hpk c x
   · simp only [List.singleton_append, List.mem_cons, List.mem_flatMap] at ht
@@ -905,7 +905,7 @@ generate's "unreached within `d` steps" rests on this. -/
 theorem runs_covered (hL : SortedLayout L) {d : Nat} {B : UnrollBase v senv.nT}
     (hB : unrollBase L T P v senv d = .ok B) (hnr : B.refused = [])
     {xs : List (Input v)} (hlen : xs.length = d) (hfits : RunFits L T P v chk.callerData [] (Step.State.init v) xs) :
-    ∃ M : Model, (∀ n (h : n < B.tys.length), VarSorted L B.tys[n] (M.vars n)) ∧ LayoutSel L M ∧
+    ∃ M : Model, (∀ n (h : n < B.tys.length), VarSorted L B.tys[n] (M.vars n)) ∧ LayoutSorted L B.tys M ∧
       UnrollRun L T M chk.callerData (Step.State.init v) B.steps xs ∧ ∀ a ∈ B.asserts, Holds M a := by
   subst hlen
   simp only [unrollBase] at hB
@@ -923,7 +923,8 @@ theorem runs_covered (hL : SortedLayout L) {d : Nat} {B : UnrollBase v senv.nT}
   have hc := hcov hsrt hnr hfits fun q h => by
     rw [Nat.zero_add]
     exact coverModel_vars (List.getElem?_eq_getElem h)
-  exact ⟨_, fun n h => varSorted_of_sorted (forall2_sorted_vars hsorted n h), layoutSel_coverModel L _, hc.2, hc.1⟩
+  exact ⟨_, fun n h => varSorted_of_sorted (forall2_sorted_vars (forall2_imp (fun _ _ h => h.1) hsorted) n h),
+    layoutSorted_coverModel (forall2_imp (fun _ _ h => h.2) hsorted) hv.2, hc.2, hc.1⟩
 
 end
 

@@ -694,7 +694,8 @@ theorem pair_unfold {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P
     (senv : StepEnv L (shapes v))
     {k1 k2 : OwnPlace L v.event} {bq tq : TypedScript} (hq : pairQuestions L T P v senv k1 k2 = .ok (bq, tq))
     (hM : ∀ n (h : n < (pairTys v).length), VarSorted L (pairTys v)[n] (M.vars n))
-    (hsel : LayoutSel L M) {s : State v} (hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some s)
+    (hsel : LayoutSorted L (pairTys v) M) {s : State v}
+    (hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some s)
     (hbelow : ∀ p ∈ s.pending, p.id < s.nextId) (hsupp : Step.StateSupp s)
     {x1 x2 : OwnEffectV v.event} (hx1 : RelV L (.dsl .effect [v.event]) x1.effect (M.vars (pairVar v)))
     (hx2 : RelV L (.dsl .effect [v.event]) x2.effect (M.vars (pairVar v + 1)))
@@ -710,9 +711,10 @@ theorem pair_unfold {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P
   obtain ⟨names, hnames, hq⟩ := bind_ok.1 hq
   obtain ⟨w1, hw1, hq⟩ := bind_ok.1 hq
   obtain ⟨w2, hw2, hq⟩ := bind_ok.1 hq
-  obtain ⟨vars, -, hq⟩ := bind_ok.1 hq
+  obtain ⟨vars, hvars, hq⟩ := bind_ok.1 hq
   obtain ⟨dts, hdts, hq⟩ := bind_ok.1 hq
   cases pure_ok.1 hq
+  have hW := hsel _ _ (need_ok.1 hdts) (mapM_need hvars)
   have hR := decode_state hS
   have hf1 := ownFound_of_reach senv.hE hx1 ht1 hreach1
   have hf2 := ownFound_of_reach senv.hE hx2 ht2 hreach2
@@ -730,14 +732,14 @@ theorem pair_unfold {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P
     · exact ownWf_holds hL senv.hE hx1 ht1 (need_ok.1 hw1)
     · exact ownWf_holds hL senv.hE hx2 ht2 (need_ok.1 hw2)
   refine ⟨o, ho, fun hbq => ?_, fun htq hc hd hv => ?_⟩
-  · obtain ⟨a, ha, hna⟩ := hbq.noModel M hM (hsel _ (need_ok.1 hdts))
+  · obtain ⟨a, ha, hna⟩ := hbq.noModel M hM hW
     rcases List.mem_append.1 ha with ha | ha
     · exact (hna (hpre a ha)).elim
     simp only [List.mem_cons, List.not_mem_nil, or_false] at ha
     subst ha
     simp only [holds_or, holds_not, not_or, Classical.not_not] at hna
     exact hna
-  · obtain ⟨a, ha, hna⟩ := htq.noModel M hM (hsel _ (need_ok.1 hdts))
+  · obtain ⟨a, ha, hna⟩ := htq.noModel M hM hW
     rcases List.mem_append.1 ha with ha | ha
     · exact hna (hpre a ha)
     simp only [List.mem_cons, List.not_mem_nil, or_false] at ha
@@ -768,7 +770,7 @@ theorem pair_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P 
     (senv : StepEnv L (shapes v))
     {a0 : Step.Acc v} {x1 x2 : OwnEffectV v.event} {k1 k2 : OwnPlace L v.event}
     (hl : PairLine L T P v senv (PairFits L.count T a0 x1 x2) (k1, k2))
-    (hM : ∀ n (h : n < (pairTys v).length), VarSorted L (pairTys v)[n] (M.vars n)) (hsel : LayoutSel L M)
+    (hM : ∀ n (h : n < (pairTys v).length), VarSorted L (pairTys v)[n] (M.vars n)) (hsel : LayoutSorted L (pairTys v) M)
     (hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some a0.state)
     (hbelow : ∀ p ∈ a0.state.pending, p.id < a0.state.nextId) (hsupp : Step.StateSupp a0.state)
     (hqk : Step.QueueOk P a0) (hsa : Below Step.Acc.Self a0.state.fresh a0)

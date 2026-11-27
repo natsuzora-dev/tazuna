@@ -105,16 +105,18 @@ theorem state_answers (chk : Checked P E T v) (senv : StepEnv L (shapes v)) {res
       rcases covered chk senv hkeys hW x hivs with ⟨inp, hmem, hc, M, hM, hsel, hS, hxd, hcase⟩ | ⟨-, -, -, hq | hf⟩
       · obtain ⟨a, q, ha, hq, hu, hb⟩ := hl inp hmem
         have hun : ∀ q' : TypedScript, q'.tys = stateTys v (shapes v) ++ inp.tys → L.datatypes? = some q'.datatypes →
-            Unsat L q' → ∃ c ∈ q'.script.asserts, ¬ Holds M c := fun q' ht hd hu' =>
-          hu'.noModel_at ht hd M (fun n h => varSorted_of_sorted (hM n h)) hsel
-        have hqt : q.tys = stateTys v (shapes v) ++ inp.tys ∧ L.datatypes? = some q.datatypes := by
+            q'.tys.mapM L.srt? = some q'.vars → Unsat L q' → ∃ c ∈ q'.script.asserts, ¬ Holds M c :=
+          fun q' ht hd hv hu' => hu'.noModel_at ht hd hv M (fun n h => varSorted_of_sorted (hM n h)) hsel
+        have hqt : q.tys = stateTys v (shapes v) ++ inp.tys ∧ L.datatypes? = some q.datatypes ∧
+            q.tys.mapM L.srt? = some q.vars := by
           obtain ⟨_, -, hq'⟩ := bind_ok.1 hq
           obtain ⟨_, -, hq'⟩ := bind_ok.1 hq'
           obtain ⟨_, -, hq'⟩ := bind_ok.1 hq'
           cases pure_ok.1 hq'
-          exact ⟨stepAsk_tys L T P v senv ha _, stepAsk_dts L T P v senv ha _⟩
-        exact step_answers chk senv ha hq (hun q hqt.1 hqt.2 hu)
-          (hun _ (stepAsk_tys L T P v senv ha _) (stepAsk_dts L T P v senv ha _) hb) hS hinv hsupp hheld hxd hcase hno
+          exact ⟨stepAsk_tys L T P v senv ha _, stepAsk_dts L T P v senv ha _, stepAsk_vars L T P v senv ha _⟩
+        exact step_answers chk senv ha hq (hun q hqt.1 hqt.2.1 hqt.2.2 hu)
+          (hun _ (stepAsk_tys L T P v senv ha _) (stepAsk_dts L T P v senv ha _) (stepAsk_vars L T P v senv ha _) hb)
+          hS hinv hsupp hheld hxd hcase hno
       · obtain ⟨i, c, y, rfl⟩ := hq
         exact absurd hacc (by simp only [step]; split <;> simp)
       · exact absurd hf (hno _)
