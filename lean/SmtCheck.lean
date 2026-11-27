@@ -3853,7 +3853,7 @@ condition it is sat). -/
 /-- The unrolled run of `d` inputs with the goal its steps give as its last assertion. -/
 def unroll (L : Layout) (T : List TypeDecl) (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v)) (d : Nat)
     (goal : List (UnrollStep v senv.nT) → Except Refusal Term) : Except Refusal (Unrolled v senv.nT) := do
-  let B ← unrollBase L T P v senv d
+  let B ← unrollBase L T P v senv (List.replicate d none)
   pure (B.withGoal (← goal B.steps))
 
 /-- Whether the last step takes an answer whose rules hold. -/

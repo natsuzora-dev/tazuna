@@ -1,5 +1,7 @@
 import Tazuna.Cli.Check
-import Tazuna.Smt.Unroll
+import Tazuna.Smt.Cube
+import Std.Sync.Semaphore
+import Lean.Util.ShareCommon
 import Tazuna.Smt.Bounds
 import Tazuna.Smt.PairOrders
 import Tazuna.Smt.Reached
@@ -7,8 +9,8 @@ import Tazuna.Smt.Boundary
 import Tazuna.Trace.ReplayOk
 
 /-! What `prove` and `generate` share: their options, the solver pool, the lines of a refused encoding and of a
-service's scope, and the search of a service's unrolled run depth by depth for a model of a goal, with each depth's
-run built once for every search over it. -/
+service's scope, and the search of a service's unrolled run depth by depth for a model of a goal, each depth split into
+cubes (`CubesCover`), with each depth's run built once for every search over it. -/
 
 namespace Tazuna.Cli
 
@@ -201,32 +203,79 @@ def runAll (jobs : Nat) (xs : Array Job) : IO Unit := do
     | .ok () => pure ()
     | .error e => throw e
 
+/-- `f` holding one of the pool's permits, which bound the jobs of a kind running at once. -/
+def withPermit {α : Type} (pool : Std.Semaphore) (f : IO α) : IO α := do
+  IO.wait (← pool.acquire).result!
+  try f finally pool.release
+
+/-- Whether every question of a dead-target family reads unsat, asked in order: the first answer that is not unsat
+settles that the target is not dead, so the rest are not asked. One job asks them all, so which run is a function of
+the spec and the solver, not of the schedule. A question's script is built only where its direct key has no answer:
+an entry is written only for a question asked from the same inputs, so the kind has that question. -/
+def allUnsat (solver : Solver) (cache : System.FilePath) (inputs : List String) (ids : Option Nat) :
+    List (List String × Thunk (Option TypedScript)) → IO (Except String Bool)
+  | [] => pure (.ok true)
+  | (name, q) :: rest => do
+    let key := directKey inputs name
+    let answer ← match ← Solver.cached cache key ids with
+      | some a => pure (some (.ok a))
+      | none => match q.get with
+        | some q => some <$> solver.ask cache key ids q.script
+        | none => pure none
+    match answer with
+    | none | some (.ok .unsat) => allUnsat solver cache inputs ids rest
+    | some (.ok _) => pure (.ok false)
+    | some (.error m) => pure (.error m)
+
+/-- Whether each question of a family is unsat, read as `allUnsat` reads one, all of them asked in order. -/
+def eachUnsat (solver : Solver) (cache : System.FilePath) (inputs : List String) (ids : Option Nat)
+    (qs : List (List String × Thunk (Option TypedScript))) : IO (Except String (List Bool)) := do
+  let mut us := #[]
+  for (name, q) in qs do
+    match ← allUnsat solver cache inputs ids [(name, q)] with
+    | .error m => return .error m
+    | .ok u => us := us.push u
+  return .ok us.toList
+
+/-- One depth's unrolled run as every goal at that depth shares it: its base, merged into one object per equal subterm
+(`shareCommon`, the identity on values) so a goal built from its steps finds its shared terms among the assertions'
+at once, with the merging's state, which merges a cube's goal into the same objects, the input kinds it refused with their refusals (no gap, by `unrollBase_ofService`), and for each smaller
+number `j` of steps the prefix its cubes with `j` unfixed steps are asked with (`cubeAsk`: the run of `j` steps, this
+depth's declarations and literals), printed once when a cube first needs it. -/
+structure DepthRun (v : ServiceV) (n : Nat) where
+  base : UnrollBase v n
+  merged : ShareCommon.State Lean.ShareCommon.persistentObjectFactory
+  refused : List (SymInput v (shapes v) n × Refused)
+  prefixes : Array (Thunk (Option SentPrefix))
+
+abbrev Depth (v : ServiceV) (n : Nat) := Except Refused (DepthRun v n)
+
 section
 variable (solver : Solver) {c : CheckedSpec} (s : CheckedService c)
 
-/-- One depth's unrolled run as every goal at that depth shares it: its base, merged into one object per equal subterm
-(`shareCommon'`, the identity on values) so a goal built from its steps finds its shared terms among the assertions'
-at once, the input kinds it refused with their refusals (no gap, by `unrollBase_ofService`), and the prefix of its
-scripts (`ScriptPrefix`), read once; or the refusal of its encoding. -/
-abbrev Depth (v : ServiceV) (n : Nat) :=
-  Except Refused (UnrollBase v n × List (SymInput v (shapes v) n × Refused) × SentPrefix)
-
-/-- The run at depth `d`, each goal aside. -/
-def depthAt (d : Nat) : Depth s.v s.senv.nT :=
-  (Sound.get (unrollBase s.L c.T c.P s.v s.senv d) (unrollBase_ofService s.mem c.T s.senv d)).map fun ⟨B, hB⟩ =>
+/-- The run at depth `d`, each goal aside, with its cubes' prefixes over the runs `ds` of fewer steps. -/
+def depthAt (ds : Array (Task (Option (Depth s.v s.senv.nT)))) (d : Nat) : Depth s.v s.senv.nT :=
+  (Sound.get (unrollBase s.L c.T c.P s.v s.senv (List.replicate d none))
+    (unrollBase_ofService s.mem c.T s.senv _)).map fun ⟨B, hB⟩ =>
     let refused := B.refused.attach.map fun ⟨p, hp⟩ => (p.1, p.2.refused (hB p hp))
-    let B := ShareCommon.shareCommon' B
-    (B, refused, B.script.sentPrefix? s.L.ids solver.header)
+    let (B, merged) := (ShareCommon.State.mk Lean.ShareCommon.persistentObjectFactory).shareCommon B
+    let ls := B.script.lits
+    let ids := s.L.ids
+    let shared (Bj : UnrollBase s.v s.senv.nT) : TypedScript :=
+      ⟨B.datatypes, B.tys, B.vars, [], Bj.asserts ++ [litsFact ls]⟩
+    let prefixes := (List.range d).toArray.map fun j => Thunk.mk fun _ =>
+      match (ds[j]?).bind (·.get) with
+      | some (.ok r) => some ((shared r.base).script.sentPrefix? ids solver.header)
+      | _ => none
+    ⟨B, merged, refused, prefixes⟩
 
-/-- Each depth from 1 to `k`, built by its own job once for every search over it: the jobs, and each depth as a task a
-search awaits when it reaches that depth; none if its job never ran, an engine bug. -/
-def depthJobs (k : Nat) : IO (Array Job × Array (Task (Option (Depth s.v s.senv.nT)))) := do
-  let mut jobs : Array Job := #[]
-  let mut ds := #[]
-  for d in List.range' 1 k do
-    let p ← IO.Promise.new
-    jobs := jobs.push (d, fun d => (p.resolve (some (depthAt solver s d)) : BaseIO Unit))
-    ds := ds.push (p.resultD none)
+/-- Each depth from 0 to `k`, built by its own job holding a permit of `pool`, once for every search over it: the
+jobs, and each depth as a task a search awaits when it reaches that depth; none if its job never ran, an engine bug. -/
+def depthJobs (pool : Std.Semaphore) (k : Nat) :
+    IO (Array Job × Array (Task (Option (Depth s.v s.senv.nT)))) := do
+  let ps ← (List.range (k + 1)).toArray.mapM fun _ => IO.Promise.new
+  let ds := ps.map (·.resultD none)
+  let jobs := ps.zipIdx.map fun (p, d) => ((d, fun d => withPermit pool (p.resolve (some (depthAt solver s ds d)))) : Job)
   return (jobs, ds)
 
 end
@@ -282,14 +331,35 @@ inductive SearchResult (α : Type) where
   | noModel (steps : Nat)
   | undecided (kind : Kind) (fields : List (String × Json))
 
+/-- How many cubes a search asks at once, in their order, taking the first with a model: fixed, so the questions asked
+and the trace found are the same whatever the number of solvers. -/
+def cubeChunk : Nat := 4
+
+/-- What a cube's question gave. -/
+inductive CubeAnswer (α : Type) where
+  /-- A model, played back. -/
+  | found (a : α)
+  /-- No model: unsat, or a goal false by its shape (`Term.falsy`). -/
+  | none
+  /-- No answer: the kind and fields of its undecided line. -/
+  | open (kind : Kind) (fields : List (String × Json))
+
 section
 variable (solver : Solver) (cache : System.FilePath) {c : CheckedSpec} (s : CheckedService c)
 
 /-- The search over the depths 1, 2, ... of the service's unrolled run (`ds`, each awaited when the search reaches it)
-for a model of the goal each depth's steps give, stopping at the first, whose decoded run `play` reads. A refused
-encoding of the run or of the goal ends the search undecided; a refused input kind (which the script then lacks)
-leaves it undecided unless a model is found. `what` names the search in an engine bug's message. -/
+for a model of the goal each depth's steps give, stopping at the first, whose decoded run `play` reads. A depth is
+asked as cubes (`CubesCover`): one per pick of its last step, and a cube with no answer splits on the step before
+its fixed ones, in pick order. A cube whose last step takes only kinds `ruledOut` rules out needs no question, nor,
+at the last depth, the costliest, one whose last pick is not among those `live` gives. The cubes are asked
+`cubeChunk` at a time, and the first in order with a model is the one taken, so the questions and the run found do not
+depend on timing. A depth whose cubes all have no model is unreached; a cube with every step fixed and no answer
+leaves the depth undecided. A refused encoding of the run or of the goal ends the search undecided; a refused input
+kind (which the script then lacks) leaves it undecided unless a model is found. `what` names the search in an engine
+bug's message. -/
 def searchDepths {α : Type} (what : String) (ds : Array (Task (Option (Depth s.v s.senv.nT))))
+    (live : IO (Except String (Option (List Nat))) := pure (.ok none))
+    (ruledOut : SymInput s.v (shapes s.v) s.senv.nT → Bool := fun _ => false)
     (goal : List (UnrollStep s.v s.senv.nT) → Except Refused Term) (play : List (Input s.v) → Except String α) :
     IO (Except String (SearchResult α)) := do
   let fail (m : String) : Except String (SearchResult α) := .error s!"service {s.v.name}, {what}: {m}"
@@ -297,34 +367,98 @@ def searchDepths {α : Type} (what : String) (ds : Array (Task (Option (Depth s.
     match refusedLine c.T r with
     | .ok (kind, fields) => .ok (.undecided kind (step.toList.map (("step", Json.str ·)) ++ fields))
     | .error m => fail m
+  let depth (j : Nat) : IO (Except (Except String (SearchResult α)) (DepthRun s.v s.senv.nT)) := do
+    let some t := ds[j]? | return .error (fail s!"depth {j} has no job")
+    match ← IO.wait t with
+    | none => return .error (fail s!"depth {j} was never built")
+    | some (.error r) => return .error (undecided none r)
+    | some (.ok r) => return .ok r
+  -- The layout once: `CheckedService.L` derives it from the program at each use.
+  let L := s.L
+  let ids := L.ids
+  let some S0 := initState L s.v | return fail "the initial state has no terms, which its depths' runs rule out"
   let mut refused : Option (SymInput s.v (shapes s.v) s.senv.nT × Refused) := none
-  for (t, i) in ds.toList.zipIdx do
-    let d := i + 1
-    let some depth ← IO.wait t | return fail s!"depth {d} was never built"
-    let (B, kinds, pre) ← match depth with
-      | .error r => return undecided none r
-      | .ok x => pure x
-    let g ← match goal B.steps with
-      | .error r => return undecided none r
-      | .ok g => pure g
-    let U := B.withGoal g
-    if refused.isNone then refused := kinds.head?
-    let some answer ← solver.askGoal cache s.L.ids pre g | return fail s!"depth {d}: {noText}"
-    match answer with
-    | .unsat => pure ()
-    | .unknown why => return .ok (.undecided (.undecided .unknown) [("depth", Lean.toJson d), ("why", Json.str why)])
-    | .timeout ms =>
-      return .ok (.undecided (.undecided .timeout) [("depth", Lean.toJson d), ("why", Json.str (timeoutWhy ms))])
-    | .sat vs =>
-      -- `unroll_decode`: every model's steps decode to a run that faults nowhere.
-      let some xs := U.steps.mapM (·.decode (modelOf vs) s.L s.callerData)
-        | return fail s!"a model of depth {d} does not decode"
-      match play xs with
-      | .ok a => return .ok (.found d a)
-      | .error why => return fail s!"a model of depth {d} {why}"
+  for d in List.range' 1 (ds.size - 1) do
+    let rd ← match ← depth d with
+      | .error e => return e
+      | .ok r => pure r
+    if refused.isNone then refused := rd.refused.head?
+    let livePicks ← if d + 1 == ds.size then
+      match ← live with
+      | .error m => return .error m
+      | .ok ks => pure ks
+      else pure none
+    if livePicks == some [] then return .ok (.noModel d)
+    -- A cube's question: its fixed steps after the run of its unfixed ones, and its goal; none where the goal is
+    -- false by its shape, which needs no solver.
+    let prepare (ps : List Nat) :
+        IO (Except (Except String (SearchResult α)) (Option (List Nat × UnrollBase s.v s.senv.nT × Term))) := do
+      if let (some ks, some k) := (livePicks, ps.getLast?) then
+        if !ks.contains k then return .ok none
+      let rj ← match ← depth (d - ps.length) with
+        | .error e => return .error e
+        | .ok r => pure r
+      do
+        let B ← match extendBase L c.T c.P s.v s.senv S0 rj.base (ps.map some) with
+          | .error _ => return .error (fail s!"cube {ps} of depth {d} refused, which its depth's run rules out")
+          | .ok B => pure B
+        if !B.refused.isEmpty && rd.refused.isEmpty then
+          return .error (fail s!"cube {ps} of depth {d} refused a kind its depth's run did not")
+        if B.steps.getLast?.any fun st => st.kinds.all (ruledOut ·.1) then return .ok none
+        let g ← match goal B.steps with
+          | .error r => return .error (undecided none r)
+          | .ok g => pure g
+        let q := cubeGoal rj.base B g
+        if q.falsy then return .ok none
+        return .ok (some (ps, B, (rj.merged.shareCommon q).1))
+    -- A cube asked with the prefix of its unfixed steps at this depth; the exact script only once every step is fixed.
+    let ask (cube : List Nat × UnrollBase s.v s.senv.nT × Term) :
+        IO (Except (Except String (SearchResult α)) (CubeAnswer α)) := do
+      let (ps, B, q) := cube
+      let j := d - ps.length
+      let some pre := (rd.prefixes[j]?.map (·.get)).join | return .error (fail s!"depth {d} has no prefix for {j} steps")
+      let some answer ← solver.askGoal cache ids pre q (fallback := j == 0)
+        | return .error (fail s!"depth {d}: {noText}")
+      match answer with
+      | .unsat => return .ok .none
+      | .unknown why => return .ok (.open (.undecided .unknown) [("depth", Lean.toJson d), ("why", Json.str why)])
+      | .timeout ms =>
+        return .ok (.open (.undecided .timeout) [("depth", Lean.toJson d), ("why", Json.str (timeoutWhy ms))])
+      | .sat vs =>
+        -- `unroll_decode`: every model's steps decode to a run that faults nowhere.
+        let some xs := B.steps.mapM (·.decode (modelOf vs) L s.callerData)
+          | return .error (fail s!"a model of depth {d} does not decode")
+        match play xs with
+        | .ok a => return .ok (.found a)
+        | .error why => return .error (fail s!"a model of depth {d} {why}")
+    let splits (ps : List Nat) : List (List Nat) := (List.range (pickCount s.v)).map (· :: ps)
+    let mut todo := splits []
+    let mut open? : Option (Kind × List (String × Json)) := none
+    while !todo.isEmpty do
+      -- The next `cubeChunk` cubes in order that need the solver.
+      let mut chunk := []
+      while chunk.length < cubeChunk && !todo.isEmpty do
+        let ps := todo.head!
+        todo := todo.tail
+        match ← prepare ps with
+        | .error e => return e
+        | .ok none => pure ()
+        | .ok (some cube) => chunk := chunk ++ [cube]
+      let tasks ← chunk.mapM fun cube => IO.asTask (ask cube) (prio := .dedicated)
+      let mut next := []
+      for ((ps, _), t) in chunk.zip tasks do
+        match ← IO.ofExcept (← IO.wait t) with
+        | .error e => return e
+        | .ok (.found a) => return .ok (.found d a)
+        | .ok .none => pure ()
+        | .ok (.open kind fields) =>
+          if ps.length < d then next := next ++ splits ps
+          else if open?.isNone then open? := some (kind, fields)
+      todo := next ++ todo
+    if let some (kind, fields) := open? then return .ok (.undecided kind fields)
   match refused with
   | some (inp, r) => return undecided (some inp.text) r
-  | none => return .ok (.noModel ds.size)
+  | none => return .ok (.noModel (ds.size - 1))
 
 end
 

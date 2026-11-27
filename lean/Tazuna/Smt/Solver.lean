@@ -1,6 +1,7 @@
 import Tazuna.Smt.NameCode
 import Tazuna.Smt.Confirm
 import Tazuna.Smt.Sha256
+import Std.Sync.Semaphore
 
 /-! Running the solver. Each script runs in its own solver process, which reads the script from a file and prints its
 answer on stdout; the process boundary contains a solver crash, and a run past its time is killed. This is the one
@@ -20,6 +21,9 @@ structure Solver where
   /-- The wall-clock safety net: the process is killed after this many ms, a hundred times what the resource limit
   takes on a laptop, so the resource limit stops z3 first on any machine that runs it. -/
   timeoutMs : Nat := 600000
+  /-- Where set, a solver process runs only while it holds one of the gate's permits, which bound the solvers running
+  at once whatever number of threads build scripts. -/
+  gate : Option Std.Semaphore := none
 
 /-- z3 beside the engine's executable, where the launcher puts the z3 it fetched with the engine; else z3 on PATH, as
 for an engine built from lean/ that `TAZUNA_ENGINE` names. -/
@@ -43,6 +47,10 @@ def Solver.runText (s : Solver) (text : String) : IO (Except Answer String) :=
     runFile path
 where
   runFile (path : System.FilePath) : IO (Except Answer String) := do
+    let some gate := s.gate | runProcess path
+    IO.wait (← gate.acquire).result!
+    try runProcess path finally gate.release
+  runProcess (path : System.FilePath) : IO (Except Answer String) := do
     let child ← IO.Process.spawn
       { cmd := s.path, args := #["-smt2", path.toString], stdin := .null, stdout := .piped, stderr := .null }
     let out ← IO.asTask (prio := .dedicated) child.stdout.readToEnd
@@ -290,9 +298,11 @@ def SentPrefix.sent (p : SentPrefix) (goal : Term) : Option (ScriptPrefix × Ter
 
 /-- Asks the solver about the prefix's script with `goal` as its last assertion: the abstract variant first where the
 prefix has one and the goal's literals are the prefix's (`Solver.overApprox`), else what it reads exactly; each answer
-read from the cache directory `dir` where kept. None where a script has no text. -/
-def Solver.askGoal (s : Solver) (dir : System.FilePath) (ids : Option Nat) (p : SentPrefix) (goal : Term) :
-    IO (Option Answer) := do
+read from the cache directory `dir` where kept. Without `fallback`, an abstract variant that decides nothing answers
+unknown instead of asking the exact script: a cube that can still split is cheaper split. None where a script has no
+text. -/
+def Solver.askGoal (s : Solver) (dir : System.FilePath) (ids : Option Nat) (p : SentPrefix) (goal : Term)
+    (fallback : Bool := true) : IO (Option Answer) := do
   let some (q, g, coded) := p.sent goal | return none
   let exact : IO (Option (Answer × String)) := do
     let some eq := q.ask g | return none
@@ -304,7 +314,8 @@ def Solver.askGoal (s : Solver) (dir : System.FilePath) (ids : Option Nat) (p : 
     guard (srt == .bool)
     pure (a, ← a.pre.askAll (g' :: a.order))
   let some (a, k) := abs | return (← exact).map (·.1)
-  let r ← s.overApprox dir ids q.script.datatypes q.script.vars a.lits k (fun fixes => q.askAll (g :: fixes)) exact
+  let r ← s.overApprox dir ids q.script.datatypes q.script.vars a.lits k (fun fixes => q.askAll (g :: fixes))
+    (if fallback then exact else pure (some (.unknown "the abstract variant decided nothing", "")))
   return r.map (·.1)
 
 /-- A question to the solver that owns its call: the script, the id datatype if it has one, and how its answer reads

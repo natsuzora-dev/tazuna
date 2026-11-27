@@ -5,7 +5,8 @@ fit the slots, are valid, do not fault and whose steps stay within the slots giv
 the input's kind (`Input.pick`), and each kind of the step holds the input's values where the kind is the input's
 (`kindVals`). An answer's kinds all hold the answer's wire id, so the one slot that holds the request is the only case
 that can hold, and the kinds whose shape answers with the answer's type all hold its value. The other constants hold
-any value of their sort. So "no model within `d` steps" means no such run of `d` inputs. -/
+any value of their sort. So "no model within `d` steps" means no such run of `d` inputs, and a step that fixes its
+kind leaves out only the runs whose input there is of another kind. -/
 
 namespace Tazuna.Smt
 
@@ -573,15 +574,15 @@ variable {M : Model} {L : Layout} {T : List TypeDecl} {v : ServiceV} {P : List A
 
 /-- One unrolled step from terms that denote the run's state `s`, whose constants hold the values of a step `x` can
 take, holds its assertions and decodes to `x`. -/
-theorem unrollOne_covers (hL : SortedLayout L) (S : SymState v) (shown : List (Term × Term)) (i b : Nat) {s : State v}
+theorem unrollOne_covers (hL : SortedLayout L) (S : SymState v) (shown : List (Term × Term)) (i b : Nat) (f : Option Nat) {s : State v}
     {seen : List IdV} (hR : StateRel M L T (shapes v) S s) (hinv : Step.Inv P s) (h0 : i = 0 → s.pending = [])
-    (hs : IdsExact M L shown seen) (hsrt : ∀ t ∈ (unrollOne L T P v senv S shown i b).1, (L.srt? t).isSome = true)
-    (hnr : (unrollOne L T P v senv S shown i b).2.2.2.1 = []) {x : Input v}
-    (hx : RunStep L T P v chk.callerData seen s x)
+    (hs : IdsExact M L shown seen) (hsrt : ∀ t ∈ (unrollOne L T P v senv S shown i b f).1, (L.srt? t).isSome = true)
+    (hnr : (unrollOne L T P v senv S shown i b f).2.2.2.1 = []) {x : Input v}
+    (hx : RunStep L T P v chk.callerData seen s x) (hf : f.all (· == x.pick) = true)
     (hvars : ∀ q (h : q < (stepVals L v chk.callerData senv.nT i b x).length),
       M.vars (b + q) = (stepVals L v chk.callerData senv.nT i b x)[q]) :
-    (∀ a ∈ (unrollOne L T P v senv S shown i b).2.1, Holds M a) ∧
-      (unrollOne L T P v senv S shown i b).2.2.1.decode M L chk.callerData = some x := by
+    (∀ a ∈ (unrollOne L T P v senv S shown i b f).2.1, Holds M a) ∧
+      (unrollOne L T P v senv S shown i b f).2.2.1.decode M L chk.callerData = some x := by
   have hc := chk.callerData
   obtain ⟨hvs, hfit, ⟨hval, hkn⟩, hno⟩ := hx
   obtain ⟨vs, hvs'⟩ := Option.isSome_iff_exists.1 hvs
@@ -621,17 +622,18 @@ theorem unrollOne_covers (hL : SortedLayout L) (S : SymState v) (shown : List (T
       omega
     simp only [e1, List.getElem_cons_succ]
     exact (List.getElem?_eq_some_iff.1 hidx).2
-  generalize hoks : (inps.map fun inp => unrollKind L T P v senv S shown (.var b) inp).filterMap
+  generalize hfil : inps.filter (fun inp => f.all (· == inp.pick)) = kept at hnr
+  generalize hoks : (kept.map fun inp => unrollKind L T P v senv S shown (.var b) inp).filterMap
     (fun | .ok x => some x | .error _ => none) = oks
   have hok : ∀ y ∈ oks, ∃ inp ∈ inps, unrollKind L T P v senv S shown (.var b) inp = .ok y := fun y hy => by
     rw [← hoks] at hy
     obtain ⟨r, hrm, hro⟩ := List.mem_filterMap.1 hy
     obtain ⟨inp, hi, rfl⟩ := List.mem_map.1 hrm
-    refine ⟨inp, hi, ?_⟩
+    refine ⟨inp, (List.mem_filter.1 (hfil ▸ hi)).1, ?_⟩
     cases hu : unrollKind L T P v senv S shown (.var b) inp with
     | error _ => simp [hu] at hro
     | ok x0 => simp [hu] at hro; rw [hro]
-  have hall : ∀ inp ∈ inps, ∃ y, unrollKind L T P v senv S shown (.var b) inp = .ok y ∧ y ∈ oks := fun inp hi => by
+  have hall : ∀ inp ∈ kept, ∃ y, unrollKind L T P v senv S shown (.var b) inp = .ok y ∧ y ∈ oks := fun inp hi => by
     cases hu : unrollKind L T P v senv S shown (.var b) inp with
     | error r =>
       have := (List.filterMap_eq_nil_iff.1 hnr) _ (List.mem_map_of_mem (f := fun inp =>
@@ -672,7 +674,7 @@ theorem unrollOne_covers (hL : SortedLayout L) (S : SymState v) (shown : List (T
       simp only [Holds, Term.denote, hb, he, Val.toBool]
       show Val.beq (.int _) (.int _) = true
       simp [Val.beq]
-  have hfound : ∃ inp ∈ inps, ∀ t, encodeStep L T P v senv S inp = .ok t →
+  have hfound : ∃ inp ∈ inps, inp.pick = x.pick ∧ ∀ t, encodeStep L T P v senv S inp = .ok t →
       Holds M (selectsT (.var b) (inp, t)) := by
     have hone : ∀ inp : SymInput v (shapes v) senv.nT, inp.pick = x.pick → (∀ k j to w, inp ≠ .answer k j to w) →
         (∀ ty to w, inp ≠ .unmatched ty to w) → ∀ t, encodeStep L T P v senv S inp = .ok t →
@@ -682,16 +684,16 @@ theorem unrollOne_covers (hL : SortedLayout L) (S : SymState v) (shown : List (T
     cases x with
     | command i' caller input =>
       obtain ⟨c, hc'⟩ := hmem (2, fun b => .command i' (.var b) (.var (b + 1))) (by simp [unrollKinds])
-      exact ⟨_, hc', hone _ rfl (by simp) (by simp)⟩
+      exact ⟨_, hc', rfl, hone _ rfl (by simp) (by simp)⟩
     | query i' caller input =>
       obtain ⟨c, hc'⟩ := hmem (2, fun b => .query i' (.var b) (.var (b + 1))) (by simp [unrollKinds])
-      exact ⟨_, hc', hone _ rfl (by simp) (by simp)⟩
+      exact ⟨_, hc', rfl, hone _ rfl (by simp) (by simp)⟩
     | event i' value =>
       obtain ⟨c, hc'⟩ := hmem (1, fun b => .event i' (.var b)) (by simp [unrollKinds])
-      exact ⟨_, hc', hone _ rfl (by simp) (by simp)⟩
+      exact ⟨_, hc', rfl, hone _ rfl (by simp) (by simp)⟩
     | clock time =>
       obtain ⟨c, hc'⟩ := hmem (1, fun b => .clock (.var b)) (by simp [unrollKinds])
-      exact ⟨_, hc', hone _ rfl (by simp) (by simp)⟩
+      exact ⟨_, hc', rfl, hone _ rfl (by simp) (by simp)⟩
     | answer to w =>
       obtain ⟨ty, value⟩ := w
       obtain ⟨p0, hf, hty⟩ := answer_found hno
@@ -715,7 +717,7 @@ theorem unrollOne_covers (hL : SortedLayout L) (S : SymState v) (shown : List (T
         rw [ite_eq_left hi0]
         exact List.mem_append_left _ (List.mem_append_left _ (List.mem_append_right _
           (List.mem_flatMap.2 ⟨k, hkm, List.mem_map.2 ⟨j, List.mem_finRange j, rfl⟩⟩))))
-      refine ⟨_, hc', fun t ht => ?_⟩
+      refine ⟨_, hc', rfl, fun t ht => ?_⟩
       obtain ⟨p', hp', c', heq, hv, -⟩ := hplaced _ hc'
       have heq' : SymInput.answer k j (.var c) (.var (c + 1)) = p'.2 c' := heq
       have hcc : c = c' := by
@@ -733,8 +735,8 @@ theorem unrollOne_covers (hL : SortedLayout L) (S : SymState v) (shown : List (T
       rw [selectsT, holds_andT, encodeStep_answer_case ht]
       refine ⟨hpickEq _ rfl, ?_⟩
       simpa [Holds, Term.denote, h0'] using hhit
-  obtain ⟨inp0, hi0, hpk0⟩ := hfound
-  obtain ⟨y0, hu0, hy0⟩ := hall inp0 hi0
+  obtain ⟨inp0, hi0, hpe0, hpk0⟩ := hfound
+  obtain ⟨y0, hu0, hy0⟩ := hall inp0 (hfil ▸ List.mem_filter.2 ⟨hi0, by rw [hpe0]; exact hf⟩)
   obtain ⟨t0, _, _, ht0, _, _, hy0e⟩ := unrollKind_ok senv hu0
   have hpick0 : Holds M y0.2.1 := by rw [hy0e]; exact hpk0 t0 ht0
   have hpick1 : Holds M (selectsT (.var b) y0.1) := by
@@ -793,6 +795,10 @@ noncomputable def runVals (n : Nat) : Nat → Nat → List (Input v) → List Va
 
 end
 
+/-- Each input's kind is the pick its step fixes, where it fixes one (`unrollOne`). -/
+def PicksFit {v : ServiceV} (fs : List (Option Nat)) (xs : List (Input v)) : Prop :=
+  Forall2 (fun f x => f.all (· == x.pick) = true) fs xs
+
 theorem forall2_flatMap {α β γ : Type} {R : β → γ → Prop} {f : α → List β} {g : α → List γ} :
     (l : List α) → (∀ a ∈ l, Forall2 R (f a) (g a)) → Forall2 R (l.flatMap f) (l.flatMap g)
   | [], _ => trivial
@@ -811,9 +817,9 @@ variable {M : Model} {L : Layout} {T : List TypeDecl} {v : ServiceV} {P : List A
 
 /-- An unrolled step's constants and their values in a run's model: one value per constant, of its sort wherever the
 sort holds one, all data. -/
-theorem unrollOne_vals (S : SymState v) (shown : List (Term × Term)) (i b : Nat) (x : Input v) :
-    Forall2 (SortedIf L) (unrollOne L T P v senv S shown i b).1 (stepVals L v chk.callerData senv.nT i b x) ∧
-      ∀ t ∈ (unrollOne L T P v senv S shown i b).1, t.isData = true := by
+theorem unrollOne_vals (S : SymState v) (shown : List (Term × Term)) (i b : Nat) (f : Option Nat) (x : Input v) :
+    Forall2 (SortedIf L) (unrollOne L T P v senv S shown i b f).1 (stepVals L v chk.callerData senv.nT i b x) ∧
+      ∀ t ∈ (unrollOne L T P v senv S shown i b f).1, t.isData = true := by
   have hat := placeKinds_at _ (b + 1) (unrollKinds_terms senv (ans := i != 0))
   rcases hp : placeKinds (unrollKinds v (shapes v) senv.nT (i != 0)) (b + 1) with ⟨inps, e⟩
   rw [hp] at hat
@@ -829,92 +835,96 @@ theorem unrollOne_vals (S : SymState v) (shown : List (Term × Term)) (i b : Nat
       exact (unrollKinds_shape chk.callerData hpk c).2.2 t ht
 
 /-- The constant after an unrolled step is past its values. -/
-theorem unrollOne_next_vals (S : SymState v) (shown : List (Term × Term)) (i b : Nat) (x : Input v) :
-    (unrollOne L T P v senv S shown i b).2.2.2.2 = b + (stepVals L v chk.callerData senv.nT i b x).length := by
-  rw [unrollOne_next senv S shown i b, forall2_length (unrollOne_vals chk senv S shown i b x).1]
+theorem unrollOne_next_vals (S : SymState v) (shown : List (Term × Term)) (i b : Nat) (f : Option Nat) (x : Input v) :
+    (unrollOne L T P v senv S shown i b f).2.2.2.2 = b + (stepVals L v chk.callerData senv.nT i b x).length := by
+  rw [unrollOne_next senv S shown i b f, forall2_length (unrollOne_vals chk senv S shown i b f x).1]
 
-theorem unrollSteps_vals : (xs : List (Input v)) → (S : SymState v) → (shown : List (Term × Term)) → (i b : Nat) →
-    Forall2 (SortedIf L) (unrollSteps L T P v senv S shown i b xs.length).1 (runVals L v chk.callerData senv.nT i b xs) ∧
-      ∀ t ∈ (unrollSteps L T P v senv S shown i b xs.length).1, t.isData = true
-  | [], _, _, _, _ => by simp [unrollSteps, runVals, Forall2]
-  | x :: xs, S, shown, i, b => by
-    have h1 := unrollOne_vals chk senv S shown i b x
-    rcases ho : unrollOne L T P v senv S shown i b with ⟨tys, asserts, st, refused, b'⟩
+theorem unrollSteps_vals : (xs : List (Input v)) → (fs : List (Option Nat)) → fs.length = xs.length →
+    (S : SymState v) → (shown : List (Term × Term)) → (i b : Nat) →
+    Forall2 (SortedIf L) (unrollSteps L T P v senv S shown i b fs).1 (runVals L v chk.callerData senv.nT i b xs) ∧
+      ∀ t ∈ (unrollSteps L T P v senv S shown i b fs).1, t.isData = true
+  | [], [], _, _, _, _, _ => by simp [unrollSteps, runVals, Forall2]
+  | [], _ :: _, h, _, _, _, _ | _ :: _, [], h, _, _, _, _ => by simp at h
+  | x :: xs, f :: fs, hl, S, shown, i, b => by
+    have h1 := unrollOne_vals chk senv S shown i b f x
+    rcases ho : unrollOne L T P v senv S shown i b f with ⟨tys, asserts, st, refused, b'⟩
     have hb' : b' = (placeKinds (unrollKinds v (shapes v) senv.nT (i != 0)) (b + 1)).2 := by
-      have : (unrollOne L T P v senv S shown i b).2.2.2.2 = b' := by rw [ho]
+      have : (unrollOne L T P v senv S shown i b f).2.2.2.2 = b' := by rw [ho]
       rw [← this]; rfl
-    have ih := unrollSteps_vals xs st.after (shown ++ st.shows) (i + 1) b'
+    have ih := unrollSteps_vals xs fs (by simpa using hl) st.after (shown ++ st.shows) (i + 1) b'
     rw [ho] at h1
-    simp only [List.length_cons, unrollSteps, ho, runVals, ← hb'] at ih ⊢
+    simp only [unrollSteps, ho, runVals, ← hb'] at ih ⊢
     exact ⟨forall2_append h1.1 ih.1, fun t ht => (List.mem_append.1 ht).elim (h1.2 t) (ih.2 t)⟩
 
 /-- The steps of an unrolled run from terms that denote the run's state `s`, after steps whose shown positions are
 exactly `seen`, whose constants hold a fitting run's values, hold their assertions and are that run. -/
-theorem unrollSteps_covers (hL : SortedLayout L) : (xs : List (Input v)) → (S : SymState v) →
+theorem unrollSteps_covers (hL : SortedLayout L) : (xs : List (Input v)) → (fs : List (Option Nat)) →
+    PicksFit fs xs → (S : SymState v) →
     (shown : List (Term × Term)) → (i b : Nat) → {s : State v} → {seen : List IdV} → StateRel M L T (shapes v) S s →
     Step.Inv P s → (i = 0 → s.pending = []) → IdsExact M L shown seen →
-    (∀ t ∈ (unrollSteps L T P v senv S shown i b xs.length).1, (L.srt? t).isSome = true) →
-    (unrollSteps L T P v senv S shown i b xs.length).2.2.2 = [] → RunFits L T P v chk.callerData seen s xs →
+    (∀ t ∈ (unrollSteps L T P v senv S shown i b fs).1, (L.srt? t).isSome = true) →
+    (unrollSteps L T P v senv S shown i b fs).2.2.2 = [] → RunFits L T P v chk.callerData seen s xs →
     (∀ q (h : q < (runVals L v chk.callerData senv.nT i b xs).length),
       M.vars (b + q) = (runVals L v chk.callerData senv.nT i b xs)[q]) →
-    (∀ a ∈ (unrollSteps L T P v senv S shown i b xs.length).2.1, Holds M a) ∧
-      UnrollRun L T M chk.callerData s (unrollSteps L T P v senv S shown i b xs.length).2.2.1 xs
-  | [], _, _, _, _, _, _, _, _, _, _, _, _, _, _ => by simp [unrollSteps, UnrollRun]
-  | x :: xs, S, shown, i, b, s, seen, hR, hinv, h0, hs, hsrt, hnr, hfits, hvars => by
-    have hnext := unrollOne_next_vals chk senv S shown i b x
-    have hlen := forall2_length (unrollOne_vals chk senv S shown i b x).1
-    rcases ho : unrollOne L T P v senv S shown i b with ⟨tys, asserts, st, refused, b'⟩
+    (∀ a ∈ (unrollSteps L T P v senv S shown i b fs).2.1, Holds M a) ∧
+      UnrollRun L T M chk.callerData s (unrollSteps L T P v senv S shown i b fs).2.2.1 xs
+  | [], [], _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => by simp [unrollSteps, UnrollRun]
+  | [], _ :: _, h, _, _, _, _, _, _, _, _, _, _, _, _, _, _ | _ :: _, [], h, _, _, _, _, _, _, _, _, _, _, _, _, _, _ =>
+    h.elim
+  | x :: xs, f :: fs, ⟨hf, hfs⟩, S, shown, i, b, s, seen, hR, hinv, h0, hs, hsrt, hnr, hfits, hvars => by
+    have hnext := unrollOne_next_vals chk senv S shown i b f x
+    have hlen := forall2_length (unrollOne_vals chk senv S shown i b f x).1
+    rcases ho : unrollOne L T P v senv S shown i b f with ⟨tys, asserts, st, refused, b'⟩
     have hb' : b' = (placeKinds (unrollKinds v (shapes v) senv.nT (i != 0)) (b + 1)).2 := by
-      have : (unrollOne L T P v senv S shown i b).2.2.2.2 = b' := by rw [ho]
+      have : (unrollOne L T P v senv S shown i b f).2.2.2.2 = b' := by rw [ho]
       rw [← this]; rfl
     rw [ho] at hnext hlen
     dsimp only at hnext hlen
-    simp only [List.length_cons, unrollSteps, ho, runVals, ← hb'] at hsrt hnr hvars ⊢
+    simp only [unrollSteps, ho, runVals, ← hb'] at hsrt hnr hvars ⊢
     obtain ⟨hfit, hfits⟩ := hfits
     have hvars1 : ∀ q (h : q < (stepVals L v chk.callerData senv.nT i b x).length),
         M.vars (b + q) = (stepVals L v chk.callerData senv.nT i b x)[q] := fun q h => by
       rw [hvars q (by simp; omega)]
       exact List.getElem_append_left h
-    have hsrt1 : ∀ t ∈ (unrollOne L T P v senv S shown i b).1, (L.srt? t).isSome = true := by
+    have hsrt1 : ∀ t ∈ (unrollOne L T P v senv S shown i b f).1, (L.srt? t).isSome = true := by
       rw [ho]; exact fun t ht => hsrt t (List.mem_append_left _ ht)
-    have hc1 := unrollOne_covers chk senv hL S shown i b hR hinv h0 hs hsrt1
-      (by rw [ho]; exact (List.append_eq_nil_iff.1 hnr).1) hfit hvars1
-    have hat := unrollOne_at chk senv hL S shown i b hR hinv hs hsrt1 hc1.1 hc1.2
+    have hc1 := unrollOne_covers chk senv hL S shown i b f hR hinv h0 hs hsrt1
+      (by rw [ho]; exact (List.append_eq_nil_iff.1 hnr).1) hfit hf hvars1
+    have hat := unrollOne_at chk senv hL S shown i b f hR hinv hs hsrt1 hc1.1 hc1.2
     rw [ho] at hc1 hat
     dsimp only at hc1 hat
     obtain ⟨hat, -, hshows⟩ := hat
-    have ih := unrollSteps_covers hL xs st.after (shown ++ st.shows) (i + 1) b' hat.2.2.1 (step_inv T chk.reach s hinv x)
+    have ih := unrollSteps_covers hL xs fs hfs st.after (shown ++ st.shows) (i + 1) b' hat.2.2.1
+      (step_inv T chk.reach s hinv x)
       (fun h => by omega) (hs.append hshows) (fun t ht => hsrt t (List.mem_append_right _ ht))
       (List.append_eq_nil_iff.1 hnr).2 hfits fun q h => by
         have e : b' + q = b + ((stepVals L v chk.callerData senv.nT i b x).length + q) := by omega
         rw [e, hvars _ (by simp; omega), List.getElem_append_right (by omega)]
         simp
     exact ⟨fun a ha => (List.mem_append.1 ha).elim (hc1.1 a) (ih.1 a), hc1.2, hat, ih.2⟩
-
 end
 
 section
 variable {L : Layout} {T : List TypeDecl} {v : ServiceV} {P : List AnySite} {E : List AnyEffectSite}
   (chk : Checked P E T v) (senv : StepEnv L (shapes v))
 
-/-- Every run is a model of its unrolled script: where no input kind's encoding was refused, a run of `d` inputs from
-the initial state whose inputs fit the slots and are valid, whose steps stay within the slots and do not fault, gives a
+/-- Every run is a model of its unrolled script: where no input kind's encoding was refused, a run of one input per
+step from the initial state, each of the kind its step fixes (`PicksFit`), whose inputs fit the slots and are valid, whose steps stay within the slots and do not fault, gives a
 model whose variables hold values of their sorts, whose steps are that run, and which satisfies every assertion of the
 run. So the run with a goal has no model exactly when no such run satisfies the goal (`UnrollBase.holds_withGoal`):
 generate's "unreached within `d` steps" rests on this. -/
-theorem runs_covered (hL : SortedLayout L) {d : Nat} {B : UnrollBase v senv.nT}
-    (hB : unrollBase L T P v senv d = .ok B) (hnr : B.refused = [])
-    {xs : List (Input v)} (hlen : xs.length = d) (hfits : RunFits L T P v chk.callerData [] (Step.State.init v) xs) :
+theorem runs_covered (hL : SortedLayout L) {fs : List (Option Nat)} {B : UnrollBase v senv.nT}
+    (hB : unrollBase L T P v senv fs = .ok B) (hnr : B.refused = [])
+    {xs : List (Input v)} (hpk : PicksFit fs xs) (hfits : RunFits L T P v chk.callerData [] (Step.State.init v) xs) :
     ∃ M : Model, (∀ n (h : n < B.tys.length), VarSorted L B.tys[n] (M.vars n)) ∧ LayoutSorted L B.tys M ∧
       UnrollRun L T M chk.callerData (Step.State.init v) B.steps xs ∧ ∀ a ∈ B.asserts, Holds M a := by
-  subst hlen
   simp only [unrollBase] at hB
   obtain ⟨S0, hS0, hB⟩ := bind_ok.1 hB
   obtain ⟨dts, hdts, hB⟩ := bind_ok.1 hB
-  have hv := unrollSteps_vals chk senv xs S0 [] 0 0
-  have hcov := unrollSteps_covers (M := coverModel L (runVals L v chk.callerData senv.nT 0 0 xs)) chk senv hL xs S0 [] 0 0
-    (init_rel (need_ok.1 hS0)) Step.init_inv (fun _ => rfl) IdsExact.nil
-  rcases hr : unrollSteps L T P v senv S0 [] 0 0 xs.length with ⟨tys, asserts, steps, refused⟩
+  have hv := unrollSteps_vals chk senv xs fs (forall2_length hpk) S0 [] 0 0
+  have hcov := unrollSteps_covers (M := coverModel L (runVals L v chk.callerData senv.nT 0 0 xs)) chk senv hL xs fs hpk
+    S0 [] 0 0 (init_rel (need_ok.1 hS0)) Step.init_inv (fun _ => rfl) IdsExact.nil
+  rcases hr : unrollSteps L T P v senv S0 [] 0 0 fs with ⟨tys, asserts, steps, refused⟩
   rw [hr] at hB hv hcov
   obtain ⟨vars, hvars, hB⟩ := bind_ok.1 hB
   cases pure_ok.1 hB

@@ -176,7 +176,7 @@ def GenerateKind.explanation : GenerateKind → Explanation
   | .reached => ⟨docOf% GenerateKind.reached,
     [`Tazuna.Cli.generate_reaches, `Tazuna.Ir.targets_cover, `Tazuna.Cli.targetFile_inj],
     [service, target, written, steps]⟩
-  | .unreached => ⟨docOf% GenerateKind.unreached, [`Tazuna.Smt.generate_unreached],
+  | .unreached => ⟨docOf% GenerateKind.unreached, [`Tazuna.Smt.noModel_cubes],
     [service, target, steps, bounds, assumes]⟩
 
 def UndecidedKind.explanation : UndecidedKind → Explanation

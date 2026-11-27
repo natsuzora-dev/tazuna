@@ -7,8 +7,8 @@ the names of the rules a request breaks. A rule's name term is compared as SMT-L
 holds of every value exactly when its string is the name, so the goal misses no run. An event's class is read off the
 event slots of the step's end and a request's off its news slots (`Finished` relates them to the events applied and
 the requests written), where the step reaches its end. With
-`runs_covered` this gives T6b (`generate_unreached`): a depth with no model has no run of that many valid inputs,
-within the slots and faulting nowhere, whose last step shows the target's class. The goal reads the kind the step
+`runs_covered` this gives T6b (`generate_unreached`): steps with no model have no run of that many valid inputs,
+each of the kind its step fixes, within the slots and faulting nowhere, whose last step shows the target's class. The goal reads the kind the step
 takes, the one decoding reads, so it holds only of runs that show that class (`generate_sound`). -/
 
 namespace Tazuna.Smt
@@ -1039,21 +1039,22 @@ theorem unrollRun_last {M : Model} {hc : v.caller.isData = true} {n : Nat} (x : 
     | nil => cases ys <;> exact h.elim
     | cons a l => simpa [List.getLast?_cons_cons] using hl
 
-/-- T6b: where generate's script for the target at depth `d` has no input kind refused and no model, no run from the
-initial state of `d` inputs that fit the slots and are valid, whose steps stay within the slots and fault nowhere,
-answers at its last step in a class the target aims at. generate's "unreached within k steps" is this at every depth up
-to k, so no such run of at most k inputs answers in that class at any step. -/
+/-- T6b: where generate's script for the target on the steps `fs` (each fixing an input kind or not) has no input kind
+refused and no model, no run from the initial state of one input per step, each of the kind its step fixes, that fit
+the slots and are valid, whose steps stay within the slots and fault nowhere, answers at its last step in a class the
+target aims at. With no step fixed this is depth `fs.length` (`noModel_cubes` gathers the fixed ones). -/
 theorem generate_unreached (chk : Checked P E T v) (senv : StepEnv L (shapes v)) (hL : SortedLayout L)
-    {rules : RuleNames} {g : GenTarget} {d : Nat} {B : UnrollBase v senv.nT}
-    (hB : unrollBase L T P v senv d = .ok B) (hnr : B.refused = [])
-    (hun : Unsat L (B.withGoal (genGoal L T rules g B.steps)).ask)
-    {ys : List (Input v)} {x : Input v} (hlen : ys.length + 1 = d)
+    {rules : RuleNames} {g : GenTarget} {fs : List (Option Nat)} {B : UnrollBase v senv.nT}
+    (hB : unrollBase L T P v senv fs = .ok B) (hnr : B.refused = [])
+    (hun : ∀ M : Model, (∀ n (h : n < B.tys.length), VarSorted L B.tys[n] (M.vars n)) → LayoutSorted L B.tys M →
+      ∃ a ∈ (B.withGoal (genGoal L T rules g B.steps)).ask.script.asserts, ¬ Holds M a)
+    {ys : List (Input v)} {x : Input v} (hpk : PicksFit fs (ys ++ [x]))
     (hin : RunIn L T P v chk.callerData (Step.State.init v) (ys ++ [x]))
     (has : ∀ a ∈ Step.Assumption.ofRuns, a.Holds T (Step.State.init v) (ys ++ [x])) :
     ¬ Hits T v rules g x (step T v (run T v (Step.State.init v) ys).1 x) := by
   intro hhit
-  obtain ⟨M, hM, hsel, hrun, hA⟩ := runs_covered chk senv hL hB hnr (by simp [hlen]) (runFits_of _ _ _ _ _ _ _ hin has)
-  obtain ⟨a, ha, hna⟩ := hun.noModel M hM (hsel _ _ (unrollBase_dts L T P v senv hB) (unrollBase_vars L T P v senv hB))
+  obtain ⟨M, hM, hsel, hrun, hA⟩ := runs_covered chk senv hL hB hnr hpk (runFits_of _ _ _ _ _ _ _ hin has)
+  obtain ⟨a, ha, hna⟩ := hun M hM hsel
   refine hna (((B.holds_withGoal _).2 ⟨hA, ?_⟩) a ha)
   obtain ⟨st, hlast, ⟨k, hk, hdec, hrel⟩, hno, -⟩ := unrollRun_last x ys _ _ hrun
   simp only [genGoal, hlast]
@@ -1073,8 +1074,8 @@ their sorts, the steps decode to inputs that `validInputs` allows (`Step.ShownRu
 answers at its last step in a class the target aims at. So a found model always replays to its target; generate's
 check of that is never the one that fails. -/
 theorem generate_sound (chk : Checked P E T v) (senv : StepEnv L (shapes v)) (hL : SortedLayout L) {M : Model}
-    {rules : RuleNames} {g : GenTarget} {d : Nat} {B : UnrollBase v senv.nT}
-    (hB : unrollBase L T P v senv d = .ok B)
+    {rules : RuleNames} {g : GenTarget} {fs : List (Option Nat)} {B : UnrollBase v senv.nT}
+    (hB : unrollBase L T P v senv fs = .ok B)
     (hM : ∀ n (h : n < B.tys.length), VarSorted L B.tys[n] (M.vars n))
     (hA : ∀ a ∈ (B.withGoal (genGoal L T rules g B.steps)).ask.script.asserts, Holds M a) :
     ∃ ys x, B.steps.mapM (·.decode M L chk.callerData) = some (ys ++ [x]) ∧

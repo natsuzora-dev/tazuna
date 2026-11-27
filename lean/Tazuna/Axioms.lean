@@ -178,10 +178,11 @@ elab "#check_tazuna_reach" : command => do
     -- unless out of tries, and its last step answers in the target's class. Its chain: `traceOf_reads` (Trace/ReplayOk),
     -- on `dec_enc` and `Step.step_same`.
     ``Tazuna.Cli.generate_reaches,
-    -- T6b: generate's "unreached within k steps": where its script at a depth has no model, no run of that many valid
-    -- inputs within the slots that faults nowhere answers at its last step in the target's class (from
-    -- `runs_covered`: every such run is a model of every assertion but the goal).
-    ``Tazuna.Smt.generate_unreached,
+    -- T6b: generate's "unreached within k steps": where its cubes at a depth cover it and have no model, no run of
+    -- that many valid inputs within the slots that faults nowhere answers at its last step in the target's class
+    -- (`generate_unreached` per cube, from `runs_covered`: every such run of the cube's kinds is a model of every
+    -- assertion but the goal; `extendBase_ok`: a cube's script is the run on its picks).
+    ``Tazuna.Smt.noModel_cubes,
     -- T7, a response by induction over steps (Lamport sec 3.3): where every input kind's response question is unsat, no
     -- run on valid inputs with timely clock lines whose steps stay within the slots violates it (Prove.withinBounds);
     -- where every bound question is unsat too and every input and the initial state fit, no such run at all, at any

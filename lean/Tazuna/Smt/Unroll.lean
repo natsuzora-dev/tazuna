@@ -277,12 +277,13 @@ def unrollKind (S : SymState v) (shown : List (Term × Term)) (sel : Term) (inp 
 at the constant `b`, then its kinds' inputs: the types of its constants, its assertions (each kind's, then that one
 kind is taken), the step, the kinds refused, and the constant after its last. The state after is the taken kind's (`S`
 where none is, which the last assertion rules out), and so are the ids it shows. Answers are no kind of the first
-step, since no request waits in the initial state. -/
-def unrollOne (S : SymState v) (shown : List (Term × Term)) (i b : Nat) :
+step, since no request waits in the initial state. A step whose pick `p` is fixed encodes only the kinds of that
+pick, with every kind's constants still declared, so its constants are the same whatever the pick. -/
+def unrollOne (S : SymState v) (shown : List (Term × Term)) (i b : Nat) (p : Option Nat) :
     List Ty × List Term × UnrollStep v senv.nT × List (SymInput v (shapes v) senv.nT × Refusal) × Nat :=
   let sel : Term := .var b
   let (inps, e) := placeKinds (unrollKinds v (shapes v) senv.nT (i != 0)) (b + 1)
-  let rs := inps.map fun inp => unrollKind L T P v senv S shown sel inp
+  let rs := (inps.filter fun inp => p.all (· == inp.pick)).map fun inp => unrollKind L T P v senv S shown sel inp
   let oks := rs.filterMap fun | .ok x => some x | .error _ => none
   let refused := rs.filterMap fun | .error x => some x | .ok _ => none
   let S' := (oks.foldr (fun x r => SymState.ite x.2.1 x.2.2.2 r) S).share
@@ -290,28 +291,29 @@ def unrollOne (S : SymState v) (shown : List (Term × Term)) (i b : Nat) :
   ([.int] ++ inps.flatMap (·.tys), oks.map (·.2.2.1) ++ [anyT (oks.map (·.2.1))], ⟨sel, S, S', oks.map (·.1), shows⟩,
     refused, e)
 
-/-- The `d` steps of an unrolled run from step `i`, from `S` after steps whose out lines show `shown`, with the first
-selector at the constant `b`. -/
+/-- The steps of an unrolled run from step `i`, one per pick of `fs` (none: every kind), from `S` after steps whose out
+lines show `shown`, with the first selector at the constant `b`. -/
 def unrollSteps (S : SymState v) (shown : List (Term × Term)) (i b : Nat) :
-    Nat → List Ty × List Term × List (UnrollStep v senv.nT) × List (SymInput v (shapes v) senv.nT × Refusal)
-  | 0 => ([], [], [], [])
-  | d + 1 =>
-    let (tys, asserts, st, refused, b') := unrollOne L T P v senv S shown i b
-    let (tys', asserts', sts, refused') := unrollSteps st.after (shown ++ st.shows) (i + 1) b' d
+    List (Option Nat) → List Ty × List Term × List (UnrollStep v senv.nT) × List (SymInput v (shapes v) senv.nT × Refusal)
+  | [] => ([], [], [], [])
+  | p :: fs =>
+    let (tys, asserts, st, refused, b') := unrollOne L T P v senv S shown i b p
+    let (tys', asserts', sts, refused') := unrollSteps st.after (shown ++ st.shows) (i + 1) b' fs
     (tys ++ tys', asserts ++ asserts', st :: sts, refused ++ refused')
 
-/-- The runs of `d` inputs from the initial state, before a goal: what every goal at that depth shares. -/
-def unrollBase (d : Nat) : Except Refusal (UnrollBase v senv.nT) := do
+/-- The runs of one input per pick of `fs` from the initial state, before a goal: what every goal on those steps
+shares. -/
+def unrollBase (fs : List (Option Nat)) : Except Refusal (UnrollBase v senv.nT) := do
   -- The initial records have a term where they fit the slots (`embedV`); else a bound is below them.
   let S0 ← need (if (embedV L v.records (Ty.up _ v.records_data v.init)).isSome then .layout (.type v.records)
     else .limit (.slots v.records)) (initState L v)
   let dts ← need (.layout (.type v.records)) L.datatypes?
-  let r := unrollSteps L T P v senv S0 [] 0 0 d
+  let r := unrollSteps L T P v senv S0 [] 0 0 fs
   let vars ← r.1.mapM fun ty => need (lacks ty) (L.srt? ty)
   pure ⟨dts, r.1, vars, r.2.1, r.2.2.1, r.2.2.2⟩
 
 /-- The runs declare each variable at its type's sort. -/
-theorem unrollBase_vars {d : Nat} {B : UnrollBase v senv.nT} (hB : unrollBase L T P v senv d = .ok B) :
+theorem unrollBase_vars {fs : List (Option Nat)} {B : UnrollBase v senv.nT} (hB : unrollBase L T P v senv fs = .ok B) :
     B.tys.mapM L.srt? = some B.vars := by
   simp only [unrollBase] at hB
   obtain ⟨_, -, hB⟩ := bind_ok.1 hB
@@ -321,7 +323,7 @@ theorem unrollBase_vars {d : Nat} {B : UnrollBase v senv.nT} (hB : unrollBase L 
   exact mapM_need hvars
 
 /-- The runs declare the layout's datatypes. -/
-theorem unrollBase_dts {d : Nat} {B : UnrollBase v senv.nT} (hB : unrollBase L T P v senv d = .ok B) :
+theorem unrollBase_dts {fs : List (Option Nat)} {B : UnrollBase v senv.nT} (hB : unrollBase L T P v senv fs = .ok B) :
     L.datatypes? = some B.datatypes := by
   simp only [unrollBase] at hB
   obtain ⟨_, -, hB⟩ := bind_ok.1 hB

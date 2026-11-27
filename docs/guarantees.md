@@ -142,9 +142,12 @@ A command gets `<command> rejected <Variant>` only for the constructors its `dec
 Where `decide` writes every rejection in place as a constructor, in `require`, `lookup` or `Error(..)`, through `let` and `case`, those are the constructors it names (`Expr.rejects_sound`); anywhere else, such as a rejection held in a variable or returned by a helper function, every constructor of the rejection type stays a target.
 `targets_cover`: every class of out line a step can show is aimed at by one of these targets.
 For each target, `generate` searches runs from the initial state, one input longer each time, up to `steps` inputs.
+It splits each length into cubes that fix the input kinds of the last steps: one cube per kind of the last step, and a cube the solver leaves undecided splits again on the step before (cube and conquer).
+Cubes are asked a fixed number at a time, and the first in order with a model wins, so the questions and the trace do not depend on `--jobs`.
+A cube needs no question where the code rules out that its last step's kinds show the target, or, at the last length, where `prove`'s dead-target question of each kind of its last step is unsat.
 
 - `Generate.reached` writes the trace of the shortest run it found to `<dir>/<service>/<target>.jsonl`. `generate_reaches` (T6): the written trace reads as the spec from the initial state, so `verify` replays it as passed unless it runs out of tries, and the last step of its run shows the target. `generate_sound`: every model the solver gives decodes to inputs that satisfy `validInputs` whose run faults nowhere and reaches the target. `targetFile_inj`: two targets never share a file, so no written trace overwrites another's.
-- `Generate.unreached`: `generate_unreached` (T6b): no run of at most `steps` inputs within the slots, on which the line's `assumes` hold, shows the target's class at any step.
+- `Generate.unreached`: `noModel_cubes` (T6b): no run of at most `steps` inputs within the slots, on which the line's `assumes` hold, shows the target's class at any step. Every input's kind is one a split lists, so cubes with no model at a length leave no run of that length.
 
 ## verify
 

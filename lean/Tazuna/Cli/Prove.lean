@@ -534,25 +534,6 @@ inductive Placed where
   | skipped (service : String) (target : Target)
   | asked (result : IO.Ref (Option (Except String Report)))
 
-/-- Whether every question of a dead-target family reads unsat, asked in order: the first answer that is not unsat
-settles that the target is not dead, so the rest are not asked. One job asks them all, so which run is a function of
-the spec and the solver, not of the schedule. A question's script is built only where its direct key has no answer:
-an entry is written only for a question asked from the same inputs, so the kind has that question. -/
-def allUnsat (solver : Solver) (cache : System.FilePath) (inputs : List String) (ids : Option Nat) :
-    List (List String × Thunk (Option TypedScript)) → IO (Except String Bool)
-  | [] => pure (.ok true)
-  | (name, q) :: rest => do
-    let key := directKey inputs name
-    let answer ← match ← Solver.cached cache key ids with
-      | some a => pure (some (.ok a))
-      | none => match q.get with
-        | some q => some <$> solver.ask cache key ids q.script
-        | none => pure none
-    match answer with
-    | none | some (.ok .unsat) => allUnsat solver cache inputs ids rest
-    | some (.ok _) => pure (.ok false)
-    | some (.error m) => pure (.error m)
-
 -- Every service a report names has a scope, so the empty list is never read.
 set_option linter.tazuna.silentDefault false in
 def prove (root path : String) (opts : Options) : Cmd Unit := do
