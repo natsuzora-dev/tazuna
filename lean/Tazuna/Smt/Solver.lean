@@ -1,4 +1,5 @@
 import Tazuna.Smt.NameCode
+import Tazuna.Smt.Confirm
 import Tazuna.Smt.Sha256
 
 /-! Running the solver. Each script runs in its own solver process, which reads the script from a file and prints its
@@ -122,13 +123,39 @@ def Answer.uncode (ids : Option Nat) (a : Answer) : Answer :=
   | some d, .sat vs => .sat (vs.map fun (n, v) => (n, v.uncode d))
   | _, a => a
 
-/-- Runs what the solver reads for a script (`Script.sent`, `ids` being the id datatype if the script has one), or
-reads its answer from the cache directory `dir`, keyed by its whole text; an engine bug where the script has no text
-(`noSort`). -/
+/-- Over-approximate, confirm, fall back: asks the abstract variant `abs` of the exact script whose datatypes and
+variables are `dts` and `vars` and whose literals are `lits`; an unsat answer is the answer, as `Unsat` reads it. A sat
+answer is confirmed by the exact script with the variant's model fixed (`confirmations`, keyed by `fixed`), whose sat
+answer is the answer; where no fixing confirms it, or the variant has no verdict, the exact script answers (none: it
+has no text). Every script asked is cached by its own text. -/
+def Solver.overApprox (s : Solver) (dir : System.FilePath) (ids : Option Nat) (dts : List Datatype) (vars : List Srt)
+    (lits : List String) (abs : Keyed) (fixed : List Term → Option Keyed) (exact : IO (Option Answer)) :
+    IO (Option Answer) := do
+  match ← s.runKeyed dir abs with
+  | .unsat => return some .unsat
+  | .sat vs =>
+    for fixes in confirmations dts vars lits vs do
+      if let some q := fixed fixes then
+        if let .sat ws ← s.runKeyed dir q then return some ((Answer.sat ws).uncode ids)
+    exact
+  | _ => exact
+
+/-- Asks what the solver reads for a script (`Script.sent`, `ids` being the id datatype if the script has one): its
+abstract variant first where it holds strings (`Solver.overApprox`), else the script; each answer read from the cache
+directory `dir` where kept. An engine bug where a script has no text (`noSort`). -/
 def Solver.runCached (s : Solver) (dir : System.FilePath) (ids : Option Nat) (script : Script) :
     IO (Except String Answer) := do
-  let some q := (script.sent ids).keyed s.header | return .error noSort
-  return .ok ((← s.runKeyed dir q).uncode ids)
+  let e := script.sent ids
+  let exact : IO (Option Answer) := do
+    let some q := e.keyed s.header | return none
+    return some ((← s.runKeyed dir q).uncode ids)
+  let fixed (fixes : List Term) : Option Keyed := { e with asserts := e.asserts ++ fixes }.keyed s.header
+  let r ← match e.abs.bind (·.keyed s.header) with
+    | none => exact
+    | some a => s.overApprox dir ids e.datatypes e.vars e.lits a fixed exact
+  return match r with
+    | some a => .ok a
+    | none => .error noSort
 
 /-- A script's text parts with their shared definitions found, the definitions' sorts and the SHA-256 of the framed
 parts: what scripts that add one goal assertion share (the goals of generate's targets and of a service's responses at
@@ -148,26 +175,55 @@ def Script.prefix? (s : Script) (header : List String) : Option ScriptPrefix := 
   let parts := s.parts header asserts (D.entries.toList.map (·.2) |>.zip sorts.toList)
   pure ⟨s, D, sorts, parts, Sha256.hex (frame [parts.head, parts.body, parts.tail]).toUTF8⟩
 
-/-- The prefix's script with `goal` as its last assertion, keyed: the text is the prefix's parts with the goal's new
-definitions after the prefix's and its assertion after the prefix's, and the key is the SHA-256 of the prefix's digest
-and those two pieces, so the key covers exactly what prints the text without printing the prefix again. None where a
-new definition has no sort. -/
-def ScriptPrefix.ask (p : ScriptPrefix) (goal : Term) : Option Keyed := do
-  let (g, D) := goal.extract p.defs
+/-- The prefix's script with `goals` as its last assertions, keyed: the text is the prefix's parts with the goals' new
+definitions after the prefix's and their assertions after the prefix's, and the key is the SHA-256 of the prefix's
+digest and those two pieces, so the key covers exactly what prints the text without printing the prefix again. None
+where a new definition has no sort. -/
+def ScriptPrefix.askAll (p : ScriptPrefix) (goals : List Term) : Option Keyed := do
+  let (gs, D) := Term.extracts goals p.defs
   let fresh := D.entries.toList.drop p.defs.entries.size
   let sorts ← fresh.foldlM (fun acc (_, b) => do pure (acc.push (← b.srt? p.script.datatypes p.script.vars acc))) p.sorts
   let defs := linesText ((fresh.zip (sorts.toList.drop p.sorts.size)).zipIdx.map fun (((_, b), srt), i) =>
     defineLine (p.defs.entries.size + i) b srt)
-  let assert := linesText [s!"(assert {g.print})"]
-  pure ⟨Sha256.hex (frame [p.digest, defs, assert]).toUTF8,
-    fun _ => p.parts.head ++ defs ++ p.parts.body ++ assert ++ p.parts.tail⟩
+  let asserts := linesText (gs.map fun g => s!"(assert {g.print})")
+  pure ⟨Sha256.hex (frame [p.digest, defs, asserts]).toUTF8,
+    fun _ => p.parts.head ++ defs ++ p.parts.body ++ asserts ++ p.parts.tail⟩
+
+/-- The prefix's script with `goal` as its last assertion, keyed (`ScriptPrefix.askAll`). -/
+def ScriptPrefix.ask (p : ScriptPrefix) (goal : Term) : Option Keyed := p.askAll [goal]
+
+/-- The abstract variant (`Script.abs`) of a prefix's script, for scripts that add a goal to it: the variant's
+prefix without the literals' order, which follows the goal as in `Script.abs`, the cache its terms were coded with, so
+a goal's shared terms code to the prefix's objects, and the script's literals and variables. A goal with a literal the
+prefix lacks has no variant here, as the literals' variables would differ. -/
+structure AbsPrefix where
+  pre : ScriptPrefix
+  cache : SCodeCache
+  lits : List String
+  order : List Term
+
+/-- The abstract variant's prefix of `s`, as `Script.abs` builds the variant of `s` with goals added. -/
+def Script.absPrefix? (s : Script) (header : List String) : Option AbsPrefix := do
+  guard s.funs.isEmpty
+  let lits := s.lits
+  guard (s.hasStrings lits)
+  let base := s.vars.length
+  let (ps, cache) := Term.scodesC s.datatypes s.vars (litVar lits base) s.asserts {}
+  let ps ← ps
+  guard (ps.all (·.2 == .bool))
+  let vars := s.vars.map Srt.code ++ lits.map fun _ => Srt.int
+  let pre ← Script.prefix? ⟨s.datatypes.map Datatype.code, vars, [2, 1], ps.map (·.1), List.range (base + lits.length)⟩
+    header
+  pure ⟨pre, cache, lits, litOrder lits base⟩
 
 /-- What the solver reads for scripts that add a goal to one script (`Script.sent`): the prefix with names as codes
 and the cache its terms were coded with, so a goal's shared terms code to the prefix's objects, where the script has
-names as codes; and the prefix as it is, read only for a goal that has no codes. -/
+names as codes; the prefix as it is, read only for a goal that has no codes; and the abstract variant's prefix of
+the prefix the goal is read with, asked first (`Solver.overApprox`). -/
 structure SentPrefix where
   coded : Option (Nat × ScriptPrefix × CodeCache)
   exact : Thunk (Option ScriptPrefix)
+  abs : Thunk (Option AbsPrefix)
 
 /-- The prefix of what the solver reads for `s` and goals added to it, `ids` being the id datatype if any. -/
 def Script.sentPrefix? (s : Script) (ids : Option Nat) (header : List String) : SentPrefix :=
@@ -178,14 +234,36 @@ def Script.sentPrefix? (s : Script) (ids : Option Nat) (header : List String) : 
         (Script.prefix? { s with datatypes := s.datatypes.set d codedIdDatatype, asserts } header).map (d, ·, c)
       | (none, _) => none
     else none
-  { coded, exact := Thunk.mk fun _ => s.prefix? header }
+  let exact := Thunk.mk fun _ => s.prefix? header
+  { coded, exact,
+    abs := Thunk.mk fun _ => (match coded with | some (_, q, _) => some q | none => exact.get).bind
+      (·.script.absPrefix? header) }
 
-/-- What the solver reads for the prefix's script with `goal` as its last assertion, keyed: with names as codes where
-the goal has codes too, else as it is. -/
-def SentPrefix.ask (p : SentPrefix) (goal : Term) : Option Keyed :=
+/-- What the solver reads exactly for the prefix's script with `goal` as its last assertion: with names as codes where
+the goal has codes too, the prefix and the goal so; else the prefix as it is and the goal; and whether the prefix is
+the one the abstract variant's prefix codes. -/
+def SentPrefix.sent (p : SentPrefix) (goal : Term) : Option (ScriptPrefix × Term × Bool) :=
   match p.coded.bind fun (d, q, c) => ((goal.codeC d c).1).map (q, ·) with
-  | some (q, g) => q.ask g
-  | none => p.exact.get.bind (·.ask goal)
+  | some (q, g) => some (q, g, true)
+  | none => p.exact.get.map (·, goal, p.coded.isNone)
+
+/-- Asks the solver about the prefix's script with `goal` as its last assertion: the abstract variant first where the
+prefix has one and the goal's literals are the prefix's (`Solver.overApprox`), else what it reads exactly; each answer
+read from the cache directory `dir` where kept. None where a script has no text. -/
+def Solver.askGoal (s : Solver) (dir : System.FilePath) (ids : Option Nat) (p : SentPrefix) (goal : Term) :
+    IO (Option Answer) := do
+  let some (q, g, coded) := p.sent goal | return none
+  let exact : IO (Option Answer) := do
+    let some eq := q.ask g | return none
+    return some ((← s.runKeyed dir eq).uncode ids)
+  let abs : Option (AbsPrefix × Keyed) := do
+    guard coded
+    let a ← p.abs.get
+    let (g', srt) ← (g.scodeC q.script.datatypes q.script.vars (litVar a.lits q.script.vars.length) a.cache).1
+    guard (srt == .bool)
+    pure (a, ← a.pre.askAll (g' :: a.order))
+  let some (a, k) := abs | exact
+  s.overApprox dir ids q.script.datatypes q.script.vars a.lits k (fun fixes => q.askAll (g :: fixes)) exact
 
 /-- A question to the solver that owns its call: the script, the id datatype if it has one, and how its answer reads
 as a result. Nothing pairs answers with questions by position. -/
