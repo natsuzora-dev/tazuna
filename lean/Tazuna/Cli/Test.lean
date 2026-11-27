@@ -34,7 +34,7 @@ def testScenario (T : List TypeDecl) (v : ServiceV) (sc : ScenarioV v.records v.
     Cmd Unit := do
   let at_ := [("service", Json.str v.name), ("scenario", Json.str sc.name)]
   match runScenario T v sc.steps with
-  | .error (.fault k f) =>
+  | .error (.fault k f _) =>
     printLine (.fault f.kind) (at_ ++ [("step", Json.num k)] ++ faultFields f)
   | .error (.badStep k m) =>
     printLine (.test .badStep) (at_ ++ [("step", Json.num k), ("message", Json.str m)])

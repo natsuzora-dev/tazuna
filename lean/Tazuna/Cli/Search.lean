@@ -1,5 +1,5 @@
 import Tazuna.Cli.Check
-import Tazuna.Smt.Cube
+import Tazuna.Smt.Break
 import Std.Sync.Semaphore
 import Lean.Util.ShareCommon
 import Tazuna.Smt.Bounds
@@ -329,6 +329,8 @@ inductive SearchResult (α : Type) where
   | found (steps : Nat) (a : α)
   /-- No model at any depth up to `steps`. -/
   | noModel (steps : Nat)
+  /-- No pick is live (`live` gave none): no step of any kind can be the last, at any depth. -/
+  | dead
   | undecided (kind : Kind) (fields : List (String × Json))
 
 /-- How many cubes a search asks at once, in their order, taking the first with a model: fixed, so the questions asked
@@ -356,10 +358,12 @@ at the last depth, the costliest, one whose last pick is not among those `live` 
 depend on timing. A depth whose cubes all have no model is unreached; a cube with every step fixed and no answer
 leaves the depth undecided. A refused encoding of the run or of the goal ends the search undecided; a refused input
 kind (which the script then lacks) leaves it undecided unless a model is found. `what` names the search in an engine
-bug's message. -/
+bug's message. With `brk`, a target a fault breaks, the search is for a run that breaks it (`BreakCover`): a cube's
+last fixed step is a break step (`breakAfter`) and `goal` is not read, and `live` gives at every depth the picks of
+the kinds whose step question whether the step breaks the target is not unsat. -/
 def searchDepths {α : Type} (what : String) (ds : Array (Task (Option (Depth s.v s.senv.nT))))
     (live : IO (Except String (Option (List Nat))) := pure (.ok none))
-    (ruledOut : SymInput s.v (shapes s.v) s.senv.nT → Bool := fun _ => false)
+    (ruledOut : SymInput s.v (shapes s.v) s.senv.nT → Bool := fun _ => false) (brk : Option Target := none)
     (goal : List (UnrollStep s.v s.senv.nT) → Except Refused Term) (play : List (Input s.v) → Except String α) :
     IO (Except String (SearchResult α)) := do
   let fail (m : String) : Except String (SearchResult α) := .error s!"service {s.v.name}, {what}: {m}"
@@ -378,43 +382,59 @@ def searchDepths {α : Type} (what : String) (ds : Array (Task (Option (Depth s.
   let ids := L.ids
   let some S0 := initState L s.v | return fail "the initial state has no terms, which its depths' runs rule out"
   let mut refused : Option (SymInput s.v (shapes s.v) s.senv.nT × Refused) := none
+  let liveAll ← if brk.isSome then
+    match ← live with
+    | .error m => return .error m
+    | .ok ks => pure ks
+    else pure none
   for d in List.range' 1 (ds.size - 1) do
     let rd ← match ← depth d with
       | .error e => return e
       | .ok r => pure r
     if refused.isNone then refused := rd.refused.head?
-    let livePicks ← if d + 1 == ds.size then
-      match ← live with
-      | .error m => return .error m
-      | .ok ks => pure ks
+    let livePicks ← if brk.isSome then pure liveAll
+      else if d + 1 == ds.size then
+        match ← live with
+        | .error m => return .error m
+        | .ok ks => pure ks
       else pure none
-    if livePicks == some [] then return .ok (.noModel d)
+    if livePicks == some [] then return .ok .dead
     -- A cube's question: its fixed steps after the run of its unfixed ones, and its goal; none where the goal is
     -- false by its shape, which needs no solver.
     let prepare (ps : List Nat) :
-        IO (Except (Except String (SearchResult α)) (Option (List Nat × UnrollBase s.v s.senv.nT × Term))) := do
+        IO (Except (Except String (SearchResult α)) (Option (List Nat × List (UnrollStep s.v s.senv.nT) × Term))) := do
       if let (some ks, some k) := (livePicks, ps.getLast?) then
         if !ks.contains k then return .ok none
       let rj ← match ← depth (d - ps.length) with
         | .error e => return .error e
         | .ok r => pure r
       do
-        let B ← match extendBase L c.T c.P s.v s.senv S0 rj.base (ps.map some) with
+        let B ← match extendBase L c.T c.P s.v s.senv S0 rj.base ((if brk.isSome then ps.dropLast else ps).map some) with
           | .error _ => return .error (fail s!"cube {ps} of depth {d} refused, which its depth's run rules out")
           | .ok B => pure B
         if !B.refused.isEmpty && rd.refused.isEmpty then
           return .error (fail s!"cube {ps} of depth {d} refused a kind its depth's run did not")
-        if B.steps.getLast?.any fun st => st.kinds.all (ruledOut ·.1) then return .ok none
-        let g ← match goal B.steps with
-          | .error r => return .error (undecided none r)
-          | .ok g => pure g
-        let q := cubeGoal rj.base B g
-        if q.falsy then return .ok none
-        return .ok (some (ps, B, (rj.merged.shareCommon q).1))
+        match brk, ps.getLast? with
+        | some g, some k =>
+          let (_, asserts, st, brkRefused) := breakAfter L c.T c.P s.v s.senv S0 B k g
+          if !brkRefused.isEmpty && rd.refused.isEmpty then
+            return .error (fail s!"break cube {ps} of depth {d} refused a kind its depth's run did not")
+          let q := breakGoal rj.base B asserts
+          if q.falsy then return .ok none
+          return .ok (some (ps, B.steps ++ [st], (rj.merged.shareCommon q).1))
+        | some _, none => return .error (fail s!"a break cube of depth {d} fixes no step")
+        | none, _ =>
+          if B.steps.getLast?.any fun st => st.kinds.all (ruledOut ·.1) then return .ok none
+          let g ← match goal B.steps with
+            | .error r => return .error (undecided none r)
+            | .ok g => pure g
+          let q := cubeGoal rj.base B g
+          if q.falsy then return .ok none
+          return .ok (some (ps, B.steps, (rj.merged.shareCommon q).1))
     -- A cube asked with the prefix of its unfixed steps at this depth; the exact script only once every step is fixed.
-    let ask (cube : List Nat × UnrollBase s.v s.senv.nT × Term) :
+    let ask (cube : List Nat × List (UnrollStep s.v s.senv.nT) × Term) :
         IO (Except (Except String (SearchResult α)) (CubeAnswer α)) := do
-      let (ps, B, q) := cube
+      let (ps, steps, q) := cube
       let j := d - ps.length
       let some pre := (rd.prefixes[j]?.map (·.get)).join | return .error (fail s!"depth {d} has no prefix for {j} steps")
       let some answer ← solver.askGoal cache ids pre q (fallback := j == 0)
@@ -425,8 +445,9 @@ def searchDepths {α : Type} (what : String) (ds : Array (Task (Option (Depth s.
       | .timeout ms =>
         return .ok (.open (.undecided .timeout) [("depth", Lean.toJson d), ("why", Json.str (timeoutWhy ms))])
       | .sat vs =>
-        -- `unroll_decode`: every model's steps decode to a run that faults nowhere.
-        let some xs := B.steps.mapM (·.decode (modelOf vs) L s.callerData)
+        -- `unroll_decode`: every model's unrolled steps decode to a run that faults nowhere; a break step's input is
+        -- the kind it takes, decoded, and `play` runs the whole run in Lean.
+        let some xs := steps.mapM (·.decode (modelOf vs) L s.callerData)
           | return .error (fail s!"a model of depth {d} does not decode")
         match play xs with
         | .ok a => return .ok (.found a)

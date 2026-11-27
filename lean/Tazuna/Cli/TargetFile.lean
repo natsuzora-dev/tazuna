@@ -243,6 +243,14 @@ theorem targetFile_inj {s s' : String} {g g' : GenTarget} (h : targetFile s g = 
   have ne : ∀ g : GenTarget, g.words ≠ [] := fun g => by cases g <;> simp [GenTarget.words] <;> split <;> simp
   exact joinWords_inj g.words_spaceless g'.words_spaceless (ne g) (ne g') (List.append_cancel_right h2)
 
+/-- Where generate writes the trace of a run that breaks one of prove's targets, relative to its directory: the service's
+escaped name, `/violated/`, and the target's text escaped, `.jsonl`. No behavior target's file is under a directory,
+so none is overwritten. -/
+def breakFile (service target : String) : String :=
+  String.ofList (escName service ++ "/violated/".toList ++ escName target ++ ".jsonl".toList)
+
+#guard breakFile "counter" "invariant under 50" == "counter/violated/invariant+under+50.jsonl"
+
 -- Names that read like the words around them stay apart.
 #guard targetFile "counter" (.accepted "add") == "counter/add accepted.jsonl"
 #guard targetFile "s" (.invalid "q" none) == "s/q invalid %28a computed name%29.jsonl"

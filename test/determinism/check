@@ -1,6 +1,6 @@
 #!/bin/sh
 # prove's lines do not depend on how many solvers run at once, nor on --only beyond what it leaves out. The prove
-# e2e spec with a violation (of a step's target and of a response), proved from an empty cache with --jobs 1 and with
+# e2e spec with counterexamples to induction (of a step's target and of a response), proved from an empty cache with --jobs 1 and with
 # --jobs 4, must print the same bytes and exit with the same code. The one where everything is proved, proved with
 # --only, must print some of the full run's lines, each the same apart from `assumes`: an invariant --only leaves out
 # is not proved in that run, so it is assumed. generate, run the same ways, must print the same lines and write the
@@ -25,8 +25,8 @@ prove() {
   (cd "$work/$name" && TAZUNA_ENGINE="$engine" node "$work/run.mjs" prove m "$@" >out.jsonl) || code=$?
   echo "$code" >"$work/$name/exit"
 }
-prove one Prove.violated --jobs 1
-prove four Prove.violated --jobs 4 &
+prove one Prove.unproved --jobs 1
+prove four Prove.unproved --jobs 4 &
 loader=$!
 prove loaded Undecided.unknown --jobs 4
 wait "$loader"

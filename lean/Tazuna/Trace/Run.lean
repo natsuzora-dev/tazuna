@@ -203,8 +203,9 @@ def Names.answerWire (ns : Names) (T : List TypeDecl) (o : Ty) :
 
 /-- Why a scenario stopped before its end. -/
 inductive Stop where
-  /-- The spec faulted at step `step`. -/
-  | fault (step : Nat) (f : Fault)
+  /-- The spec faulted at step `step`; `lines` are the trace's lines up to that step's in lines, which no out line
+  follows. -/
+  | fault (step : Nat) (f : Fault) (lines : List Line)
   /-- Step `step` cannot run: its answer matches no pending request or more than one, it waits a negative time, it
   sends a request the service does not list, or a value has no wire form. -/
   | badStep (step : Nat) (message : String)
@@ -274,7 +275,7 @@ structure Run where
 def Run.finish' (run : Run v) (input : Input v) (inLines : List Line) (answerTo : Option String) (k : Nat) :
     Except Stop (Run v) := do
   let r := step T v run.state input
-  if let .fault f := r.outcome then throw (.fault k f)
+  if let .fault f := r.outcome then throw (.fault k f (run.lines ++ inLines))
   let (ns, outs) := outLines T v run.names answerTo r
   let some outs := outs | throw (.badStep k "an output has no wire form")
   pure { run with state := r.state, names := ns, lines := run.lines ++ inLines ++ outs }

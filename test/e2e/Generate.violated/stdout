@@ -1,0 +1,4 @@
+{"file":"counter/add accepted.jsonl","kind":"Generate.reached","service":"counter","steps":1,"target":"add accepted"}
+{"file":"counter/add invalid positive.jsonl","kind":"Generate.reached","service":"counter","steps":1,"target":"add invalid positive"}
+{"file":"counter/event Added.jsonl","kind":"Generate.reached","service":"counter","steps":1,"target":"event Added"}
+{"file":"counter/violated/invariant+under+50.jsonl","kind":"Generate.violated","outcome":"fault invariant under 50","service":"counter","steps":1,"target":"invariant under 50"}

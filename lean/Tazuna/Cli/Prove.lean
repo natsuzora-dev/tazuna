@@ -20,20 +20,6 @@ namespace Tazuna.Cli
 open Lean (Json)
 open Tazuna.Ir Tazuna.Ir.Step Tazuna.Smt Tazuna.Trace
 
-def _root_.Tazuna.Smt.Target.text : Target → String
-  | .invariant none r => "invariant " ++ ruleText r
-  | .invariant (some m) r => m ++ " invariant " ++ ruleText r
-  | .ensures c r => c ++ " ensures " ++ ruleText r
-  | .cascade => "cascade bound"
-  | .effect c => "effect " ++ c ++ " accepted"
-  | .timer m => "timers of " ++ m ++ " fire forward"
-  | .pair a b _ => a ++ " and " ++ b ++ " commute"
-  | .response n => "response " ++ n
-where
-  ruleText : Option String → String
-    | some r => r
-    | none => "(a computed name)"
-
 def _root_.Tazuna.Smt.Target.isInvariant : Target → Bool
   | .invariant .. => true
   | _ => false
@@ -85,7 +71,8 @@ def brokenAt {v : ServiceV} (s : State v) : Target → List String
 inductive Report where
   /-- The question about `target` (none: the bound question) of the input kind `step` was unsat. -/
   | unsat (service step : String) (target : Option Target)
-  /-- A state and input that break the target, from the initial state or from a state of the right shape. -/
+  /-- A state that breaks the target (the initial state), or a state of the right shape and an input whose step breaks
+  it. -/
   | violated (service step : String) (target : Target) (fields : List (String × Json))
   /-- A state of the right shape whose step of the kind leaves the slots. -/
   | boundReached (service step : String)
@@ -502,7 +489,9 @@ def lineOf (unproved : String → List Target) (past : String → String → Opt
       | some bs => (.prove .withinBounds, common ++ [("bounds", Json.arr bs.toArray)])
   | .unsat _ _ none | .boundReached .. => none
   | .violated s step g fields =>
-    some (.prove .violated, [("service", Json.str s), ("target", Json.str g.text), ("step", Json.str step)] ++ fields ++
+    -- The initial state is the one state known to be reached; any other is a counterexample to induction.
+    some (.prove (if step == "init" then .violated else .unproved),
+      [("service", Json.str s), ("target", Json.str g.text), ("step", Json.str step)] ++ fields ++
       [assumes s step g] ++ widenedField g)
   | .undecided k s step g fields =>
     some (k, [("service", Json.str s)] ++ (g.map fun g => ("target", Json.str g.text)).toList ++

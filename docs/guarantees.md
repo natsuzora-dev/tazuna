@@ -9,6 +9,32 @@ The build fails when a root is missing, when a proof uses `sorry`, or when a dec
 For what one kind of line means, run `gleam run -m tazuna -- explain <kind>`; this page does not repeat it.
 [Concepts](concepts.md) explains why the rules are what they are.
 
+## One question per target
+
+Every target asks whether a run from the initial state reaches it.
+A target that a fault breaks (an invariant, an `ensures` rule, `effect <name> accepted`, `cascade bound`) is a bug where a run reaches it.
+A behavior target, a class of out line, gives a test input where a run reaches it.
+`prove` answers from one step, and `generate` searches runs of at most `steps` inputs:
+
+```
+target a fault breaks
+├─ the initial state breaks it ........ Prove.violated                      exit 1
+├─ no step breaks it .................. Prove.proved, Prove.withinBounds    exit 0
+└─ a step breaks it ................... Prove.unproved                      exit 2
+   ├─ generate finds a run ............ Generate.violated, trace written    exit 1
+   ├─ no run within steps ............. Generate.unsettled                  exit 2
+   └─ the solver gives no answer ...... Undecided.*                         exit 2
+behavior target
+├─ no step shows it ................... Prove.unreachable, Generate.unreachable  exit 0
+├─ generate finds a run ............... Generate.reached, trace written     exit 0
+├─ no run within steps ................ Generate.unreached                  exit 0
+└─ the solver gives no answer ......... Undecided.*                         exit 2
+```
+
+`Prove.unproved` is a counterexample to induction: a state where every invariant holds and a step from it that breaks the target, which no run may reach.
+Only the initial state, or a run from it that Lean runs and `verify` replays, makes a target violated.
+A response's, a pair's and a timer machine's line has no fault to search for, so its `Prove.unproved` line stays open.
+
 ## Verdicts are scoped to the bounds
 
 `prove` and `generate` ask the Z3 solver about a fixed number of slots per collection, taken from the service's `bounds`:
@@ -20,7 +46,7 @@ For what one kind of line means, run `gleam run -m tazuna -- explain <kind>`; th
 - `steps` limits the inputs of a run that `generate` unrolls.
 
 A verdict speaks only of states and inputs that fit the slots.
-`Prove.withinBounds` and `Generate.unreached` list in `bounds` every bound a step of the service can go past.
+`Prove.withinBounds`, `Generate.unreached` and `Generate.unsettled` list in `bounds` every bound a step of the service can go past.
 That list is the service's static scope, the same in every run.
 
 ## check
@@ -53,6 +79,7 @@ The right shape includes that every id the service made in the state is below it
 The right shape also includes that each machine has an instance for exactly the keys its `instances` gives at the records.
 `run_keys` proves every state a run reaches has it with no assumption on the inputs, because check requires that `instances` gives no key at the initial records (`Illegal.initialInstances`).
 With no such model, the line reads `Prove.proved` or `Prove.withinBounds`.
+With one, it reads `Prove.unproved`, and an `init` line whose initial state breaks the invariant reads `Prove.violated`.
 
 `proved_sound` (T4): where every input kind's lines about a fault read proved, no step of any run from the initial state on inputs that satisfy `validInputs` faults with it.
 `run_within` gives its induction over the run: each step from a state within the slots leaves a state within them, and an answer that fits no slot names no pending request of its type, so it changes nothing.
@@ -60,9 +87,9 @@ With no such model, the line reads `Prove.proved` or `Prove.withinBounds`.
 Both proofs are by induction, so they also need the initial state's invariants to hold, which the `init` lines check.
 `Fault.answerUnmatched` is no target, because an answer that names no request is the outside's mistake.
 
-A step line's `assumes` lists `validInputs` and the invariants the induction took as holding that this run did not prove: the violated ones, the undecided ones, and the ones `--only` left out.
+A step line's `assumes` lists `validInputs` and the invariants the induction took as holding that this run did not prove: the unproved ones, the undecided ones, and the ones `--only` left out.
 
-`cti_sound`, for `Prove.violated` with `"from":"validState"`: the state keeps the step invariant and every invariant, and the step Lean computes from it is the one the solver's terms describe.
+`cti_sound`, for `Prove.unproved`: the state keeps the step invariant and every invariant, and the step Lean computes from it is the one the solver's terms describe.
 `step_settled`: `after` is the state the step reaches before its invariant check.
 
 ## prove: dead targets
@@ -85,7 +112,8 @@ Nor does any target of a service whose initial state breaks an invariant or one 
 
 Both rest on `run_invariants` and `run_supp`: every state such a run reaches has the shape the question assumes, whether or not the invariants were proved.
 The line exits 0, like a compiler warning, because a defensive branch may be meant never to run.
-`Generate.unreached` still has a job: a target whose question has a model, from a state no run reaches, gets no `Prove.unreachable` line, but `generate` can still find no run of at most `steps` inputs to it.
+`generate` asks the same questions at its last length and prints `Generate.unreachable` for such a target.
+A target whose question has a model, from a state no run reaches, gets no `Prove.unreachable` line, and `generate` may still find no run of at most `steps` inputs to it (`Generate.unreached`).
 
 ## prove: order of own steps and timers (T5)
 
@@ -103,7 +131,7 @@ The proof composes the commutation of one step with another, so a pair whose ord
 
 A pair line's `widened` names an own kind that a send with no handle or `on_answer` written in place makes.
 
-A violated pair or timer line rests on these theorems:
+A pair or timer line with a counterexample reads `Prove.unproved`, since its state is any state of the right shape, and rests on these theorems:
 
 - `pair_violates`: a pair's counterexample shows that the pair does not commute. Either one order faults or disables the other step and the other order does not, or both orders finish and no renaming of the ids the pair made gives them the same data. Lean searches every such renaming, both counters kept or swapped and each wire id the pair made mapped one to one onto the other order's, so finding none means none exists.
 - `timer_violates`: a timer line's counterexample is an instance and records whose timer enters a state that waits for an earlier timer.
@@ -125,7 +153,7 @@ A response is judged per step, so a `then` event in the same step as its trigger
 
 - `Prove.proved`: `response_holds` (T7): where every kind's line and bound question is unsat, and every input and the initial state fit the slots, no run from the initial state on inputs that satisfy `validInputs`, with timely clock lines, violates the response, at any length.
 - `Prove.withinBounds`: `response_scoped` (T7): where every kind's line is unsat, the same of every run whose steps stay within the slots.
-- `Prove.violated`: the step breaks one of the three parts, recomputed in Lean from the model's state, input and trigger. Like a step line's counterexample, it comes from a state of the right shape: a real bug, or a state no run reaches, which another invariant can rule out (a machine invariant may read `now`).
+- `Prove.unproved`: the step breaks one of the three parts, recomputed in Lean from the model's state, input and trigger. Like a step line's counterexample, it comes from a state of the right shape, which no run may reach; another invariant can rule it out (a machine invariant may read `now`). `generate` searches no run for it: a reachable state that breaks a part violates the response only once a later step passes the trigger's time plus `within` unanswered.
 
 `not_violated` (`Semantics/Response.lean`) turns the three facts into the run's: after the trigger's step its deadline is at most its time plus `within`; each later step that does not answer keeps the deadline no later; and time moves only on clock lines, which pass no waiting deadline.
 A step within the slots ends with every machine's `instances` fitting at the records it leaves (the bound question asks it), so parts 2 and 3 hold at every step after the trigger's.
@@ -148,6 +176,15 @@ A cube needs no question where the code rules out that its last step's kinds sho
 
 - `Generate.reached` writes the trace of the shortest run it found to `<dir>/<service>/<target>.jsonl`. `generate_reaches` (T6): the written trace reads as the spec from the initial state, so `verify` replays it as passed unless it runs out of tries, and the last step of its run shows the target. `generate_sound`: every model the solver gives decodes to inputs that satisfy `validInputs` whose run faults nowhere and reaches the target. `targetFile_inj`: two targets never share a file, so no written trace overwrites another's.
 - `Generate.unreached`: `noModel_cubes` (T6b): no run of at most `steps` inputs within the slots, on which the line's `assumes` hold, shows the target's class at any step. Every input's kind is one a split lists, so cubes with no model at a length leave no run of that length.
+- `Generate.unreachable`: at the last length, every input kind's dead-target question is unsat, as for `Prove.unreachable` (`unshown_within`), so no run of any length shows the class.
+
+For each target a fault breaks whose `Prove.unproved` lines some input kind has, `generate` searches runs the same way, for a run whose steps fault nowhere until the last, which faults by a fault the target covers.
+The last step of every cube takes only the input kinds whose step question, whether a step from a state where every invariant holds breaks the target, is not unsat.
+One question per kind first asks whether its step breaks any target a fault breaks, so most kinds need no question per target.
+A target that every kind's question rules out is settled by `prove` and gets no line.
+
+- `Generate.violated` writes the run's trace, up to the last step's `in` line, to `<dir>/<service>/violated/<target>.jsonl`. `generate_breaks`: the run, in Lean, faults nowhere before its last step and faults there by a fault the target covers, and `verify` replays the trace to such a fault at its last line.
+- `Generate.unsettled`: `noModel_breaks`: no run of at most `steps` inputs within the slots, on valid inputs, whose steps before the last fault nowhere, faults at its last step by a fault the target covers.
 
 ## verify
 
@@ -165,11 +202,12 @@ After 100,000 tries it prints `Undecided.limit`.
 
 Three assumptions appear in `assumes`, in these words.
 `Assumption.text` in `Semantics/Valid.lean` defines each text beside its meaning, so the two cannot part.
+`Generate.unsettled` also prints `no step before the last faults`, since its run ends in a fault.
 
 | Text in `assumes` | Lines that print it |
 | --- | --- |
-| `ids the service made are used only after they appeared on an out line` | step lines, pair lines, responses, `Prove.unreachable`, `Generate.unreached` |
-| `no step of the run faults` | `Prove.unreachable`, `Generate.unreached` |
+| `ids the service made are used only after they appeared on an out line` | step lines, pair lines, responses, `Prove.unreachable`, `Generate.unreached`, `Generate.unreachable`, `Generate.unsettled` |
+| `no step of the run faults` | `Prove.unreachable`, `Generate.unreached`, `Generate.unreachable` |
 | `no clock line moves time past a timer that waits` | responses |
 
 The first leaves ids from outside the service unrestricted.

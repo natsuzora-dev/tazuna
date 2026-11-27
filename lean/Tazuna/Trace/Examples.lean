@@ -25,9 +25,10 @@ def replays (xs : List (Input svc)) : Bool :=
 -- and sending `ping`, and the answer to it.
 #guard replays [cmd 1 5, cmd 2 5, cmd 1 0, .query ⟨0, by decide⟩ (1 : Int) (0 : Int), .event ⟨0, by decide⟩ (2 : Int),
   .clock 10, .answer 0 ⟨Ty.result .int .str, .inl ((0 : Int), ())⟩]
--- A trace stops where the spec faults; generate writes no such trace.
+-- A trace stops where the spec faults, after the faulting step's in line: generate writes such a trace only for a run
+-- that breaks one of prove's targets.
 #guard match traceOf prelude svc [cmd 1 60] with
-  | .error (.fault 1 _) => true
+  | .error (.fault 1 _ [_]) => true
   | _ => false
 
 end Tazuna.Trace.Examples

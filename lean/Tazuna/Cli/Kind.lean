@@ -32,9 +32,15 @@ inductive Tazuna.ProveKind : Type
   and list types, and its pending requests where it sends any), the same for every run. For a response, the same of
   every run whose steps stay within the slots. -/
   | withinBounds
-  /-- A state and input whose step breaks the target; for a response, also the trigger whose deadline the step breaks
-  and which part it breaks. -/
+  /-- The initial state breaks the target, an invariant of the service: every run starts there, so the line needs no
+  search. -/
   | violated
+  /-- A state of the right shape whose invariants hold, and an input whose step from it breaks the target; for a
+  response, also the trigger whose deadline the step breaks and which part it breaks. A counterexample to induction,
+  not a violation: no run may reach the state. For a target a fault breaks (an invariant, an `ensures` rule, an own
+  effect's acceptance, the cascade bound), generate searches for a run that does. A pair's or a timer machine's state
+  is any state of the right shape, invariants or not. -/
+  | unproved
   /-- No step from a state of the right shape whose invariants hold, of any input kind, shows the class of out line
   the generate target aims at unless it faults: no run on valid inputs that faults nowhere ever shows it, at any depth
   where no step goes past the slots and every input and the initial state fit them, else within the slots the line
@@ -50,6 +56,18 @@ inductive Tazuna.GenerateKind : Type
   /-- No run of at most the spec's steps within the slots, on which its `assumes` hold (valid inputs, no step faults),
   shows the target's class at any step. Not "unreachable": a longer run or larger slots may reach it. -/
   | unreached
+  /-- Every input kind's dead-target question is unsat, as prove's line of the same name says: no run within the slots
+  the line names, on which its `assumes` hold, shows the target's class, at any length. generate asks these questions
+  at its last depth, once no shorter run reached the target. -/
+  | unreachable
+  /-- A run from the initial state on valid inputs whose steps before the last fault nowhere, and whose last step
+  faults by a fault the target covers: prove's target is broken in a state a run reaches. Its trace is written, and
+  verify replays it to that fault at its last line. -/
+  | violated
+  /-- prove found a step that breaks the target from a state whose invariants hold (`Prove.unproved`), and no run of at
+  most the spec's steps within the slots, on valid inputs, whose steps before the last fault nowhere, faults by it at
+  its last step. Not settled: a longer run or larger slots may break the target, or no run may. -/
+  | unsettled
 deriving DecidableEq
 
 /-- Why a question or a trace has no verdict. -/
@@ -188,7 +206,7 @@ def TestKind.name : TestKind → String
   | .written => "written"
   | .badStep => "badStep"
 
-def ProveKind.all : List ProveKind := [.proved, .withinBounds, .violated, .unreachable]
+def ProveKind.all : List ProveKind := [.proved, .withinBounds, .violated, .unproved, .unreachable]
 
 theorem ProveKind.mem_all (k : ProveKind) : k ∈ ProveKind.all := by cases k <;> simp [ProveKind.all]
 
@@ -196,15 +214,19 @@ def ProveKind.name : ProveKind → String
   | .proved => "proved"
   | .withinBounds => "withinBounds"
   | .violated => "violated"
+  | .unproved => "unproved"
   | .unreachable => "unreachable"
 
-def GenerateKind.all : List GenerateKind := [.reached, .unreached]
+def GenerateKind.all : List GenerateKind := [.reached, .unreached, .unreachable, .violated, .unsettled]
 
 theorem GenerateKind.mem_all (k : GenerateKind) : k ∈ GenerateKind.all := by cases k <;> simp [GenerateKind.all]
 
 def GenerateKind.name : GenerateKind → String
   | .reached => "reached"
   | .unreached => "unreached"
+  | .unreachable => "unreachable"
+  | .violated => "violated"
+  | .unsettled => "unsettled"
 
 def UndecidedKind.all : List UndecidedKind := [.unknown, .timeout, .limit, .upToRenaming]
 
@@ -273,7 +295,10 @@ def exit : Kind → Exit
   | checkPassed | verifyPassed | explain | version => .ok
   | prove .proved | prove .withinBounds | prove .unreachable => .ok
   | prove .violated => .violation
-  | generate .reached | generate .unreached => .ok
+  | prove .unproved => .undecided
+  | generate .reached | generate .unreached | generate .unreachable => .ok
+  | generate .violated => .violation
+  | generate .unsettled => .undecided
   | undecided _ => .undecided
 
 end Kind

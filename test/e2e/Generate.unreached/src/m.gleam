@@ -1,7 +1,7 @@
 import tazuna.{type Ctx}
 
 pub type Records {
-  Records(total: Int)
+  Records(count: Int)
 }
 
 pub type Event {
@@ -23,7 +23,7 @@ fn send() -> tazuna.ExternalCommand(Int, Nil, Nil) {
 fn apply(ctx: tazuna.ApplyCtx(Records), e: Event) -> Records {
   let r = ctx.records
   case e {
-    Added(n) -> Records(total: r.total + n)
+    Added(_) -> Records(count: r.count + 1)
   }
 }
 
@@ -33,11 +33,11 @@ fn add() -> tazuna.Command(Records, Event, Caller, Int, Rejection) {
     callers: [tazuna.Outside(User)],
     accepts: fn(n: Int) { [#("positive", n > 0)] },
     decide: fn(c: Ctx(Records, Int, Caller)) {
-      use <- tazuna.require(c.records.total >= 0, Full)
+      use <- tazuna.require(c.records.count < 4, Full)
       Ok([Added(c.input)])
     },
     ensures: fn(c: Ctx(Records, Int, Caller), r: Records) {
-      [#("grows", r.total > c.records.total)]
+      [#("grows", r.count > c.records.count)]
     },
   )
 }
@@ -60,15 +60,15 @@ fn notify() -> tazuna.Reaction(Records, Event) {
 fn counter() -> tazuna.Service {
   tazuna.service(
     name: "counter",
-    init: Records(total: 0),
+    init: Records(count: 0),
     apply: apply,
     subscribes: [],
     declares: [tazuna.declare_command(add())],
     machines: [],
     reactions: [notify()],
-    invariants: fn(r: Records) { [#("not negative", r.total >= 0)] },
+    invariants: fn(r: Records) { [#("not negative", r.count >= 0)] },
     responses: [],
-    bounds: tazuna.bounds(creates: [], others_at_most: 1, cascade: 1, steps: 5),
+    bounds: tazuna.bounds(creates: [], others_at_most: 1, cascade: 1, steps: 3),
     scenarios: [],
   )
 }

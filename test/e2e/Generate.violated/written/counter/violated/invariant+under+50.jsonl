@@ -1,0 +1,2 @@
+{"service":"counter","trace":1}
+{"caller":{"tag":"User"},"id":"1","in":"request","input":50,"name":"add","time":0}

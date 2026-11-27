@@ -43,7 +43,7 @@ def fromField : Field := ⟨"from", "init: from the initial state; validState: f
 def state : Field := ⟨"state", "the state before the step, as wire values"⟩
 def input : Field := ⟨"input", "the input of the step"⟩
 def after : Field := ⟨"after", "the state the step reaches before its invariant check"⟩
-def outcome : Field := ⟨"outcome", "how the step ended"⟩
+def outcome : Field := ⟨"outcome", "how the step ended; for generate, the last step of the trace"⟩
 def out : Field := ⟨"out", "the out lines of the step"⟩
 def violated : Field := ⟨"violated", "the rules broken"⟩
 def inst : Field := ⟨"instance", "a timer machine's instance: its key and state"⟩
@@ -165,7 +165,8 @@ def ProveKind.explanation : ProveKind → Explanation
   | .withinBounds => ⟨docOf% ProveKind.withinBounds,
     [`Tazuna.Smt.fault_sound, `Tazuna.Smt.run_lines, `Tazuna.Smt.response_scoped, `Tazuna.Smt.boundReached_iff],
     questionFields ++ [assumes, bounds, widened]⟩
-  | .violated => ⟨docOf% ProveKind.violated,
+  | .violated => ⟨docOf% ProveKind.violated, [], questionFields ++ [fromField, state, Field.violated, assumes]⟩
+  | .unproved => ⟨docOf% ProveKind.unproved,
     [`Tazuna.Smt.cti_sound, `Tazuna.Ir.step_settled, `Tazuna.Smt.timer_violates, `Tazuna.Smt.pair_violates],
     questionFields ++ [fromField, state, input, after, outcome, out, inst, records, timer, next, first, second,
       firstThenSecond, secondThenFirst, trigger, Field.violated, assumes, widened]⟩
@@ -177,6 +178,11 @@ def GenerateKind.explanation : GenerateKind → Explanation
     [`Tazuna.Cli.generate_reaches, `Tazuna.Ir.targets_cover, `Tazuna.Cli.targetFile_inj],
     [service, target, written, steps]⟩
   | .unreached => ⟨docOf% GenerateKind.unreached, [`Tazuna.Smt.noModel_cubes],
+    [service, target, steps, bounds, assumes]⟩
+  | .unreachable => ⟨docOf% GenerateKind.unreachable, [`Tazuna.Smt.unshown_within],
+    [service, target, assumes, bounds]⟩
+  | .violated => ⟨docOf% GenerateKind.violated, [`Tazuna.Cli.generate_breaks], [service, target, written, steps, outcome]⟩
+  | .unsettled => ⟨docOf% GenerateKind.unsettled, [`Tazuna.Smt.noModel_breaks],
     [service, target, steps, bounds, assumes]⟩
 
 def UndecidedKind.explanation : UndecidedKind → Explanation

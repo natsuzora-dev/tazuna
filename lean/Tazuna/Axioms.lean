@@ -183,6 +183,15 @@ elab "#check_tazuna_reach" : command => do
     -- (`generate_unreached` per cube, from `runs_covered`: every such run of the cube's kinds is a model of every
     -- assertion but the goal; `extendBase_ok`: a cube's script is the run on its picks).
     ``Tazuna.Smt.noModel_cubes,
+    -- A run generate reports as breaking one of prove's targets does (Generate.violated): run in Lean, it faults
+    -- nowhere before its last step and faults there by a fault the target covers, and verify replays the written
+    -- trace to such a fault at its last line.
+    ``Tazuna.Cli.generate_breaks,
+    -- generate's "unsettled within k steps" (Generate.unsettled): where its break cubes at a depth cover it with no
+    -- model, or the step question whether a step breaks the target is unsat for every kind of a cube's last pick, no
+    -- run of that many valid inputs within the slots whose steps before the last fault nowhere faults at its last step
+    -- by a fault the target covers (`breakOne_covers`: the break step of such a run holds its assertions).
+    ``Tazuna.Smt.noModel_breaks,
     -- T7, a response by induction over steps (Lamport sec 3.3): where every input kind's response question is unsat, no
     -- run on valid inputs with timely clock lines whose steps stay within the slots violates it (Prove.withinBounds);
     -- where every bound question is unsat too and every input and the initial state fit, no such run at all, at any

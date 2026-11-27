@@ -139,15 +139,15 @@ end
 section
 variable {M : Model} {L : Layout} {T : List TypeDecl} {v : ServiceV}
 
-/-- An answer that does not fault names a pending request whose answers have its type. -/
+/-- An answer that names a request names a pending request whose answers have its type. -/
 theorem answer_found {s : State v} {to : Nat} {t : Ty} {value : t.den0}
-    (hno : ∀ f, (step T v s (.answer to ⟨t, value⟩)).outcome ≠ .fault f) :
+    (hno : (step T v s (.answer to ⟨t, value⟩)).outcome ≠ .fault .answerUnmatched) :
     ∃ p, s.pending.find? (·.id == to) = some p ∧ t = answerTy p.request.output p.request.rejection := by
   cases hf : s.pending.find? (·.id == to) with
-  | none => exact absurd (by simp only [step, hf]) (hno .answerUnmatched)
+  | none => exact absurd (by simp only [step, hf]) hno
   | some p =>
     cases hsame : Ty.same t (answerTy p.request.output p.request.rejection) with
-    | none => exact absurd (by simp only [step, hf, hsame]) (hno .answerUnmatched)
+    | none => exact absurd (by simp only [step, hf, hsame]) hno
     | some e => exact ⟨p, rfl, e.down⟩
 
 theorem pick_of_eq {b : Nat} {m n : Nat} (h : Holds M (.eq (.var b) (.int (n : Int)))) (hb : M.vars b = .int (m : Int)) :
@@ -184,10 +184,10 @@ variable {M : Model} {L : Layout} {T : List TypeDecl} {P : List AnySite} {v : Se
 
 /-- A kind a model's step picks is the input's: the selector holds the input's kind, which only that command, query,
 subscription or clock line has, and an answer kind's case holds only at the slot that holds the request its wire id
-names, a request whose answers have the answer's type where the step does not fault. -/
+names, a request whose answers have the answer's type where the answer names a request. -/
 theorem isOf_of_picks {ans : Bool} {p : Nat × (Nat → SymInput v (shapes v) senv.nT)}
     (hp : p ∈ unrollKinds v (shapes v) senv.nT ans) (c : Nat) {S : SymState v} {s : State v}
-    (hR : StateRel M L T (shapes v) S s) {x : Input v} (hno : ∀ f, (step T v s x).outcome ≠ .fault f)
+    (hR : StateRel M L T (shapes v) S s) {x : Input v} (hno : (step T v s x).outcome ≠ .fault .answerUnmatched)
     (hv : (unrollVals L hc x).isSome = true)
     (hvars : ∀ q (h : q < (kindVals L hc x (p.2 c)).length), M.vars (c + q) = (kindVals L hc x (p.2 c))[q])
     {b : Nat} (hb : M.vars b = .int (x.pick : Int)) {t : EncodedStep v}
@@ -645,7 +645,7 @@ theorem unrollOne_covers (hL : SortedLayout L) (S : SymState v) (shown : List (T
       Holds M (selectsT (.var b) (inp, t)) → inp.decode M L hc = some x := by
     intro inp hi t ht hpk
     obtain ⟨p, hpk', c, rfl, hv, -⟩ := hplaced inp hi
-    exact decode_of_isOf hc hpk' c hvs' hv (isOf_of_picks hc senv hpk' c hR hno hvs hv hb ht hpk)
+    exact decode_of_isOf hc hpk' c hvs' hv (isOf_of_picks hc senv hpk' c hR (hno _) hvs hv hb ht hpk)
   have hassert : ∀ y ∈ oks, Holds M y.2.2.1 := by
     intro y hy
     obtain ⟨inp, hi, hu⟩ := hok y hy
@@ -654,7 +654,7 @@ theorem unrollOne_covers (hL : SortedLayout L) (S : SymState v) (shown : List (T
     by_cases hpk : Holds M (selectsT (.var b) (inp, t))
     · right
       obtain ⟨p, hpk', c, rfl, hv, hs'⟩ := hplaced inp hi
-      have hio := isOf_of_picks hc senv hpk' c hR hno hvs hv hb ht hpk
+      have hio := isOf_of_picks hc senv hpk' c hR (hno _) hvs hv hb ht hpk
       have hdec := decode_of_isOf hc hpk' c hvs' hv hio
       have ex := step_encode chk senv hR hinv hdec ht
       have hcodes := ex.1.2 (codesFit_of_decode hdec hcf)
@@ -696,7 +696,7 @@ theorem unrollOne_covers (hL : SortedLayout L) (S : SymState v) (shown : List (T
       exact ⟨_, hc', rfl, hone _ rfl (by simp) (by simp)⟩
     | answer to w =>
       obtain ⟨ty, value⟩ := w
-      obtain ⟨p0, hf, hty⟩ := answer_found hno
+      obtain ⟨p0, hf, hty⟩ := answer_found (hno _)
       have hi0 : (i != 0) = true := by
         cases i with
         | zero => rw [h0 rfl] at hf; cases hf
@@ -767,6 +767,11 @@ variable (L : Layout) (T : List TypeDecl) (P : List AnySite) (v : ServiceV) (hc 
 def RunFits : List IdV → State v → List (Input v) → Prop
   | _, _, [] => True
   | seen, s, x :: xs => RunStep L T P v hc seen s x ∧ RunFits (seen ++ (step T v s x).shownIds T) (step T v s x).state xs
+
+/-- The ids the out lines of the run from `s` on the inputs showed, after `seen`. -/
+def runSeen : List IdV → State v → List (Input v) → List IdV
+  | seen, _, [] => seen
+  | seen, s, x :: xs => runSeen (seen ++ (step T v s x).shownIds T) (step T v s x).state xs
 
 /-- Every step of the run is within the slots: its input's values fit them and the step stays within them. The part of
 `RunStep` that is the bounds; the rest is what `Step.Assumption.ofRuns` names. -/
@@ -856,8 +861,18 @@ theorem unrollSteps_vals : (xs : List (Input v)) → (fs : List (Option Nat)) �
     simp only [unrollSteps, ho, runVals, ← hb'] at ih ⊢
     exact ⟨forall2_append h1.1 ih.1, fun t ht => (List.mem_append.1 ht).elim (h1.2 t) (ih.2 t)⟩
 
+-- A list's last item, with the default standing for the empty list.
+set_option linter.tazuna.silentDefault false in
+theorem getLast?_cons_getD {α β : Type} (f : α → β) (a : α) (l : List α) (z : β) :
+    (((a :: l).getLast?).map f).getD z = ((l.getLast?).map f).getD (f a) := by
+  rw [List.getLast?_cons]
+  cases h : l.getLast? <;> simp
+
+-- With no step, the state the steps leave is `S`.
+set_option linter.tazuna.silentDefault false in
 /-- The steps of an unrolled run from terms that denote the run's state `s`, after steps whose shown positions are
-exactly `seen`, whose constants hold a fitting run's values, hold their assertions and are that run. -/
+exactly `seen`, whose constants hold a fitting run's values, hold their assertions and are that run; the state their
+last step leaves denotes the run's last state, and their shown positions are exactly the ids its out lines showed. -/
 theorem unrollSteps_covers (hL : SortedLayout L) : (xs : List (Input v)) → (fs : List (Option Nat)) →
     PicksFit fs xs → (S : SymState v) →
     (shown : List (Term × Term)) → (i b : Nat) → {s : State v} → {seen : List IdV} → StateRel M L T (shapes v) S s →
@@ -867,8 +882,15 @@ theorem unrollSteps_covers (hL : SortedLayout L) : (xs : List (Input v)) → (fs
     (∀ q (h : q < (runVals L v chk.callerData senv.nT i b xs).length),
       M.vars (b + q) = (runVals L v chk.callerData senv.nT i b xs)[q]) →
     (∀ a ∈ (unrollSteps L T P v senv S shown i b fs).2.1, Holds M a) ∧
-      UnrollRun L T M chk.callerData s (unrollSteps L T P v senv S shown i b fs).2.2.1 xs
-  | [], [], _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => by simp [unrollSteps, UnrollRun]
+      UnrollRun L T M chk.callerData s (unrollSteps L T P v senv S shown i b fs).2.2.1 xs ∧
+      StateRel M L T (shapes v) (((unrollSteps L T P v senv S shown i b fs).2.2.1.getLast?.map (·.after)).getD S)
+        (run T v s xs).1 ∧
+      IdsExact M L (shown ++ (unrollSteps L T P v senv S shown i b fs).2.2.1.flatMap (·.shows))
+        (runSeen T v seen s xs)
+  | [], [], _, S, _, _, _, s, seen, hR, _, _, hs, _, _, _, _ => by
+    simp only [unrollSteps, UnrollRun, List.getLast?_nil, Option.map_none, Option.getD_none, run, runSeen,
+      List.flatMap_nil, List.append_nil]
+    exact ⟨nofun, trivial, hR, hs⟩
   | [], _ :: _, h, _, _, _, _, _, _, _, _, _, _, _, _, _, _ | _ :: _, [], h, _, _, _, _, _, _, _, _, _, _, _, _, _, _ =>
     h.elim
   | x :: xs, f :: fs, ⟨hf, hfs⟩, S, shown, i, b, s, seen, hR, hinv, h0, hs, hsrt, hnr, hfits, hvars => by
@@ -901,7 +923,12 @@ theorem unrollSteps_covers (hL : SortedLayout L) : (xs : List (Input v)) → (fs
         have e : b' + q = b + ((stepVals L v chk.callerData senv.nT i b x).length + q) := by omega
         rw [e, hvars _ (by simp; omega), List.getElem_append_right (by omega)]
         simp
-    exact ⟨fun a ha => (List.mem_append.1 ha).elim (hc1.1 a) (ih.1 a), hc1.2, hat, ih.2⟩
+    refine ⟨fun a ha => (List.mem_append.1 ha).elim (hc1.1 a) (ih.1 a), ⟨hc1.2, hat, ih.2.1⟩, ?_, ?_⟩
+    · have e : (run T v s (x :: xs)).1 = (run T v (step T v s x).state xs).1 := by simp [run]
+      rw [e]
+      rw [getLast?_cons_getD]
+      exact ih.2.2.1
+    · simpa [runSeen, List.append_assoc] using ih.2.2.2
 end
 
 section
@@ -934,7 +961,7 @@ theorem runs_covered (hL : SortedLayout L) {fs : List (Option Nat)} {B : UnrollB
     rw [Nat.zero_add]
     exact coverModel_vars (List.getElem?_eq_getElem h)
   exact ⟨_, fun n h => varSorted_of_sorted (forall2_sorted_vars (forall2_imp (fun _ _ h => h.1) hsorted) n h),
-    layoutSorted_coverModel (forall2_imp (fun _ _ h => h.2) hsorted) hv.2, hc.2, hc.1⟩
+    layoutSorted_coverModel (forall2_imp (fun _ _ h => h.2) hsorted) hv.2, hc.2.1, hc.1⟩
 
 end
 

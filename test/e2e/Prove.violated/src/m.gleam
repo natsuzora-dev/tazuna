@@ -35,7 +35,7 @@ fn add() -> tazuna.Command(Records, Event, Caller, Int, tazuna.Never) {
 fn counter() -> tazuna.Service {
   tazuna.service(
     name: "counter",
-    init: Records(total: 0),
+    init: Records(total: 60),
     apply: apply,
     subscribes: [],
     declares: [tazuna.declare_command(add())],

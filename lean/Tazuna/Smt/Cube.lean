@@ -110,13 +110,6 @@ theorem unrollSteps_tys : (fs fs' : List (Option Nat)) → fs.length = fs'.lengt
       (i + 1) b1
     simp only [unrollSteps, h1, h2, ih]
 
--- A list's last item, with the default standing for the empty list.
-set_option linter.tazuna.silentDefault false in
-theorem getLast?_cons_getD {α β : Type} (f : α → β) (a : α) (l : List α) (z : β) :
-    (((a :: l).getLast?).map f).getD z = ((l.getLast?).map f).getD (f a) := by
-  rw [List.getLast?_cons]
-  cases h : l.getLast? <;> simp
-
 -- With no step on `fs1`, the run on `fs2` starts at `S`.
 set_option linter.tazuna.silentDefault false in
 /-- An unrolled run on `fs1 ++ fs2` is the run on `fs1` and then, from the state its last step leaves and after the
