@@ -172,7 +172,7 @@ def reactMachines {r e : Ty} (records : r.den0) (now : Int) (ev : e.den0) :
 
 /-- One event: apply it, then let every machine and reaction react. -/
 def react (s : State v) (ev : v.event.den0) : State v × List (Sender × EffectV v.event) :=
-  let records := v.apply.fn (s.records, ev, ())
+  let records := v.apply.fn (.inl (s.records, s.now, ()), ev, ())
   let x := reactMachines T records s.now ev s.machines
   let effs := x.2 ++ v.reactions.flatMap fun x => (x.effectsAt ev records s.now).map (.reaction x.name, ·)
   ({ s with records, machines := x.1 }, effs)

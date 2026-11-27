@@ -120,6 +120,11 @@ pub type Origin(caller) {
   Own
 }
 
+/// What `apply` sees: the records before the event, and the time of the step that applies it.
+pub type ApplyCtx(records) {
+  ApplyCtx(records: records, now: Instant)
+}
+
 /// A point in time, in milliseconds.
 pub type Instant =
   Int
@@ -154,11 +159,11 @@ pub fn spec(
   panic as "tazuna's built-ins run only in the engine"
 }
 
-/// A service. `apply` folds an event into the records: events are the only writes. The service owns the commands, queries and sources it declares, and its scenarios run from `init` at time 0.
+/// A service. `apply` folds an event into the records: events are the only writes, so a time the records keep, such as a deadline, is written there from `ctx.now`. The service owns the commands, queries and sources it declares, and its scenarios run from `init` at time 0.
 pub fn service(
   name _name: String,
   init _init: records,
-  apply _apply: fn(records, event) -> records,
+  apply _apply: fn(ApplyCtx(records), event) -> records,
   subscribes _subscribes: List(Subscription(event)),
   declares _declares: List(Declared(records, event, caller)),
   machines _machines: List(Machine(records, event)),

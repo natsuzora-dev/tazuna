@@ -556,7 +556,7 @@ structure ClockOut (v : ServiceV) where
 from the requests and own effects the rounds start. Each part's condition is asked only where the step reaches it;
 the second term is the codes' condition. -/
 def encodeClock (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
-    (apply : Code (Ty.fn [v.records, v.event] v.records)) (invariants : Code (Ty.fn [v.records] Ty.rules))
+    (apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)) (invariants : Code (Ty.fn [v.records] Ty.rules))
     (S : SymState v) (time : Term) : Except Refusal (Encoded (ClockOut v)) := do
   let (ro, cr) ← encodeRounds L T shs v.declared senv v.machines S.records time (v.bounds.cascadeNat + 1) S.machines tt
     S.nextId (.int 0)
@@ -883,7 +883,7 @@ slots code. -/
 theorem clock_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P) (hshp : ShapesHold shs v.declared)
     (s : State v) (hinv : Step.Inv P s) (time : Int)
-    {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
+    {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     {inv : Code (Ty.fn [v.records] Ty.rules)} {ci : Term} (hci : v.invariants.code L = .ok (inv, ci)) (hcinv : Holds M ci)
     {S : SymState v} (hR : StateRel M L T shs S s) {st : Term} (hst : st.denote M = .int time)

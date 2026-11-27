@@ -263,7 +263,7 @@ variable (L : Layout) (T : List TypeDecl) {v : ServiceV}
 codes' condition, from the codes of the service's `apply` and `invariants` and the terms of the state, the wire id
 the answer names and the answer. -/
 def encodeAnswer (P : List AnySite) (shs : List (PendingShape v.event)) (k : Nat) (sh : PendingShape v.event)
-    (senv : StepEnv L shs) (j : Fin senv.nT) (apply : Code (Ty.fn [v.records, v.event] v.records))
+    (senv : StepEnv L shs) (j : Fin senv.nT) (apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records))
     (invariants : Code (Ty.fn [v.records] Ty.rules)) (S : SymState v) (to value : Term) : Except Refusal (Encoded (AnswerOut v)) := do
   let de := senv.dP
   let PS := slotsOf senv.dT senv.dtT senv.nT 2 S.pending
@@ -338,7 +338,7 @@ theorem answer_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
     (s : State v) (hsinv : Step.Inv P s)
     {k : Nat} {sh : PendingShape v.event} (hk : shs[k]? = some sh)
     (to : Nat) (value : (answerTy sh.output sh.rejection).den0)
-    {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
+    {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     {inv : Code (Ty.fn [v.records] Ty.rules)} {ci : Term} (hinv : v.invariants.code L = .ok (inv, ci)) (hci : Holds M ci)
     (senv : StepEnv L shs) (j : Fin senv.nT)
@@ -607,7 +607,6 @@ theorem answer_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
       let s' : State v := { s with pending := s.pending.filter (·.id != to) }
       let evL := (sh.onAnswer.fn (Ty.down _ hd3 f3)).fn (value, ())
       let sA := (Step.reactAll T s' evL).1
-      have v.apply.ht : (Ty.fn [v.records, v.event] v.records).isData = true := by simp [Ty.isData, Ty.isDatas, v.records_data, v.event_data]
       have e4 : Holds M c4 ↔ eventsFit L.count T s' evL :=
         (events_encode chk hshs hshp happ hca senv _ svl hSl _ hhl s' hR.now hR.records hR.machines h12).1
       have hinv' : Step.Inv P s' := hsinv.filterPending _
@@ -635,7 +634,7 @@ theorem answer_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
       have := sh.onAnswer.ht; simp only [Ty.isData, Ty.isDatas, Bool.and_eq_true] at this; exact this.2
     have happ0 := happ
     have hinv0 := hinv
-    have happ := v.apply.code_fn (by simp [Ty.isData, Ty.isDatas, v.records_data, v.event_data]) happ hca
+    have happ := v.apply.code_fn v.apply.ht happ hca
     match shs, hk, hR.pending, henc, hshs, senv with
     | sh0 :: rest, hk, ⟨tbl, htbl, hlist⟩, henc, hshs, senv =>
     -- The slot holds the request `to` names, as an entry of the shape `sh`.
@@ -778,7 +777,6 @@ theorem answer_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
         rw [rules_broken g6 _ hrs]
         rfl
     have hle : (Ty.list v.event).isData = true := by simp [Ty.isData, v.event_data]
-    have v.apply.ht : (Ty.fn [v.records, v.event] v.records).isData = true := by simp [Ty.isData, Ty.isDatas, v.records_data, v.event_data]
     -- The table without the request: its slots filtered by key, as `table.remove` does.
     have hrem : PendingRel L (sh0 :: rest) ((slotsTerm d dt (filterSlots (slotsOf d dt n 2 S.pending)
         (keepQs toT (slotsOf d dt n 2 S.pending)))).denote M) (s.pending.filter (·.id != to)) := by

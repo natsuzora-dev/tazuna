@@ -191,8 +191,8 @@ theorem react_self (hv : v.Equivariant) {s : State v}
     (hs : ∀ P : PBij, P.Fixes n → Ty.rel0 P v.records s.records s.records ∧ Machines.Rel P s.machines s.machines)
     {ev : v.event.den0} (hev : ∀ P : PBij, P.Fixes n → Ty.rel0 P v.event ev ev) :
     ∀ x ∈ (react T s ev).2, ∀ P : PBij, P.Fixes n → Started.Rel P x x := by
-  have hrec : ∀ P : PBij, P.Fixes n → Ty.rel0 P v.records (v.apply.fn (s.records, ev, ())) (v.apply.fn (s.records, ev, ())) :=
-    fun P hP => (hv.self P).apply _ _ ⟨(hs P hP).1, hev P hP, trivial⟩
+  have hrec : ∀ P : PBij, P.Fixes n → Ty.rel0 P v.records (v.apply.fn (.inl (s.records, s.now, ()), ev, ())) (v.apply.fn (.inl (s.records, s.now, ()), ev, ())) :=
+    fun P hP => (hv.self P).apply _ _ ⟨⟨(hs P hP).1, rfl, trivial⟩, hev P hP, trivial⟩
   intro x hx P hP
   simp only [react, List.mem_append] at hx
   rcases hx with hx | hx
@@ -201,8 +201,8 @@ theorem react_self (hv : v.Equivariant) {s : State v}
   · simp only [List.mem_flatMap, List.mem_map] at hx
     obtain ⟨y, hy, eff, he, rfl⟩ := hx
     have hl := EffectFun.apply_rel y.react ((hv.self P).reactions y hy)
-      (xs := (.inl (v.apply.fn (s.records, ev, ()), s.now, ()), ev, ()))
-      (ys := (.inl (v.apply.fn (s.records, ev, ()), s.now, ()), ev, ())) ⟨⟨hrec P hP, rfl, trivial⟩, hev P hP, trivial⟩
+      (xs := (.inl (v.apply.fn (.inl (s.records, s.now, ()), ev, ()), s.now, ()), ev, ()))
+      (ys := (.inl (v.apply.fn (.inl (s.records, s.now, ()), ev, ()), s.now, ()), ev, ())) ⟨⟨hrec P hP, rfl, trivial⟩, hev P hP, trivial⟩
     exact ⟨.reaction _, forall2_self hl eff he⟩
 
 theorem applyEvents_self (hv : v.Equivariant) (n : Nat) :

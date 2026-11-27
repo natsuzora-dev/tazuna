@@ -36,6 +36,7 @@ def opaqueTy? (name : String) (args : List Ty) : Option Ty :=
 /-- The documentation of the prelude's types that `tazuna` declares, by name. -/
 def preludeDocs : List (String × String) :=
   [ ("tazuna.Origin", "Who runs a command or query: `Outside(caller)` for a request line from outside, whose `caller` is the value the line names, or `Own` for the service itself, through a machine's or reaction's `send_command` or `send_query`. A `callers` list holds origins, and `ctx.caller` is the one that ran."),
+    ("tazuna.ApplyCtx", "What `apply` sees: the records before the event, and the time of the step that applies it."),
     ("tazuna.Never", "A type with no values. As a command's rejection type it says the command never rejects: `decide` can return no `Error`, and no rejected outcome exists to reach.") ]
 
 /-- Aliases `tazuna` declares, with their documentation. -/
@@ -49,6 +50,7 @@ def builtinAliases : List (Surface.AliasDef × String) :=
 the field or parameter label, the alias). -/
 def timeAliases : List (String × String × String) :=
   [ ("tazuna.Ctx", "now", "Instant"), ("tazuna.MachineCtx", "now", "Instant"), ("tazuna.ReactionCtx", "now", "Instant"),
+    ("tazuna.ApplyCtx", "now", "Instant"),
     ("tazuna.QueryCtx", "now", "Instant"),
     ("tazuna.Timer", "after", "Duration"), ("response", "within", "Duration"), ("step_wait", "for", "Duration") ]
 
@@ -165,9 +167,9 @@ def sig : Prim → PrimSig :=
       ret := .dsl .spec [] }
   | .service =>
     { name := "service",
-      doc := "A service. `apply` folds an event into the records: events are the only writes. The service owns the commands, queries and sources it declares, and its scenarios run from `init` at time 0.",
+      doc := "A service. `apply` folds an event into the records: events are the only writes, so a time the records keep, such as a deadline, is written there from `ctx.now`. The service owns the commands, queries and sources it declares, and its scenarios run from `init` at time 0.",
       tvars := ["records", "event", "caller"], dataArgs := true, needsEq := [2],
-      params := [l "name" .str, l "init" a, l "apply" (kept (.fn [a, b] a)),
+      params := [l "name" .str, l "init" a, l "apply" (kept (.fn [.applyCtx a, b] a)),
         l "subscribes" (.list (.dsl .subscription [b])), l "declares" (.list (.dsl .declared [a, b, param 2])),
         l "machines" (.list (.dsl .machine [a, b])),
         l "reactions" (.list (.dsl .reaction [a, b])), l "invariants" (kept (.fn [a] Ty.rules)),

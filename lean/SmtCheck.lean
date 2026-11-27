@@ -27,6 +27,9 @@ instance {w : Nat} : Inhabited (SlotItems w) := ⟨⟨List.replicate w tt, by si
 
 abbrev E (t : Ty) := Expr [] [] t
 
+/-- The records `apply` sees. -/
+def recsE {Γ : List Ty} {r : Ty} (x : Expr [] Γ (Ty.applyCtx r)) : Expr [] Γ r := .field (ft := r) "records" 0 (by simp) x
+
 def optI : Ty := Ty.option .int
 /-- A record with two variants that share an Int field `id` at index 0. -/
 def shape : Ty := .adt 8 [] [[.int, .str], [.int]]
@@ -375,7 +378,7 @@ def getQ : QueryV recordsT .str :=
 
 def querySvc : ServiceV :=
   { name := "s", records := recordsT, event := .int, caller := .str, init := Builtin.tableEmpty,
-    apply := .closed (.lam (.var .here)), subscribes := [], declares := [], commands := [], queries := [getQ],
+    apply := .closed (.lam (recsE (.var .here))), subscribes := [], declares := [], commands := [], queries := [getQ],
     sources := [],
     machines := [], reactions := [], invariants := .closed (.lam (.list .nil)), responses := [], bounds := ⟨[], 0, 0, 0⟩,
     scenarios := [], declared := [] }
@@ -466,11 +469,12 @@ and a value, the records insert it, and the invariant `small` holds while the ta
 
 def evT : Ty := .tuple [.int, .int]
 
+
 def wrapE : E (.fn [evT] evT) := .lam (.var .here)
 
-def applyE : E (.fn [recordsT, evT] recordsT) :=
+def applyE : E (.fn [Ty.applyCtx recordsT, evT] recordsT) :=
   .lam (.call (.prim .tableInsert [.int, .int] rfl)
-    (.cons (.var .here) (.cons (.index (ts := [.int, .int]) (.var (.there .here)) ⟨0, by decide⟩)
+    (.cons (recsE (.var .here)) (.cons (.index (ts := [.int, .int]) (.var (.there .here)) ⟨0, by decide⟩)
       (.cons (.index (ts := [.int, .int]) (.var (.there .here)) ⟨1, by decide⟩) .nil))))
 
 def invariantsE : E (.fn [recordsT] Ty.rules) :=
@@ -847,9 +851,9 @@ def rateAnswerE : Expr [] [.int] (.fn [.int] (.list .int)) :=
 def rateEnsuresE : Expr [] [] (.fn [.str, .int] Ty.rules) :=
   .lam (.list (.cons (.tuple (.cons (.str (str! "positive")) (.cons (.bin .lt (.int 0) (.var (.there .here))) .nil))) .nil))
 
-def insertE : E (.fn [recordsT, .int] recordsT) :=
+def insertE : E (.fn [Ty.applyCtx recordsT, .int] recordsT) :=
   .lam (.call (.prim .tableInsert [.int, .int] rfl)
-    (.cons (.var .here) (.cons (.var (.there .here)) (.cons (.var (.there .here)) .nil))))
+    (.cons (recsE (.var .here)) (.cons (.var (.there .here)) (.cons (.var (.there .here)) .nil))))
 
 def pendingSites : List AnySite :=
   [⟨[.int], _, ⟨⟨"m", 1, 1, 0⟩, [], .nil, rfl, rfl, payAnswerE⟩⟩, ⟨[.int], _, ⟨⟨"m", 2, 1, 0⟩, [], .nil, rfl, rfl, rateAnswerE⟩⟩,
@@ -1176,13 +1180,13 @@ into both. -/
 
 def recordsB : Ty := .tuple [recordsT, recordsT]
 
-def applyB : E (.fn [recordsB, evT] recordsB) :=
-  let key : Expr [] [recordsB, evT] .int := .index (ts := [.int, .int]) (.var (.there .here)) ⟨0, by decide⟩
-  let val : Expr [] [recordsB, evT] .int := .index (ts := [.int, .int]) (.var (.there .here)) ⟨1, by decide⟩
-  let ins (t : Expr [] [recordsB, evT] recordsT) : Expr [] [recordsB, evT] recordsT :=
+def applyB : E (.fn [Ty.applyCtx recordsB, evT] recordsB) :=
+  let key : Expr [] [Ty.applyCtx recordsB, evT] .int := .index (ts := [.int, .int]) (.var (.there .here)) ⟨0, by decide⟩
+  let val : Expr [] [Ty.applyCtx recordsB, evT] .int := .index (ts := [.int, .int]) (.var (.there .here)) ⟨1, by decide⟩
+  let ins (t : Expr [] [Ty.applyCtx recordsB, evT] recordsT) : Expr [] [Ty.applyCtx recordsB, evT] recordsT :=
     .call (.prim .tableInsert [.int, .int] rfl) (.cons t (.cons key (.cons val .nil)))
-  .lam (.tuple (.cons (ins (.index (ts := [recordsT, recordsT]) (.var .here) ⟨0, by decide⟩))
-    (.cons (ins (.index (ts := [recordsT, recordsT]) (.var .here) ⟨1, by decide⟩)) .nil)))
+  .lam (.tuple (.cons (ins (.index (ts := [recordsT, recordsT]) (recsE (.var .here)) ⟨0, by decide⟩))
+    (.cons (ins (.index (ts := [recordsT, recordsT]) (recsE (.var .here)) ⟨1, by decide⟩)) .nil)))
 
 def tableA : E (.fn [recordsB] recordsT) := .lam (.index (ts := [recordsT, recordsT]) (.var .here) ⟨0, by decide⟩)
 def tableB : E (.fn [recordsB] recordsT) := .lam (.index (ts := [recordsT, recordsT]) (.var .here) ⟨1, by decide⟩)
@@ -2364,7 +2368,7 @@ def eventsCheck (solver : Solver) : IO Bool := do
             sms.map fun ⟨_, is⟩ => is.map fun i => (intDen _ i.key, intDen _ i.state, i.timer.map fun (d, st) => (d, intDen _ st))
           let sorted (ps : List (Step.Pending writeSvc.event)) := (ps.map pendView).mergeSort fun a b => a.1 ≤ b.1
           match Step.applyEvents prelude ({ state := s } : Step.Acc writeSvc) evs,
-              Step.applyEvents prelude ({ state := { s with records := writeSvc.apply.fn (s.records, (3 : Int), ()) } } :
+              Step.applyEvents prelude ({ state := { s with records := writeSvc.apply.fn (.inl (s.records, s.now, ()), (3 : Int), ()) } } :
                 Step.Acc writeSvc) [(3 : Int)] with
           | .ok a, .ok b =>
             let mut ok := true
@@ -3643,7 +3647,10 @@ def pairCases (solver : Solver) (v : ServiceV) (sites : List AnySite) (cases : L
     match pairQuestions L prelude sites v senv p1 p2 with
     | .error r => ok ← fail s!"{name}: no questions: {repr r}"
     | .ok (_, tq) =>
-      match ← solver.run tq.script, want with
+      let empty : List Term := match want, L.find? recordsT, L.find? (.tuple [Ty.bool, .int, .int]) with
+        | .keptDiffer, some (d, n), some (dt, _) => [allT ((slotsOf d dt n 2 (.var 0)).map fun x => .not x.1)]
+        | _, _, _ => []
+      match ← solver.run { tq.script with asserts := tq.script.asserts ++ empty }, want with
       | .unsat, .commutes => pure ()
       | .sat vs, .violated | .sat vs, .keptDiffer =>
         let M := modelOf vs
@@ -3701,9 +3708,10 @@ def pairWfCheck (solver : Solver) : IO Bool := do
 /-! Pair questions whose steps send requests: the service `p` with the reaction `echo`, which asks `mail` to `send`
 the event's key, or `count`, which sends how many rows the records hold, each `on_answer` capturing the event's key.
 Two `ins` with `echo` commute: each sends the same request at the same wire id counted from where its step starts,
-whichever runs first, so the question is unsat. With `count` the first `ins` sends one row fewer than it does after
-the other `ins`, so the question, which keeps each step's wire ids, is sat; with the wire ids swapped the two orders
-send the same counts, and differ only in which key each `on_answer` captures. `on_answer` ignores it, so the orders
+whichever runs first, so the question is unsat. With `count`, from records with no row, the first `ins` sends one row
+fewer than it does after the other `ins`, so the question, which keeps each step's wire ids, is sat; with the wire ids
+swapped the two orders send the same counts, and differ only in which key each `on_answer` captures. (From a row with
+one of the keys, the counts differ in data, and the solver may pick such a model, so the case asks from no row.) `on_answer` ignores it, so the orders
 behave alike, but Lean does not compare what functions do: the model must read as differing only in kept functions,
 never as not commuting. -/
 
@@ -3833,7 +3841,7 @@ def tagC : CommandV .int .int .int :=
 
 def taggingSvc : ServiceV :=
   { name := "tagging", records := .int, event := .int, caller := .int, init := (0 : Int),
-    apply := .closed (.lam (.var .here)), subscribes := [], declares := [], commands := [tagC], queries := [],
+    apply := .closed (.lam (recsE (.var .here))), subscribes := [], declares := [], commands := [tagC], queries := [],
     sources := [], machines := [], reactions := [], invariants := .closed (.lam (.list .nil)), responses := [],
     bounds := ⟨[], 3, 2, 5⟩, scenarios := [], declared := [] }
 

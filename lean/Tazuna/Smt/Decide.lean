@@ -26,7 +26,7 @@ variable (L : Layout) (T : List TypeDecl)
 the records it leaves, at the context code `ctx`, with the condition: `decide`'s, the loop's, and `ensures`' where
 `decide` accepted. -/
 def encodeDecide (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
-    (x : CommandV v.records v.event v.caller) (cc : CommandCode x) (apply : Code (Ty.fn [v.records, v.event] v.records))
+    (x : CommandV v.records v.event v.caller) (cc : CommandCode x) (apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records))
     (ctx : Code (Ty.ctx v.records x.input v.caller)) (now records : Term) (xs : PerMachine (fun _ => Term) v.machines) (n q : Term) :
     Except Refusal (DecideOut v × Term) := do
   let (res, c2) ← cc.decide (ctx, ())
@@ -94,7 +94,7 @@ theorem newsRel_writes {shs : List (PendingShape v.event)} {ds : List (String ×
 whichever pending requests the step writes for the requests the events start, `applyEvents`' result. -/
 theorem loop_apply {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P) (hshp : ShapesHold shs v.declared)
-    {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
+    {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca) (senv : StepEnv L shs) (a : Step.Acc v) {now : Term} (hnow : now.denote M = .int a.state.now)
     {S : List (Slot 1)} {sv : List (Bool × List Val)} (hS : SlotsDen M S sv)
     {evs : List v.event.den0} (hev : Holds2 (EBag L v.event) (evs.map (Ty.up _ v.event_data)) sv)
@@ -153,7 +153,7 @@ theorem AccRel.queueCoded {shs : List (PendingShape v.event)} {a : Step.Acc v} {
 /-- The events loop over a list's slots from a step in progress, as `AccRel` says of `applyEvents`' result. -/
 theorem loop_acc {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P) (hshp : ShapesHold shs v.declared)
-    {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
+    {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca) (senv : StepEnv L shs) (a : Step.Acc v) {now : Term} (hnow : now.denote M = .int a.state.now)
     {S : List (Slot 1)} {sv : List (Bool × List Val)} (hS : SlotsDen M S sv)
     {evs : List v.event.den0} (hev : Holds2 (EBag L v.event) (evs.map (Ty.up _ v.event_data)) sv)
@@ -256,7 +256,7 @@ rejection is the one the terms denote and leaves `a` as it was. -/
 theorem decide_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) {shs : List (PendingShape v.event)}
     (hshs : ∀ sh ∈ shs, sh.InSites P) (hshp : ShapesHold shs v.declared) (x : CommandV v.records v.event v.caller) {cc : CommandCode x} {cx : Term}
     (hcc : CommandCode.of L x = .ok (cc, cx)) (hccx : Holds M cx)
-    {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
+    {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca) (senv : StepEnv L shs) (a : Step.Acc v) (cv : (Ty.ctx v.records x.input v.caller).den0)
     {ctx : Code (Ty.ctx v.records x.input v.caller)} (hctx : Smt.Rel M L _ (Ty.up _ x.data.ctx cv) ctx)
     {now records n q fresh : Term} {xs : PerMachine (fun _ => Term) v.machines} {q0 : Nat} (hnow : now.denote M = .int a.state.now)

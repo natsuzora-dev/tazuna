@@ -12,7 +12,7 @@ pub type Caller {
   User
 }
 
-fn apply(_r: Records, e: Event) -> Records {
+fn apply(_ctx: tazuna.ApplyCtx(Records), e: Event) -> Records {
   case e {
     Set(a, b, c) -> Records(a: a, b: b, c: c)
   }

@@ -9,7 +9,7 @@ open Tazuna.Ir
 
 /-- The codes of the functions an event step reads. -/
 structure EventCode (v : ServiceV) (i : Fin v.subscribes.length) where
-  apply : Code (Ty.fn [v.records, v.event] v.records)
+  apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)
   wrap : Code (Ty.fn [(v.subscribes.get i).event] v.event)
   invariants : Code (Ty.fn [v.records] Ty.rules)
 

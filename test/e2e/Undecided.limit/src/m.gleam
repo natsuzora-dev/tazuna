@@ -13,7 +13,8 @@ pub type Caller {
   User
 }
 
-fn apply(r: Records, e: Event) -> Records {
+fn apply(ctx: tazuna.ApplyCtx(Records), e: Event) -> Records {
+  let r = ctx.records
   case e {
     Seen(n) ->
       Records(
@@ -69,7 +70,8 @@ pub type AskEvent {
   Asked
 }
 
-fn ask_apply(r: AskRecords, e: AskEvent) -> AskRecords {
+fn ask_apply(ctx: tazuna.ApplyCtx(AskRecords), e: AskEvent) -> AskRecords {
+  let r = ctx.records
   case e {
     Set -> AskRecords(flag: True)
     _ -> r

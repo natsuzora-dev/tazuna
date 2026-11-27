@@ -49,7 +49,8 @@ pub type SalePhase {
   Over
 }
 
-fn apply(records: Records, event: Event) -> Records {
+fn apply(ctx: tazuna.ApplyCtx(Records), event: Event) -> Records {
+  let records = ctx.records
   case event {
     ProductAdded(sku, name, price) ->
       Records(

@@ -43,7 +43,7 @@ theorem forall_zipIdx_iff {α : Type} (p : α → Prop) (l : List α) : (∀ x �
 
 section
 variable {M : Model} {L : Layout} {T : List TypeDecl} {v : ServiceV} {P : List AnySite}
-  {shs : List (PendingShape v.event)} {senv : StepEnv L shs} {apply : Code (Ty.fn [v.records, v.event] v.records)}
+  {shs : List (PendingShape v.event)} {senv : StepEnv L shs} {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)}
 
 theorem ownKind_codes {nR : Nat} {records now fresh n q eff : Term} {xs : PerMachine (fun _ => Term) v.machines}
     {j : Nat} {key : OwnKey} {k : Encoded (OwnKindStep v)}

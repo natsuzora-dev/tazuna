@@ -105,7 +105,7 @@ variable (L : Layout) (T : List TypeDecl)
 /-- One own kind's internal step for the effect term `eff`, read as the kind's variant `nR + j`: its outcome and step
 terms, its condition, and the condition of the command's or query's codes. -/
 def encodeOwnKind (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs) (nR : Nat)
-    (apply : Code (Ty.fn [v.records, v.event] v.records)) (records now fresh n q eff : Term) (xs : PerMachine (fun _ => Term) v.machines)
+    (apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)) (records now fresh n q eff : Term) (xs : PerMachine (fun _ => Term) v.machines)
     (j : Nat) (key : OwnKey) : Except Refusal (Encoded (OwnKindStep v)) := do
   let sel (i : Nat) := Term.sel senv.dE (nR + j) i eff
   match ← need (.layout (.effectKind key.name)) (ownShape v P key) with
@@ -135,7 +135,7 @@ def encodeOwnKind (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.
 /-- The internal step for the own effect term `eff`: every own kind's, merged by the variant tests; its condition
 asks each kind's only where its test holds. The second term is the codes' condition, which holds statically. -/
 def encodeOwnStep (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
-    (apply : Code (Ty.fn [v.records, v.event] v.records)) (records now fresh n q eff : Term) (xs : PerMachine (fun _ => Term) v.machines) :
+    (apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)) (records now fresh n q eff : Term) (xs : PerMachine (fun _ => Term) v.machines) :
     Except Refusal (Encoded (OwnStepOut v)) := do
   let nR := (L.effectsOf v.event).length
   let eff := Term.share eff
@@ -266,7 +266,7 @@ with what the step terms denote (`AccRel`). -/
 theorem ownKind_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P) (hshp : ShapesHold shs v.declared)
     (a : Step.Acc v)
-    {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
+    {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     (senv : StepEnv L shs)
     {records now fresh n q eff : Term} {xs : PerMachine (fun _ => Term) v.machines} {q0 : Nat}
@@ -617,7 +617,7 @@ fault, which is `Step.runOwn`'s, and otherwise the internal step runs to its end
 theorem ownStep_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P) (hshp : ShapesHold shs v.declared)
     (a : Step.Acc v)
-    {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
+    {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     (senv : StepEnv L shs)
     {records now fresh n q eff : Term} {xs : PerMachine (fun _ => Term) v.machines} {q0 : Nat}

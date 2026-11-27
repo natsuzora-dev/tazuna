@@ -169,8 +169,8 @@ theorem react_same (ho : Ordered T v) {s s' : State v} (hs : StateSame s s') {ev
     StateSame (react T s ev).1 (react T s' ev').1 ∧
       Forall2 (Started.Rel PBij.refl) (react T s ev).2 (react T s' ev').2 := by
   obtain ⟨hrec, hmach, hpend, hnow, hf, hn⟩ := hs
-  have hrec' : Ty.Same v.records (v.apply.fn (s.records, ev, ())) (v.apply.fn (s'.records, ev', ())) :=
-    (ho.equi.self PBij.refl).apply _ _ ⟨hrec, hev, trivial⟩
+  have hrec' : Ty.Same v.records (v.apply.fn (.inl (s.records, s.now, ()), ev, ())) (v.apply.fn (.inl (s'.records, s.now, ()), ev', ())) :=
+    (ho.equi.self PBij.refl).apply _ _ ⟨⟨hrec, rfl, trivial⟩, hev, trivial⟩
   have hm := reactMachines_same T hrec' s.now hev
     (fun m hm => ⟨ho.equi.machines m hm, ho.keys m hm⟩) hmach
   unfold react
@@ -178,8 +178,8 @@ theorem react_same (ho : Ordered T v) {s s' : State v} (hs : StateSame s s') {ev
   rw [← hnow]
   refine ⟨⟨hrec', hm.1, hpend, rfl, hf, hn⟩, forall2_append hm.2 ?_⟩
   have hx : ∀ x ∈ v.reactions, Forall2 (Started.Rel PBij.refl)
-      ((x.effectsAt ev (v.apply.fn (s.records, ev, ())) s.now).map (.reaction x.name, ·))
-      ((x.effectsAt ev' (v.apply.fn (s'.records, ev', ())) s.now).map (.reaction x.name, ·)) := fun x hx =>
+      ((x.effectsAt ev (v.apply.fn (.inl (s.records, s.now, ()), ev, ())) s.now).map (.reaction x.name, ·))
+      ((x.effectsAt ev' (v.apply.fn (.inl (s'.records, s.now, ()), ev', ())) s.now).map (.reaction x.name, ·)) := fun x hx =>
     forall2_map2 (fun _ _ h => ⟨.reaction x.name, h⟩)
       (EffectFun.apply_rel x.react ((ho.equi.self PBij.refl).reactions x hx) ⟨⟨hrec', rfl, trivial⟩, hev, trivial⟩)
   clear hm hpend

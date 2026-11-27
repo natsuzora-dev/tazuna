@@ -157,7 +157,7 @@ end
 section
 variable {M : Model} {L : Layout} {T : List TypeDecl}
 
-theorem apply_inv_exact {v : ServiceV} {apply : Code (Ty.fn [v.records, v.event] v.records)}
+theorem apply_inv_exact {v : ServiceV} {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)}
     {inv : Code (Ty.fn [v.records] Ty.rules)} {ca ci : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hinv : v.invariants.code L = .ok (inv, ci)) :
     Holds M (andT ca ci) ↔ (v.apply.fits L.count).1 ∧ (v.invariants.fits L.count).1 := by

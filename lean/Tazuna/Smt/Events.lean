@@ -110,13 +110,13 @@ occupied slot's event is applied, every machine reacts, its starts are ranked fr
 place (own commands and queries), then every reaction's effects follow; the condition asks for each occupied slot's
 applications. -/
 def encodeEvents (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
-    (apply : Code (Ty.fn [v.records, v.event] v.records)) (now : Term) :
+    (apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)) (now : Term) :
     List (Slot 1) → (records : Term) → (xs : PerMachine (fun _ => Term) v.machines) → (n q : Term) →
     Except Refusal (EventsOut v × Term)
   | [], records, xs, n, q => pure (⟨records, xs, n, [], [], q, []⟩, tt)
   | (f, ys) :: S, records, xs, n, q => do
     let ev := Term.share ys[0]
-    let rc ← Code.ofDataE v.records records
+    let rc ← Code.ofDataE (Ty.applyCtx v.records) (← applyCtxT (r := v.records) L records now)
     let ec ← Code.ofDataE v.event ev
     let (r', ca) ← apply (rc, ec, ())
     let rt ← Code.dataTermE v.records r'
@@ -236,7 +236,7 @@ variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
 
 /-- The events loop's event slots are the slots it ran over. -/
 theorem encodeEvents_events {v : ServiceV} {shs : List (PendingShape v.event)} {senv : StepEnv L shs}
-    {apply : Code (Ty.fn [v.records, v.event] v.records)} {now : Term} :
+    {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)} {now : Term} :
     (S : List (Slot 1)) → {records : Term} → {xs : PerMachine (fun _ => Term) v.machines} → {n q : Term} →
     {o : EventsOut v} → {c : Term} → encodeEvents L T v shs senv apply now S records xs n q = .ok (o, c) →
     o.events = S
@@ -244,6 +244,7 @@ theorem encodeEvents_events {v : ServiceV} {shs : List (PendingShape v.event)} {
     simp only [encodeEvents, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at h
     rw [← h.1]
   | (f, ys) :: S, _, _, _, _, _, _, h => by
+    obtain ⟨_, -, h⟩ := bind_ok.1 h
     obtain ⟨_, -, h⟩ := bind_ok.1 h
     obtain ⟨_, -, h⟩ := bind_ok.1 h
     obtain ⟨_, -, h⟩ := bind_ok.1 h
@@ -260,10 +261,10 @@ records' `apply`, every machine's reaction and every reaction. -/
 def eventsFit (S : Ty → Nat) (T : List TypeDecl) : State v → List v.event.den0 → Prop
   | _, [] => True
   | s, ev :: evs =>
-    (v.apply.appFits S (s.records, ev, ()) ∧
-      (∀ sm ∈ s.machines.toSigma, machineFits S sm (v.apply.fn (s.records, ev, ())) s.now ev) ∧
+    (v.apply.appFits S (.inl (s.records, s.now, ()), ev, ()) ∧
+      (∀ sm ∈ s.machines.toSigma, machineFits S sm (v.apply.fn (.inl (s.records, s.now, ()), ev, ())) s.now ev) ∧
       ∀ x ∈ v.reactions, (x.react.fits S).1 ∧
-        x.react.appFits S (.inl (v.apply.fn (s.records, ev, ()), s.now, ()), ev, ())) ∧
+        x.react.appFits S (.inl (v.apply.fn (.inl (s.records, s.now, ()), ev, ()), s.now, ()), ev, ())) ∧
     eventsFit S T (Step.react T s ev).1 evs
 
 /-- A list of events: the condition holds exactly when the functions every event applies fit, on the state the
@@ -273,7 +274,7 @@ flagged, those requests at the ids from `n0`, the queue place term the place aft
 start, and the own slots hold those at the places from `q0`. -/
 theorem events_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) {shs : List (PendingShape v.event)}
     (hshs : ∀ sh ∈ shs, sh.InSites P) (hshp : ShapesHold shs v.declared)
-    {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca0 : Term} (hap : v.apply.code L = .ok (apply, ca0))
+    {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)} {ca0 : Term} (hap : v.apply.code L = .ok (apply, ca0))
     (hca0 : Holds M ca0) (senv : StepEnv L shs) {now : Term} :
     (S : List (Slot 1)) → (sv : List (Bool × List Val)) → SlotsDen M S sv →
     (evs : List v.event.den0) → Holds2 (EBag L v.event) (evs.map (Ty.up _ v.event_data)) sv →
@@ -301,6 +302,11 @@ theorem events_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
   | (f, ys) :: S, (b, vs) :: sv, ⟨hf, hys, hS⟩, evs, hev, s, hnow, records, hrec, xs, hms, n, q, o, c, henc => by
     have hor : ∀ m ∈ v.machines, m.key.orderable = true := fun m hm => (chk.keys m hm).1
     have happ := v.apply.code_fn v.apply.ht hap hca0
+    have hcd : (Ty.applyCtx v.records).isData = true := by
+      have h := v.apply.ht
+      simp only [Ty.isData, Ty.isDatas, Bool.and_eq_true] at h
+      exact h.1.1
+    obtain ⟨ctxT, h0, henc⟩ := bind_ok.1 henc
     obtain ⟨rc, h1, henc⟩ := bind_ok.1 henc
     obtain ⟨ec, h2, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨r', ca⟩, h3, henc⟩ := bind_ok.1 henc
@@ -331,19 +337,20 @@ theorem events_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
           simp only [true_implies, eventsFit]
           have hevT : RelV L v.event (Ty.up _ v.event_data ev) ((Term.share (⟨[t], rfl⟩ : SlotItems 1)[0]).denote M) := by
             simpa [ht] using hez
-          let recs' := v.apply.fn (s.records, ev, ())
-          have hrc : Smt.Rel M L v.records (Ty.up _ v.records_data s.records) rc := (rel_ofTerm (need_ok.1 h1) _).2 hrec
+          let recs' := v.apply.fn (.inl (s.records, s.now, ()), ev, ())
+          have hrc : Smt.Rel M L (Ty.applyCtx v.records) (Ty.up _ hcd (.inl (s.records, s.now, ()))) rc :=
+            (rel_ofTerm (need_ok.1 h1) _).2 (rctx_rel hcd v.records_data hrec hnow h0)
           have hec : Smt.Rel M L v.event (Ty.up _ v.event_data ev) ec := (rel_ofTerm (need_ok.1 h2) _).2 hevT
-          have e1 : Holds M ca ↔ v.apply.appFits L.count (s.records, ev, ()) :=
+          have e1 : Holds M ca ↔ v.apply.appFits L.count (.inl (s.records, s.now, ()), ev, ()) :=
             v.apply.app_exact hap hca0 (by
               intro t ht
               simp only [List.mem_cons, List.not_mem_nil, or_false] at ht
               rcases ht with rfl | rfl
               · exact ofTerm_notFn (need_ok.1 h1)
-              · exact ofTerm_notFn (need_ok.1 h2)) _ _ (rels2 v.records_data v.event_data v.apply.args_data hrc hec) h3
+              · exact ofTerm_notFn (need_ok.1 h2)) _ _ (rels2 hcd v.event_data v.apply.args_data hrc hec) h3
           have hrt : Holds M ca → RelV L v.records (Ty.up _ v.records_data recs') ((Term.share rt).denote M) := fun hca => by
-            have hr' := happ (Ty.up _ v.records_data s.records, Ty.up _ v.event_data ev, ()) (rc, ec, ()) ⟨hrc, hec, trivial⟩ r' ca h3 hca
-            rw [up_app2 v.records_data v.event_data v.apply.ht] at hr'
+            have hr' := happ (Ty.up _ hcd (.inl (s.records, s.now, ())), Ty.up _ v.event_data ev, ()) (rc, ec, ()) ⟨hrc, hec, trivial⟩ r' ca h3 hca
+            erw [up_app2 hcd v.event_data v.records_data v.apply.ht] at hr'
             rw [Term.denote_share]; exact (rel_term (need_ok.1 h4) _).1 hr'
           have e2 : ∀ hca : Holds M ca, (Holds M cm ↔ ∀ sm ∈ s.machines.toSigma, machineFits L.count sm recs' s.now ev) :=
             fun hca => (machines_encode (T := T) recs' s.now ev (hrt hca) hnow hevT v.machines xs s.machines outs hms
@@ -401,11 +408,12 @@ theorem events_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
             rw [holds_andT, holds_andT] at hc1'; exact hc1'
           have hevT : RelV L v.event (Ty.up _ v.event_data ev) ((Term.share (⟨[t], rfl⟩ : SlotItems 1)[0]).denote M) := by
             simpa [ht] using hez
-          let recs' := v.apply.fn (s.records, ev, ())
-          have hrc : Smt.Rel M L v.records (Ty.up _ v.records_data s.records) rc := (rel_ofTerm (need_ok.1 h1) _).2 hrec
+          let recs' := v.apply.fn (.inl (s.records, s.now, ()), ev, ())
+          have hrc : Smt.Rel M L (Ty.applyCtx v.records) (Ty.up _ hcd (.inl (s.records, s.now, ()))) rc :=
+            (rel_ofTerm (need_ok.1 h1) _).2 (rctx_rel hcd v.records_data hrec hnow h0)
           have hec : Smt.Rel M L v.event (Ty.up _ v.event_data ev) ec := (rel_ofTerm (need_ok.1 h2) _).2 hevT
-          have hr' := happ (Ty.up _ v.records_data s.records, Ty.up _ v.event_data ev, ()) (rc, ec, ()) ⟨hrc, hec, trivial⟩ r' ca h3 hca
-          rw [up_app2 v.records_data v.event_data v.apply.ht] at hr'
+          have hr' := happ (Ty.up _ hcd (.inl (s.records, s.now, ())), Ty.up _ v.event_data ev, ()) (rc, ec, ()) ⟨hrc, hec, trivial⟩ r' ca h3 hca
+          erw [up_app2 hcd v.event_data v.records_data v.apply.ht] at hr'
           have hrt : RelV L v.records (Ty.up _ v.records_data recs') ((Term.share rt).denote M) := by
             rw [Term.denote_share]; exact (rel_term (need_ok.1 h4) _).1 hr'
           have hrel := (machines_encode (T := T) recs' s.now ev hrt hnow hevT v.machines xs s.machines outs hms

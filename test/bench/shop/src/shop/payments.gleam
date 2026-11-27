@@ -97,7 +97,8 @@ fn moved(to: PayState) -> fn(Payment) -> Payment {
   fn(payment: Payment) { Payment(..payment, state: to) }
 }
 
-fn apply(records: Records, event: Event) -> Records {
+fn apply(ctx: tazuna.ApplyCtx(Records), event: Event) -> Records {
+  let records = ctx.records
   case event {
     Ordered(placed) ->
       case table.get(records.payments, placed.order) {

@@ -17,7 +17,8 @@ fn send() -> tazuna.ExternalCommand(String, Nil, Nil) {
   tazuna.external_command(name: "send")
 }
 
-fn apply(r: Records, _e: Event) -> Records {
+fn apply(ctx: tazuna.ApplyCtx(Records), _e: Event) -> Records {
+  let r = ctx.records
   r
 }
 

@@ -210,7 +210,7 @@ structure ServiceV where
   event : Ty
   caller : Ty
   init : records.den0
-  apply : Fun (Ty.fn [records, event] records)
+  apply : Fun (Ty.fn [Ty.applyCtx records, event] records)
   subscribes : List (SubscriptionV event)
   /-- What it declares, as written. -/
   declares : List DeclaredV

@@ -20,6 +20,9 @@ private def recordsE {Γ : List Ty} (x : Expr [] Γ (Ty.ctx .int .int .int)) : E
   .field (ft := .int) "records" 0 (by simp) x
 private def inputE {Γ : List Ty} (x : Expr [] Γ (Ty.ctx .int .int .int)) : Expr [] Γ .int :=
   .field (ft := .int) "input" 1 (by simp) x
+/-- The records `apply` sees. -/
+private def applyRecordsE {Γ : List Ty} {r : Ty} (x : Expr [] Γ (Ty.applyCtx r)) : Expr [] Γ r :=
+  .field (ft := r) "records" 0 (by simp) x
 private def queryRecordsE {Γ : List Ty} (x : Expr [] Γ (Ty.queryCtx .int .int .int)) : Expr [] Γ .int :=
   .field (ft := .int) "records" 0 (by simp) x
 
@@ -92,7 +95,7 @@ def total : QueryV .int .int :=
 
 def svc : ServiceV :=
   { name := "sum", records := .int, event := .int, caller := .int, init := (0 : Int),
-    apply := .closed (.lam (.bin .add (.var .here) (.var (.there .here)))),
+    apply := .closed (.lam (.bin .add (applyRecordsE (.var .here)) (.var (.there .here)))),
     subscribes := [{ source := "peer", name := "moved", event := .int, wrap := .closed (.lam (.var .here)) }],
     declares := [.command .int .int .int add, .query .int .int total],
     commands := [add], queries := [total], sources := [], machines := [watch], reactions := [], scenarios := [],
@@ -231,7 +234,7 @@ def perKey : MachineV (.bag .int) .int :=
     invariants := .closed (.lam (.list .nil)) }
 def keyed : ServiceV :=
   { name := "keyed", records := .bag .int, event := .int, caller := .int, init := ([] : List Int),
-    apply := .closed (.lam (.var .here)),
+    apply := .closed (.lam (applyRecordsE (.var .here))),
     subscribes := [{ source := "p", name := "e", event := .int, wrap := .closed (.lam (.var .here)) }],
     declares := [], commands := [], queries := [], sources := [], machines := [perKey], reactions := [],
     scenarios := [], invariants := .closed (.lam (.list .nil)), responses := [],

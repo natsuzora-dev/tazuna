@@ -260,7 +260,7 @@ theorem machineStep_from (T : List TypeDecl) (records : v.records.den0) (now : I
 
 theorem react_inv (T : List TypeDecl) (hv : v.Reach P E) (s : State v) (ev : v.event.den0) (hs : Inv P s) :
     Inv P (react T s ev).1 ∧ EffsReach P (react T s ev).2 ∧ EffsFrom v (react T s ev).2 := by
-  let records := v.apply.fn (s.records, ev, ())
+  let records := v.apply.fn (.inl (s.records, s.now, ()), ev, ())
   have hm := mem_reactMachines_effs T records s.now ev s.machines
   refine ⟨⟨hs.below, hs.nodup, hs.reach, hs.shaped⟩, fun x hx => ?_, fun x hx => ?_⟩ <;>
     rcases List.mem_append.1 hx with h | h

@@ -258,7 +258,9 @@ def prelude : List TypeDecl :=
         ⟨some "now", .int⟩]⟩] },
     { name := "tazuna.Never", params := [], variants := [] },
     { name := "tazuna.Origin", params := ["caller"],
-      variants := [⟨"Outside", [⟨none, .param 0⟩]⟩, ⟨"Own", []⟩] } ]
+      variants := [⟨"Outside", [⟨none, .param 0⟩]⟩, ⟨"Own", []⟩] },
+    { name := "tazuna.ApplyCtx", params := ["records"],
+      variants := [⟨"ApplyCtx", [⟨some "records", .param 0⟩, ⟨some "now", .int⟩]⟩] } ]
 
 def Ty.bool : Ty := .adt 0 [] [[], []]
 def Ty.nil : Ty := .adt 1 [] [[]]
@@ -277,6 +279,8 @@ def Ty.machineCtx (k s r : Ty) : Ty := .adt 8 [k, s, r] [[k, s, r, .int]]
 def Ty.reactionCtx (r : Ty) : Ty := .adt 9 [r] [[r, .int]]
 /-- What a query's `resolve` sees: a command's context without the source of fresh ids, since a query makes none. -/
 def Ty.queryCtx (r i c : Ty) : Ty := .adt 10 [r, i, c] [[r, i, Ty.origin c, .int]]
+/-- What `apply` sees: the records before the event, and the time. -/
+def Ty.applyCtx (r : Ty) : Ty := .adt 13 [r] [[r, .int]]
 /-- The type with no values, `tazuna.Never`. -/
 def Ty.never : Ty := .adt 11 [] []
 /-- Named rules, as `invariants`, `accepts` and `ensures` return them. -/
@@ -316,6 +320,7 @@ example (r i c : Ty) : prelude[10]?.map (fun d => Ty.adt 10 [r, i, c] (d.variant
 example (a e : Ty) : prelude[2]?.map (fun d => Ty.adt 2 [a, e] (d.variantTys [a, e])) = some (Ty.result a e) := rfl
 example : prelude[11]?.map (fun d => Ty.adt 11 [] (d.variantTys [])) = some Ty.never := rfl
 example (c : Ty) : prelude[12]?.map (fun d => Ty.adt 12 [c] (d.variantTys [c])) = some (Ty.origin c) := rfl
+example (r : Ty) : prelude[13]?.map (fun d => Ty.adt 13 [r] (d.variantTys [r])) = some (Ty.applyCtx r) := rfl
 example (a : Ty) : prelude[3]?.map (fun d => Ty.adt 3 [a] (d.variantTys [a])) = some (Ty.option a) := rfl
 
 end Tazuna.Ir

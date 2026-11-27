@@ -58,10 +58,10 @@ abbrev reactedBy (s : State v) (records : v.records.den0) (ev : v.event.den0) : 
 /-- One event's reaction: the records apply it, every machine reacts, then every reaction. -/
 theorem react_eq (s : State v) (ev : v.event.den0) :
     Step.react T s ev =
-      ({ s with records := v.apply.fn (s.records, ev, ()),
-                machines := (Step.reactMachines T (v.apply.fn (s.records, ev, ())) s.now ev s.machines).1 },
-        (s.machines.toSigma.flatMap fun sm => (Step.machineStep T (v.apply.fn (s.records, ev, ())) s.now ev sm.1 sm.2).2) ++
-          reactedBy s (v.apply.fn (s.records, ev, ())) ev) := by
+      ({ s with records := v.apply.fn (.inl (s.records, s.now, ()), ev, ()),
+                machines := (Step.reactMachines T (v.apply.fn (.inl (s.records, s.now, ()), ev, ())) s.now ev s.machines).1 },
+        (s.machines.toSigma.flatMap fun sm => (Step.machineStep T (v.apply.fn (.inl (s.records, s.now, ()), ev, ())) s.now ev sm.1 sm.2).2) ++
+          reactedBy s (v.apply.fn (.inl (s.records, s.now, ()), ev, ())) ev) := by
   simp only [Step.react, (Step.reactMachines_toSigma T _ s.now ev s.machines).2]
 
 end

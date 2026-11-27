@@ -42,7 +42,8 @@ pub type Phase {
 
 const hour: Int = 3_600_000
 
-fn apply(records: Records, event: Event) -> Records {
+fn apply(ctx: tazuna.ApplyCtx(Records), event: Event) -> Records {
+  let records = ctx.records
   case event {
     Added(id, title) -> Records(tasks: table.insert(records.tasks, id, title))
     Completed(id) -> Records(tasks: table.remove(records.tasks, id))

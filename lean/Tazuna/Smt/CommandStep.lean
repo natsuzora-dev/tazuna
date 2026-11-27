@@ -24,7 +24,7 @@ variable (L : Layout) (T : List TypeDecl)
 service's functions, the terms of the state, the outside caller and the input, and the listed origins' constants. The
 condition asks only for what the step computes: the step's end only where `decide` accepted and `ensures` held. -/
 def encodeCommand (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
-    (x : CommandV v.records v.event v.caller) (cc : CommandCode x) (apply : Code (Ty.fn [v.records, v.event] v.records))
+    (x : CommandV v.records v.event v.caller) (cc : CommandCode x) (apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records))
     (invariants : Code (Ty.fn [v.records] Ty.rules)) (callers : List Term)
     (S : SymState v) (caller input : Term) :
     Except Refusal (Encoded (CommandOut v)) := do
@@ -69,7 +69,7 @@ theorem command_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV
     (s : State v) (hsinv : Step.Inv P s)
     (i : Fin v.commands.length) (caller : v.caller.den0) (input : (v.commands.get i).input.den0) {cc : CommandCode (v.commands.get i)} {cx : Term}
     (hcc : CommandCode.of L _ = .ok (cc, cx)) (hccx : Holds M cx)
-    {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
+    {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     {inv : Code (Ty.fn [v.records] Ty.rules)} {ci : Term} (hinv : v.invariants.code L = .ok (inv, ci)) (hci : Holds M ci)
     {ks : List Term} (hks : callerTerms L ((v.commands.get i).data).origin (v.commands.get i).callers = some ks)

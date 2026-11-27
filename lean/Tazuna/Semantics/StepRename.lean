@@ -787,16 +787,16 @@ theorem react_rel (T : List TypeDecl) (hv : v.Equivariant) {R : Ren} {s s' : Sta
     StateRel R (react T s ev).1 (react T s' ev').1 ∧
       Multi (Started.Rel R.ctr) (react T s ev).2 (react T s' ev').2 := by
   obtain ⟨hrec, hmach, hpend, hnow, hb, hb'⟩ := hs
-  have hrec' : Ty.rel0 R.ctr v.records (v.apply.fn (s.records, ev, ())) (v.apply.fn (s'.records, ev', ())) :=
-    (hv.self R.ctr).apply _ _ ⟨hrec, hev, trivial⟩
+  have hrec' : Ty.rel0 R.ctr v.records (v.apply.fn (.inl (s.records, s.now, ()), ev, ())) (v.apply.fn (.inl (s'.records, s.now, ()), ev', ())) :=
+    (hv.self R.ctr).apply _ _ ⟨⟨hrec, rfl, trivial⟩, hev, trivial⟩
   have hm := reactMachines_rel T hrec' s.now hev hv.machines hmach
   unfold react
   dsimp only
   rw [← hnow]
   refine ⟨⟨hrec', hm.1, hpend, rfl, hb, hb'⟩, hm.2.append (Multi.of_forall2 ?_)⟩
   have hx : ∀ x ∈ v.reactions, Forall2 (Started.Rel R.ctr)
-      ((x.effectsAt ev (v.apply.fn (s.records, ev, ())) s.now).map (.reaction x.name, ·))
-      ((x.effectsAt ev' (v.apply.fn (s'.records, ev', ())) s.now).map (.reaction x.name, ·)) := fun x hx =>
+      ((x.effectsAt ev (v.apply.fn (.inl (s.records, s.now, ()), ev, ())) s.now).map (.reaction x.name, ·))
+      ((x.effectsAt ev' (v.apply.fn (.inl (s'.records, s.now, ()), ev', ())) s.now).map (.reaction x.name, ·)) := fun x hx =>
     forall2_map2 (fun _ _ h => ⟨.reaction x.name, h⟩)
       (EffectFun.apply_rel x.react ((hv.self R.ctr).reactions x hx) ⟨⟨hrec', rfl, trivial⟩, hev, trivial⟩)
   clear hm hpend

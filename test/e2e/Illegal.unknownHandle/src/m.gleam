@@ -8,7 +8,8 @@ pub type Event {
   Sent
 }
 
-fn apply(r: Records, _e: Event) -> Records {
+fn apply(ctx: tazuna.ApplyCtx(Records), _e: Event) -> Records {
+  let r = ctx.records
   Records(sent: r.sent + 1)
 }
 

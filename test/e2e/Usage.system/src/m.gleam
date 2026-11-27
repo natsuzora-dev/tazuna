@@ -31,7 +31,8 @@ fn send() -> tazuna.ExternalCommand(Int, Nil, Nil) {
   tazuna.external_command(name: "send")
 }
 
-fn apply(r: Records, e: Event) -> Records {
+fn apply(ctx: tazuna.ApplyCtx(Records), e: Event) -> Records {
+  let r = ctx.records
   case e, r.first {
     Added(n), _ -> Records(..r, total: r.total + n)
     Made(id), None -> Records(..r, first: Some(id))

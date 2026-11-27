@@ -76,7 +76,7 @@ set_option linter.tazuna.silentDefault false in
 and the codes' condition. The pending write and the invariants are asked only where the cascade does not fault, since
 the step then leaves the state it began with. -/
 def encodeFinish (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
-    (apply : Code (Ty.fn [v.records, v.event] v.records)) (inv : Code (Ty.fn [v.records] Ty.rules))
+    (apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)) (inv : Code (Ty.fn [v.records] Ty.rules))
     (now fresh pending : Term) (o : EventsOut v) : Except Refusal (Encoded (FinishOut v)) := do
   -- `queueAt` reads the default only where no own slot holds the place, so its value is never asked.
   let dflt := (effectDefault L v.event).getD tt
@@ -149,7 +149,7 @@ def finishFits (S : Ty → Nat) (T : List TypeDecl) (shs : List (PendingShape v.
 /-- A step's end: its condition holds exactly when the step's end fits (`finishFits`), and wherever it holds the result
 `Step.finish` gives for the result `r` of the step's events is what the terms say (`Finished`). -/
 theorem finish_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P) (hshp : ShapesHold shs v.declared)
-    {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
+    {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     {inv : Code (Ty.fn [v.records] Ty.rules)} {ci0 : Term} (hinvc : v.invariants.code L = .ok (inv, ci0))
     (hci0 : Holds M ci0)

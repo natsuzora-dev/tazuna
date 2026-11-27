@@ -91,7 +91,8 @@ fn missing(records: Records, lines: Bag(Line)) -> Bag(String) {
   )
 }
 
-fn apply(records: Records, event: Event) -> Records {
+fn apply(ctx: tazuna.ApplyCtx(Records), event: Event) -> Records {
+  let records = ctx.records
   case event {
     Restocked(sku, units) ->
       Records(

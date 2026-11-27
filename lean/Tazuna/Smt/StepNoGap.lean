@@ -440,6 +440,7 @@ structure ServiceGot (L : Layout) (P : List AnySite) (ds : List (String × Decla
   unit : Got L (.tuple [])
   table : Got L (pendingTable shs)
   apply : Sound (fun p => CodeOk L P ds H _ p.1) (v.apply.code L)
+  applyCtx : Avail L (Ty.applyCtx v.records)
   invariants : Sound (fun p => CodeOk L P ds H _ p.1) (v.invariants.code L)
   machines : ∀ m ∈ v.machines, (MachineGot L m ∧ MachineCodes L P ds H m) ∧ Got L (.tuple [m.key]) ∧
     OwnersOk L v.event v.declared
@@ -459,14 +460,15 @@ theorem entry : Got L (pendingEntry shs) := (got_table h.table).2.1
 end ServiceGot
 
 theorem encodeEvents_sound {shs : List (PendingShape v.event)} (h : ServiceGot L P ds H v shs) (T : List TypeDecl)
-    (senv : StepEnv L shs) {apply : Code (Ty.fn [v.records, v.event] v.records)} (happ : CodeOk L P ds H _ apply)
+    (senv : StepEnv L shs) {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)} (happ : CodeOk L P ds H _ apply)
     (now : Term) : (S : List (Slot 1)) → (records : Term) → (xs : PerMachine (fun _ => Term) v.machines) →
     (n q : Term) → Sound (fun _ => True) (encodeEvents L T v shs senv apply now S records xs n q)
   | [], _, _, _, _ => trivial
   | (f, ys) :: S, records, xs, n, q => by
     have hL := h.sorted
     simp only [encodeEvents]
-    refine sound_bind (ofDataE_sound (P := P) (ds := ds) (H := H) _ (avail_of_got h.records)) fun rc hrc => ?_
+    refine sound_bind (adtCtor_sound h.applyCtx _ _) fun _ _ => ?_
+    refine sound_bind (ofDataE_sound (P := P) (ds := ds) (H := H) _ h.applyCtx) fun rc hrc => ?_
     refine sound_bind (ofDataE_sound (P := P) (ds := ds) (H := H) _ (avail_of_got h.event)) fun ec hec => ?_
     refine sound_bind (apply_sound happ ⟨hrc, hec, trivial⟩ (avail_of_got h.records)) fun _ _ => ?_
     refine sound_bind (dataTermE_sound _) fun _ _ => ?_
@@ -492,7 +494,7 @@ theorem queryCode_sound {q : QueryV v.records v.caller} (hq : QueryOk L P ds H v
 theorem encodeDecide_sound {shs : List (PendingShape v.event)} (h : ServiceGot L P ds H v shs) (T : List TypeDecl)
     (senv : StepEnv L shs) {x : CommandV v.records v.event v.caller} (hx : CommandOk L P ds H v x)
     {cc : CommandCode x} (hdec : CodeOk L P ds H _ cc.decide) (hens : CodeOk L P ds H _ cc.ensures)
-    {apply : Code (Ty.fn [v.records, v.event] v.records)} (happ : CodeOk L P ds H _ apply)
+    {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)} (happ : CodeOk L P ds H _ apply)
     {ctx : Code (Ty.ctx v.records x.input v.caller)} (hctx : CodeOk L P ds H _ ctx) (now records : Term)
     (xs : PerMachine (fun _ => Term) v.machines) (n q : Term) :
     Sound (fun _ => True) (encodeDecide L T v shs senv x cc apply ctx now records xs n q) := by
@@ -537,7 +539,7 @@ theorem encodeOwnCommand_sound {shs : List (PendingShape v.event)} (h : ServiceG
     {cc : CommandCode x} (hacc : CodeOk L P ds H _ cc.accepts) (hdec : CodeOk L P ds H _ cc.decide)
     (hens : CodeOk L P ds H _ cc.ensures) {Γ : List Ty}
     (site : Site Γ (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))) (hs : SiteCodeOk L P ds H ⟨Γ, _, site⟩)
-    (hnil : Avail L Ty.nil) (hans : Avail L (Ty.result Ty.nil x.rejection)) {σ : Codes Γ} (hσ : CodesOk L P ds H Γ σ) {apply : Code (Ty.fn [v.records, v.event] v.records)}
+    (hnil : Avail L Ty.nil) (hans : Avail L (Ty.result Ty.nil x.rejection)) {σ : Codes Γ} (hσ : CodesOk L P ds H Γ σ) {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)}
     (happ : CodeOk L P ds H _ apply) (callers : List Term) (records now fresh n q caller input : Term)
     (xs : PerMachine (fun _ => Term) v.machines) :
     Sound (fun _ => True)
@@ -561,7 +563,7 @@ theorem encodeOwnQuery_sound {shs : List (PendingShape v.event)} (h : ServiceGot
     (senv : StepEnv L shs) {x : QueryV v.records v.caller} (hx : QueryOk L P ds H v x)
     {qc : QueryCode x} (hacc : CodeOk L P ds H _ qc.accepts) (hres : CodeOk L P ds H _ qc.resolve) {Γ : List Ty}
     (site : Site Γ (Ty.fn [x.output] (.list v.event))) (hs : SiteCodeOk L P ds H ⟨Γ, _, site⟩)
-    {σ : Codes Γ} (hσ : CodesOk L P ds H Γ σ) {apply : Code (Ty.fn [v.records, v.event] v.records)}
+    {σ : Codes Γ} (hσ : CodesOk L P ds H Γ σ) {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)}
     (happ : CodeOk L P ds H _ apply) (callers : List Term) (records now n q caller input : Term)
     (xs : PerMachine (fun _ => Term) v.machines) :
     Sound (fun _ => True)
@@ -578,7 +580,7 @@ theorem encodeOwnQuery_sound {shs : List (PendingShape v.event)} (h : ServiceGot
   exact sound_bind (encodeEvents_sound h T senv happ _ _ _ _ _ _) fun _ _ => trivial
 
 theorem encodeOwnKind_sound {shs : List (PendingShape v.event)} (h : ServiceGot L P ds H v shs) (T : List TypeDecl)
-    (senv : StepEnv L shs) (nR : Nat) {apply : Code (Ty.fn [v.records, v.event] v.records)}
+    (senv : StepEnv L shs) (nR : Nat) {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)}
     (happ : CodeOk L P ds H _ apply) (records now fresh n q eff : Term) (xs : PerMachine (fun _ => Term) v.machines)
     (j : Nat) {key : OwnKey} (hk : key ∈ L.ownsOf v.event) :
     Sound (fun _ => True) (encodeOwnKind L T P v shs senv nR apply records now fresh n q eff xs j key) := by
@@ -612,7 +614,7 @@ theorem encodeOwnKind_sound {shs : List (PendingShape v.event)} (h : ServiceGot 
     exact sound_bind (encodeOwnQuery_sound h T senv hx h1 h2 site hs hσ happ _ _ _ _ _ _ _ _) fun _ _ => trivial
 
 theorem encodeOwnStep_sound {shs : List (PendingShape v.event)} (h : ServiceGot L P ds H v shs) (T : List TypeDecl)
-    (senv : StepEnv L shs) {apply : Code (Ty.fn [v.records, v.event] v.records)} (happ : CodeOk L P ds H _ apply)
+    (senv : StepEnv L shs) {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)} (happ : CodeOk L P ds H _ apply)
     (records now fresh n q eff : Term) (xs : PerMachine (fun _ => Term) v.machines) :
     Sound (fun _ => True) (encodeOwnStep L T P v shs senv apply records now fresh n q eff xs) := by
   unfold encodeOwnStep
@@ -626,7 +628,7 @@ section
 variable {L : Layout} {P : List AnySite} {ds : List (String × DeclaredV)} {H : List HandleSite} {v : ServiceV}
 
 theorem encodeSettle_sound {shs : List (PendingShape v.event)} (h : ServiceGot L P ds H v shs) (T : List TypeDecl)
-    (senv : StepEnv L shs) {apply : Code (Ty.fn [v.records, v.event] v.records)} (happ : CodeOk L P ds H _ apply)
+    (senv : StepEnv L shs) {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)} (happ : CodeOk L P ds H _ apply)
     (dflt now : Term) : (fuel k : Nat) → (S : List OwnSlot) → (t : StepTerms v) →
     Sound (fun _ => True) (encodeSettle L T P v shs senv apply dflt now fuel k S t)
   | 0, _, _, _ => trivial
@@ -636,7 +638,7 @@ theorem encodeSettle_sound {shs : List (PendingShape v.event)} (h : ServiceGot L
       sound_bind (encodeSettle_sound h T senv happ dflt now f (k + 1) _ _) fun _ _ => trivial
 
 theorem encodeFinish_sound {shs : List (PendingShape v.event)} (h : ServiceGot L P ds H v shs) (T : List TypeDecl)
-    (senv : StepEnv L shs) {apply : Code (Ty.fn [v.records, v.event] v.records)} (happ : CodeOk L P ds H _ apply)
+    (senv : StepEnv L shs) {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)} (happ : CodeOk L P ds H _ apply)
     {inv : Code (Ty.fn [v.records] Ty.rules)} (hinv : CodeOk L P ds H _ inv) (now fresh pending : Term)
     (o : EventsOut v) : Sound (fun _ => True) (encodeFinish L T P v shs senv apply inv now fresh pending o) := by
   have hL := h.sorted
@@ -649,7 +651,7 @@ theorem encodeFinish_sound {shs : List (PendingShape v.event)} (h : ServiceGot L
 theorem encodeCommand_sound {shs : List (PendingShape v.event)} (h : ServiceGot L P ds H v shs) (T : List TypeDecl)
     (senv : StepEnv L shs) {x : CommandV v.records v.event v.caller} (hx : CommandOk L P ds H v x)
     {cc : CommandCode x} (hacc : CodeOk L P ds H _ cc.accepts) (hdec : CodeOk L P ds H _ cc.decide)
-    (hens : CodeOk L P ds H _ cc.ensures) {apply : Code (Ty.fn [v.records, v.event] v.records)}
+    (hens : CodeOk L P ds H _ cc.ensures) {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)}
     (happ : CodeOk L P ds H _ apply) {inv : Code (Ty.fn [v.records] Ty.rules)} (hinv : CodeOk L P ds H _ inv)
     (callers : List Term) (S : SymState v) (caller input : Term) :
     Sound (fun _ => True) (encodeCommand L T P v shs senv x cc apply inv callers S caller input) := by
@@ -723,7 +725,7 @@ theorem ensuresTerms_sound (hL : SortedLayout L) (hr : Got L Ty.rules) {e : Ty}
 
 theorem encodeAnswer_sound {shs : List (PendingShape v.event)} (h : ServiceGot L P ds H v shs) (T : List TypeDecl)
     (k : Nat) {sh : PendingShape v.event} (ha : AnswerOk L P ds H sh) (senv : StepEnv L shs) (j : Fin senv.nT)
-    {apply : Code (Ty.fn [v.records, v.event] v.records)} (happ : CodeOk L P ds H _ apply)
+    {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)} (happ : CodeOk L P ds H _ apply)
     {inv : Code (Ty.fn [v.records] Ty.rules)} (hinv : CodeOk L P ds H _ inv) (S : SymState v) (to value : Term) :
     Sound (fun _ => True) (encodeAnswer L T P shs k sh senv j apply inv S to value) := by
   have hL := h.sorted
@@ -831,7 +833,7 @@ section
 variable {L : Layout} {P : List AnySite} {ds : List (String × DeclaredV)} {H : List HandleSite} {v : ServiceV}
 
 theorem encodeClock_sound {shs : List (PendingShape v.event)} (h : ServiceGot L P ds H v shs) (T : List TypeDecl)
-    (senv : StepEnv L shs) {apply : Code (Ty.fn [v.records, v.event] v.records)} (happ : CodeOk L P ds H _ apply)
+    (senv : StepEnv L shs) {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)} (happ : CodeOk L P ds H _ apply)
     {inv : Code (Ty.fn [v.records] Ty.rules)} (hinv : CodeOk L P ds H _ inv) (S : SymState v) (time : Term) :
     Sound (fun _ => True) (encodeClock L T P v shs senv apply inv S time) := by
   unfold encodeClock
@@ -1312,7 +1314,8 @@ theorem serviceGot_ofService :
     got_of_avail (avail_stepTy c v (t := pendingTable (shapes v)) (List.mem_append_left _ (List.mem_append_left _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _
       (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ List.mem_cons_self))))))))
       (sorted_of_embeddable _ (embeddable_pending hep)),
-    Fun.code_ofService c hv _ chk.reach.apply root_apply, Fun.code_ofService c hv _ chk.reach.invariants root_invariants,
+    Fun.code_ofService c hv _ chk.reach.apply root_apply, avail_use c v (by simp [useTys]),
+    Fun.code_ofService c hv _ chk.reach.invariants root_invariants,
     fun m hm => ?_, fun x hx => ?_, fun x hx => commandOk_ofService hv hx, fun q hq => queryOk_ofService hv hq,
     fun i => ?_, fun key hk => ownOk_ofService hv hk⟩
   · have hr := chk.reach.machines m hm

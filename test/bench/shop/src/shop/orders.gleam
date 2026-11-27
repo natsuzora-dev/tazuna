@@ -100,7 +100,8 @@ fn advance(records: Records, order: Id, from: Status, to: Status) -> Records {
   }
 }
 
-fn apply(records: Records, event: Event) -> Records {
+fn apply(ctx: tazuna.ApplyCtx(Records), event: Event) -> Records {
+  let records = ctx.records
   case event {
     Placed(order, customer, email, address, lines, total) ->
       Records(

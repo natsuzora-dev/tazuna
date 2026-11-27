@@ -132,7 +132,8 @@ fn travelling(state: ShipState) -> Bool {
   state == Booked || state == OutForDelivery
 }
 
-fn apply(records: Records, event: Event) -> Records {
+fn apply(ctx: tazuna.ApplyCtx(Records), event: Event) -> Records {
+  let records = ctx.records
   case event {
     Expected(placed) ->
       case table.get(records.shipments, placed.order) {

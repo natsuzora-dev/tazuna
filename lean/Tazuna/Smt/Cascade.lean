@@ -33,7 +33,7 @@ variable (L : Layout) (T : List TypeDecl)
 /-- The cascade from queue place `k` with `fuel` internal steps left, over the own slots `S` and the step terms `t`
 (its slots are not read): its terms, its condition (each internal step's, where it runs) and the codes' condition. -/
 def encodeSettle (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
-    (apply : Code (Ty.fn [v.records, v.event] v.records)) (dflt now : Term) :
+    (apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)) (dflt now : Term) :
     (fuel k : Nat) → (S : List OwnSlot) → (t : StepTerms v) → Except Refusal (Encoded (SettleOut v))
   | 0, k, S, t =>
     pure ⟨⟨[], .and (.not t.fault) (queueAt dflt S (.int k)).1, ⟨t.fault, { t.done with news := [], owns := [], events := [] }, t.fresh⟩⟩,
@@ -70,7 +70,7 @@ theorem settle_fault_skip {act : Term} {o : OwnStepOut v} {steps : List (Term ×
 
 /-- Once an internal step faulted, the cascade's fault term stays true. -/
 theorem settle_fault_stays {P : List AnySite} {shs : List (PendingShape v.event)} {senv : StepEnv L shs}
-    {apply : Code (Ty.fn [v.records, v.event] v.records)} {dflt now : Term} :
+    {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)} {dflt now : Term} :
     (fuel k : Nat) → (S : List OwnSlot) → (t : StepTerms v) → t.fault.denote M = .bool true →
     {o : SettleOut v} → {c cx : Term} → encodeSettle L T P v shs senv apply dflt now fuel k S t = .ok ⟨o, c, cx⟩ →
     o.terms.fault.denote M = .bool true
@@ -100,7 +100,7 @@ def settleFits (S : Ty → Nat) (T : List TypeDecl) : Nat → Nat → Step.Acc v
 
 /-- After a fault no internal step runs, so the cascade's condition asks for nothing. -/
 theorem settle_cond_fault {P : List AnySite} {shs : List (PendingShape v.event)} {senv : StepEnv L shs}
-    {apply : Code (Ty.fn [v.records, v.event] v.records)} {dflt now : Term} :
+    {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)} {dflt now : Term} :
     (fuel k : Nat) → (S : List OwnSlot) → (t : StepTerms v) → t.fault.denote M = .bool true →
     {o : SettleOut v} → {c cx : Term} → encodeSettle L T P v shs senv apply dflt now fuel k S t = .ok ⟨o, c, cx⟩ →
     Holds M c
@@ -124,7 +124,7 @@ runs fits (`settleFits`), and wherever it holds the fault the model names is `St
 cascade runs to its end with what the terms denote (`AccRel`, own effects queued from `a`'s queue length). -/
 theorem settle_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) {shs : List (PendingShape v.event)}
     (hshs : ∀ sh ∈ shs, sh.InSites P) (hshp : ShapesHold shs v.declared)
-    {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
+    {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     (senv : StepEnv L shs) {dflt now : Term} :
     (fuel k : Nat) → (S : List OwnSlot) → (t : StepTerms v) → (a : Step.Acc v) → Step.Inv P a.state →

@@ -302,12 +302,12 @@ end
 section
 variable {M : Model} {L : Layout}
 
-theorem up_app2 {r e : Ty} (hr : r.isData = true) (he : e.isData = true) (h : (Ty.fn [r, e] r).isData = true)
-    (g : (Ty.fn [r, e] r).den0) (x : r.den0) (ev : e.den0) :
-    (Ty.up _ h g) (Ty.up r hr x, Ty.up e he ev, ()) = Ty.up r hr (g (x, ev, ())) := by
-  have hargs : (Ty.tuple [r, e]).isData = true := by simp [Ty.isData, Ty.isDatas, hr, he]
-  have := Ty.up_fn [r, e] r h hargs hr g (x, ev, ())
-  erw [Ty.up_tuple _ _ _ hr (by simp [Ty.isData, Ty.isDatas, he]), Ty.up_tuple _ _ _ he rfl] at this
+theorem up_app2 {a e r : Ty} (ha : a.isData = true) (he : e.isData = true) (hr : r.isData = true)
+    (h : (Ty.fn [a, e] r).isData = true) (g : (Ty.fn [a, e] r).den0) (x : a.den0) (ev : e.den0) :
+    (Ty.up _ h g) (Ty.up a ha x, Ty.up e he ev, ()) = Ty.up r hr (g (x, ev, ())) := by
+  have hargs : (Ty.tuple [a, e]).isData = true := by simp [Ty.isData, Ty.isDatas, ha, he]
+  have := Ty.up_fn [a, e] r h hargs hr g (x, ev, ())
+  erw [Ty.up_tuple _ _ _ ha (by simp [Ty.isData, Ty.isDatas, he]), Ty.up_tuple _ _ _ he rfl] at this
   exact this
 
 theorem rels2 {a b : Ty} (ha : a.isData = true) (hb : b.isData = true) (h : (Ty.tuple [a, b]).isData = true)

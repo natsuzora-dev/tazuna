@@ -14,7 +14,7 @@ pub type Phase {
   Idle
 }
 
-fn apply(_r: Records, e: Event) -> Records {
+fn apply(_ctx: tazuna.ApplyCtx(Records), e: Event) -> Records {
   case e {
     Opened(at) -> Records(open: at)
   }

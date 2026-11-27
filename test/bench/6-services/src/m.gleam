@@ -32,7 +32,8 @@ pub type E1 {
   Ping1
 }
 
-fn apply1(r: R1, e: E1) -> R1 {
+fn apply1(ctx: tazuna.ApplyCtx(R1), e: E1) -> R1 {
+  let r = ctx.records
   case e {
     Put1(k, v) -> R1(items: table.insert(r.items, k, v), total: r.total)
     Del1(k) -> R1(items: table.remove(r.items, k), total: r.total)
@@ -207,7 +208,8 @@ pub type E2 {
   Ping2
 }
 
-fn apply2(r: R2, e: E2) -> R2 {
+fn apply2(ctx: tazuna.ApplyCtx(R2), e: E2) -> R2 {
+  let r = ctx.records
   case e {
     Put2(k, v) -> R2(items: table.insert(r.items, k, v), total: r.total)
     Del2(k) -> R2(items: table.remove(r.items, k), total: r.total)
@@ -382,7 +384,8 @@ pub type E3 {
   Ping3
 }
 
-fn apply3(r: R3, e: E3) -> R3 {
+fn apply3(ctx: tazuna.ApplyCtx(R3), e: E3) -> R3 {
+  let r = ctx.records
   case e {
     Put3(k, v) -> R3(items: table.insert(r.items, k, v), total: r.total)
     Del3(k) -> R3(items: table.remove(r.items, k), total: r.total)
@@ -557,7 +560,8 @@ pub type E4 {
   Ping4
 }
 
-fn apply4(r: R4, e: E4) -> R4 {
+fn apply4(ctx: tazuna.ApplyCtx(R4), e: E4) -> R4 {
+  let r = ctx.records
   case e {
     Put4(k, v) -> R4(items: table.insert(r.items, k, v), total: r.total)
     Del4(k) -> R4(items: table.remove(r.items, k), total: r.total)
@@ -732,7 +736,8 @@ pub type E5 {
   Ping5
 }
 
-fn apply5(r: R5, e: E5) -> R5 {
+fn apply5(ctx: tazuna.ApplyCtx(R5), e: E5) -> R5 {
+  let r = ctx.records
   case e {
     Put5(k, v) -> R5(items: table.insert(r.items, k, v), total: r.total)
     Del5(k) -> R5(items: table.remove(r.items, k), total: r.total)
@@ -907,7 +912,8 @@ pub type E6 {
   Ping6
 }
 
-fn apply6(r: R6, e: E6) -> R6 {
+fn apply6(ctx: tazuna.ApplyCtx(R6), e: E6) -> R6 {
+  let r = ctx.records
   case e {
     Put6(k, v) -> R6(items: table.insert(r.items, k, v), total: r.total)
     Del6(k) -> R6(items: table.remove(r.items, k), total: r.total)

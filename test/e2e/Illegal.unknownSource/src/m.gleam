@@ -13,7 +13,8 @@ pub type Caller {
   User
 }
 
-fn apply(r: Records, _e: Event) -> Records {
+fn apply(ctx: tazuna.ApplyCtx(Records), _e: Event) -> Records {
+  let r = ctx.records
   r
 }
 

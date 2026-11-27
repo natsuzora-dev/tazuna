@@ -32,7 +32,8 @@ pub type E1 {
   Ping1
 }
 
-fn apply1(r: R1, e: E1) -> R1 {
+fn apply1(ctx: tazuna.ApplyCtx(R1), e: E1) -> R1 {
+  let r = ctx.records
   case e {
     Put1(k, v) -> R1(items: table.insert(r.items, k, v), total: r.total)
     Del1(k) -> R1(items: table.remove(r.items, k), total: r.total)

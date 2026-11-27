@@ -43,7 +43,7 @@ constants. The condition asks only for what the internal step computes. -/
 def encodeOwnCommand (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
     (x : CommandV v.records v.event v.caller) (cc : CommandCode x) {Γ : List Ty}
     (site : Site Γ (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))) (σ : Codes Γ)
-    (apply : Code (Ty.fn [v.records, v.event] v.records)) (callers : List Term)
+    (apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)) (callers : List Term)
     (records now fresh n q caller input : Term) (xs : PerMachine (fun _ => Term) v.machines) : Except Refusal (OwnCommandOut v × Term) := do
   let (a, c1) ← encodeAdmit (c := Ty.origin v.caller) L cc.accepts callers caller input
   let cx ← encodeCtx L records now fresh caller input
@@ -69,7 +69,7 @@ constants: the caller and the `accepts` rules admit the input, `resolve` answers
 through the events loop. -/
 def encodeOwnQuery (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
     (x : QueryV v.records v.caller) (qc : QueryCode x) {Γ : List Ty} (site : Site Γ (Ty.fn [x.output] (.list v.event)))
-    (σ : Codes Γ) (apply : Code (Ty.fn [v.records, v.event] v.records)) (callers : List Term)
+    (σ : Codes Γ) (apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)) (callers : List Term)
     (records now n q caller input : Term) (xs : PerMachine (fun _ => Term) v.machines) : Except Refusal (OwnQueryOut v × Term) := do
   let (a, c1) ← encodeAdmit (c := Ty.origin v.caller) L qc.accepts callers caller input
   let cx ← encodeQueryCtx L records now caller input
@@ -136,7 +136,7 @@ theorem ownCommand_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Che
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P) (hshp : ShapesHold shs v.declared) (a : Step.Acc v)
     (x : CommandV v.records v.event v.caller) (caller : (Ty.origin v.caller).den0) (input : x.input.den0) {cc : CommandCode x}
     {cx : Term} (hcc : CommandCode.of L x = .ok (cc, cx)) (hccx : Holds M cx)
-    {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
+    {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     {Γ : List Ty} (site : Site Γ (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))) (env : (Ty.tuple Γ).den0)
     {σ : Codes Γ} (hσ : Rels M L Γ (Ty.up _ site.hΓ env) σ) (hΓf : ∀ t ∈ Γ, t.isFn = false)
@@ -404,7 +404,7 @@ end with what the terms denote (`AccRel`), the fresh counter advanced as for a c
 theorem ownQuery_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) {shs : List (PendingShape v.event)}
     (hshs : ∀ sh ∈ shs, sh.InSites P) (hshp : ShapesHold shs v.declared) (a : Step.Acc v) (x : QueryV v.records v.caller) (caller : (Ty.origin v.caller).den0)
     (input : x.input.den0) {qc : QueryCode x} {cq : Term} (hqc : QueryCode.of L x = .ok (qc, cq)) (hcq : Holds M cq)
-    {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
+    {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     {Γ : List Ty} (site : Site Γ (Ty.fn [x.output] (.list v.event))) (env : (Ty.tuple Γ).den0)
     {σ : Codes Γ} (hσ : Rels M L Γ (Ty.up _ site.hΓ env) σ) (hΓf : ∀ t ∈ Γ, t.isFn = false)
