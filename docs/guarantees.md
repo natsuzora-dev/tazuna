@@ -92,6 +92,8 @@ The line exits 0, like a compiler warning, because a defensive branch may be mea
 Two kinds of line check that no outcome depends on the order in which the semantics runs own steps and timers ([Concepts](concepts.md#the-spec-writes-every-order)):
 
 - A pair line, `<first> and <second> commute`, asks for a state and two waiting own effects whose two orders end differently, with each effect keeping the ids it made.
+  Where no input kind's cascade can queue effects of both kinds, the two never wait together, so the line reads as if both questions were unsat and no question is asked.
+  An input kind's cascade queues only the own effects whose `on_answer` the events it can apply, and the machine states it can enter, can write.
 - A timer line, `timers of <machine> fire forward`, asks whether the state a timer of the machine enters can wait for a timer before the one that fired. A timer is read off the instance's state and the records, so the question has no time in it.
 
 `run_lines` (T5): take a run from the initial state whose inputs satisfy `validInputs`, and a cascade that one of its steps starts at a state and an input within the slots.

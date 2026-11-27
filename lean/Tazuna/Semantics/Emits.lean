@@ -1685,9 +1685,8 @@ theorem runOwn_live (a : Acc v) (hqa : QueueOk P' a) (eff : OwnEffectV v.event)
 def LiveOk (i : Nat) (okV : Nat → Prop) (P' : List AnySite) (a : Acc v) : Prop := AccOk i okV false a ∧ QueueOk P' a
 
 theorem liveOk_runOwn (a : Acc v) (ha : LiveOk i okV P' a) (eff : OwnEffectV v.event)
-    (he : eff ∈ a.own) {a' : Acc v} (h : runOwn T a eff = .ok a') : LiveOk i okV P' a' :=
-  ⟨runOwn_ok T hi hq hc a ha.1 eff (ha.1.own eff he) h,
-    runOwn_live T hi hq hc hv hok hP' a ha.2 eff (ha.1.own eff he) h⟩
+    (he : EffOk i okV eff.effect) {a' : Acc v} (h : runOwn T a eff = .ok a') : LiveOk i okV P' a' :=
+  ⟨runOwn_ok T hi hq hc a ha.1 eff he h, runOwn_live T hi hq hc hv hok hP' a ha.2 eff he h⟩
 
 theorem fire_live (hcl : clock = true) (s : State v) : (fuel : Nat) →
     {r : State v × List (Sender × EffectV v.event)} → fire s fuel = some r → EffsReach P' r.2
@@ -1708,6 +1707,11 @@ theorem fire_live (hcl : clock = true) (s : State v) : (fuel : Nat) →
       · exact h2 x hx
 
 end
+
+/-- A step in progress with some of its waiting effects keeps what the cascade keeps. -/
+theorem LiveOk.sub {P' : List AnySite} {a : Acc v} (ha : LiveOk i okV P' a) {own : List (OwnEffectV v.event)}
+    (hs : ∀ o ∈ own, o ∈ a.own) : LiveOk i okV P' { a with own } :=
+  ⟨⟨ha.1.events, fun o ho => ha.1.own o (hs o ho), fun h => by cases h⟩, fun o ho => ha.2 o (hs o ho)⟩
 
 end Step
 

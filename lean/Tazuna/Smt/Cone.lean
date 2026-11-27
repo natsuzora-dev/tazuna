@@ -4,7 +4,8 @@ import Tazuna.Semantics.Emits
 /-! The cone of influence of a step of an input kind, read off the code it runs: the constructors of the event it can
 apply (`SymInput.evs`, behind `Step.step_events`), and the answer sites of the own effects its cascade can queue
 (`SymInput.live`, behind `Step.begins_live`). Dead targets read the first; the cascade's encoding reads the second and
-asks only for the own kinds the step can queue. -/
+asks only for the own kinds the step can queue, and a pair of own kinds no kind can queue together gets no question
+(`together`, `Layout.apart`). -/
 
 namespace Tazuna.Smt
 
@@ -54,6 +55,20 @@ def SymInput.live (P : List AnySite) (inp : SymInput v shs n) : Option (List Sit
 def SymInput.LiveJ (P : List AnySite) (inp : SymInput v shs n) (a : Step.Acc v) : Prop :=
   ∀ i ns, eventDecl v = some i → inp.evs P i = some ns →
     Step.LiveOk i (· ∈ ns) (v.liveSites i (fun k => ns.contains k) inp.isClock) a
+
+/-- Whether some kind of `inps` can have an effect answered at `s1` and one answered at `s2` waiting together: the own
+effects it can queue (`SymInput.live`) take both sites, or it cannot bound them. -/
+def together (P : List AnySite) (inps : List (SymInput v shs n)) (s1 s2 : SiteId) : Bool :=
+  inps.any fun inp => match inp.live P with
+    | some l => decide (s1 ∈ l ∧ s2 ∈ l)
+    | none => true
+
+theorem together_of {P : List AnySite} {inps : List (SymInput v shs n)} {inp : SymInput v shs n} (hm : inp ∈ inps)
+    {s1 s2 : SiteId} (h : ∀ l, inp.live P = some l → s1 ∈ l ∧ s2 ∈ l) : together P inps s1 s2 = true := by
+  refine List.any_eq_true.2 ⟨inp, hm, ?_⟩
+  cases hl : inp.live P with
+  | none => rfl
+  | some l => exact decide_eq_true (h l hl)
 
 end
 
@@ -181,7 +196,17 @@ theorem liveJ_run (hv : v.Reach P E) {inp : SymInput v shs n} {a : Step.Acc v} (
   intro i ns hi hns
   obtain ⟨hq, hc⟩ := evs_quiet hns
   exact Step.liveOk_runOwn T (eventDecl_some hi).1 hq hc hv (fun k => ⟨List.elem_eq_true_of_mem, List.mem_of_elem_eq_true⟩)
-    (fun _ h => h) a (ha i ns hi hns) o ho h
+    (fun _ h => h) a (ha i ns hi hns) o ((ha i ns hi hns).1.own o ho) h
+
+/-- So does a step of the cascade, which runs a waiting effect from the queue without it. -/
+theorem liveJ_pick (hv : v.Reach P E) {inp : SymInput v shs n} {a : Step.Acc v} (ha : inp.LiveJ P a) {j : Nat}
+    (hj : j < a.own.length) {a' : Step.Acc v} (h : Step.runOwn T { a with own := a.own.eraseIdx j } a.own[j] = .ok a') :
+    inp.LiveJ P a' := by
+  intro i ns hi hns
+  obtain ⟨hq, hc⟩ := evs_quiet hns
+  exact Step.liveOk_runOwn T (eventDecl_some hi).1 hq hc hv (fun k => ⟨List.elem_eq_true_of_mem, List.mem_of_elem_eq_true⟩)
+    (fun _ h => h) _ ((ha i ns hi hns).sub fun _ => List.mem_of_mem_eraseIdx) _
+    ((ha i ns hi hns).1.own _ (List.getElem_mem hj)) h
 
 theorem liveJ_apply (hv : v.Reach P E) {inp : SymInput v shs n} (s : State v) (evs : List v.event.den0)
     (hok : ∀ i ns, eventDecl v = some i → inp.evs P i = some ns →
@@ -249,23 +274,31 @@ theorem liveJ_event (hv : v.Reach P E) (k : Fin v.subscribes.length) {sv : Term}
       (oks_free _ (by simp only [Ty.mentionsL, hevt]; rfl) _)
   · cases hns
 
+/-- So does the cascade of an answer of the type `t` that a kept function of the program applies, where the kind reads
+the constructors such an answer can apply. -/
+theorem liveJ_onAnswer (hv : v.Reach P E) {inp : SymInput v shs n} {t : Ty}
+    (hevs : ∀ i ns, inp.evs P i = some ns → answerEvs P v i t = some ns)
+    (f : Fun (.fn [t] (.list v.event))) (hf : f.asSite ∈ P) (s : State v) (value : t.den0) {a : Step.Acc v}
+    (h : Step.applyEvents T { state := s } (f.fn (value, ())) = .ok a) : inp.LiveJ P a := by
+  refine liveJ_apply T hv _ _ (fun i ns hi hns => ?_) h
+  obtain ⟨-, -, ht, hs⟩ := answerEvs_some (hevs i ns hns)
+  have hmem : (⟨f.Γ, ⟨f.site, f.G, f.defs, f.hΓ, f.ht, f.body⟩⟩ : (Γ : List Ty) × Site Γ _) ∈
+      sitesOf P (.fn [t] (.list v.event)) := by
+    simp only [sitesOf, List.mem_filterMap]
+    exact ⟨_, hf, by simp [Fun.asSite, Ty_same_rfl]⟩
+  obtain ⟨hΓ, hev⟩ := hs _ hmem
+  have hps : (Ty.tuple [t]).isData = true := by
+    have := f.ht; simp only [Ty.isData, Bool.and_eq_true] at this; exact this.1
+  have hf' := Fun.ok_eval (okV := (· ∈ ns)) (eventDecl_some hi).1 f hev (oks_free _ hΓ _)
+  exact fn_events _ hps (value, ()) (hf' _ (oks_free _ (by simp [Ty.mentionsL, ht]) _))
+
 theorem liveJ_answer (hv : v.Reach P E) {k : Fin shs.length} {j : Fin n} {toT valT : Term}
     (hin : (⟨shs[k].answerΓ, _, shs[k].onAnswer⟩ : AnySite) ∈ P) (s : State v)
     (value : (answerTy shs[k].output shs[k].rejection).den0)
     (env : (Ty.tuple shs[k].answerΓ).den0) {a : Step.Acc v}
     (h : Step.applyEvents T { state := s } ((shs[k].onAnswer.fn env).fn (value, ())) = .ok a) :
-    (SymInput.answer k j toT valT).LiveJ P a := by
-  refine liveJ_apply T hv _ _ (fun i ns hi hns => ?_) h
-  obtain ⟨-, -, ht, hs⟩ := answerEvs_some (by simpa [SymInput.evs] using hns)
-  have hmem : (⟨shs[k].answerΓ, shs[k].onAnswer⟩ : (Γ : List Ty) × Site Γ _) ∈
-      sitesOf P (.fn [answerTy shs[k].output shs[k].rejection] (.list v.event)) := by
-    simp only [sitesOf, List.mem_filterMap]
-    exact ⟨_, hin, by simp [Ty_same_rfl]⟩
-  obtain ⟨hΓ, hev⟩ := hs _ hmem
-  have hps : (Ty.tuple [answerTy shs[k].output shs[k].rejection]).isData = true := by
-    have := shs[k].onAnswer.ht; simp only [Ty.isData, Bool.and_eq_true] at this; exact this.1
-  have hf := Fun.ok_eval (okV := (· ∈ ns)) (eventDecl_some hi).1 (shs[k].onAnswer.fn env) hev (oks_free _ hΓ _)
-  exact fn_events _ hps (value, ()) (hf _ (oks_free _ (by simp [Ty.mentionsL, ht]) _))
+    (SymInput.answer k j toT valT).LiveJ P a :=
+  liveJ_onAnswer T hv (fun _ _ h => by simpa [SymInput.evs] using h) (shs[k].onAnswer.fn env) hin s value h
 
 end
 

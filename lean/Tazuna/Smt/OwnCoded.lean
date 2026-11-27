@@ -63,11 +63,17 @@ theorem queued_at {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E
     (hinv : Step.Inv P a0.state) (hsupp : Step.StateSupp a0.state) (hqk : Step.QueueOk P a0)
     {x : OwnEffectV v.event} (hx : ∃ z, RelV L (.dsl .effect [v.event]) x.effect z)
     (hreach : x.effect.Reach P)
-    (hcf : ∀ p ∈ L.ownPairs v.event, PairLine L T P v senv (ownFits L.count T a0.state x) p) :
+    (hcf : ∀ p ∈ L.ownPairs v.event, PairOk L T P v senv (ownFits L.count T a0.state x) p)
+    (hl : ∃ inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v), ∀ l, inp.live P = some l → x.site ∈ l) :
     ∀ b, Step.runOwn T a0 x = .ok b → ∃ os, b.own = a0.own ++ os ∧ ∀ y ∈ os, ∃ z, RelV L (.dsl .effect [v.event]) y.effect z := by
   obtain ⟨M, hM, hsel, hS, hx1, hx2⟩ := pair_model hL hkeys hW hx hx
   obtain ⟨p, hp, ht1, ht2⟩ := pair_kinds senv hx1 hx2
-  obtain ⟨bq, tq, hq, -, hor⟩ := hcf p hp
+  obtain ⟨bq, tq, hq, -, hor⟩ := (hcf p hp).resolve_right fun hap => by
+    obtain ⟨_, -, h1⟩ := own_key hx1 ht1 rfl
+    obtain ⟨_, -, h2⟩ := own_key hx2 ht2 rfl
+    obtain ⟨inp, hm, hl⟩ := hl
+    rw [not_apart senv h1 h2 ⟨inp, hm, fun l h => ⟨hl l h, hl l h⟩⟩] at hap
+    cases hap
   obtain ⟨o, ho, hb, -⟩ := pair_unfold chk hL senv hq hM hsel hS hinv.below hsupp hx1 hx2 ht1 ht2 hreach hreach
   have hR := decode_state hS
   have hfit : Holds M o.codes ∧ ownFits L.count T a0.state x := hor.elim
@@ -82,13 +88,14 @@ theorem coded_step {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P 
     {a : Step.Acc v} (hkeys : Step.KeysOk T a.state) (hW : Within L (shapes v) a.state) (hinv : Step.Inv P a.state)
     (hsupp : Step.Supp a) (hqk : Step.QueueOk P a)
     (hc : QueueCoded L a) {i : Nat} (hi : i < a.own.length)
-    (hcf : ∀ p ∈ L.ownPairs v.event, PairLine L T P v senv (ownFits L.count T a.state a.own[i]) p)
+    (hcf : ∀ p ∈ L.ownPairs v.event, PairOk L T P v senv (ownFits L.count T a.state a.own[i]) p)
+    (hl : ∃ inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v), ∀ l, inp.live P = some l → a.own[i].site ∈ l)
     {d : Step.Acc v} (hd : Step.runOwn T { a with own := a.own.eraseIdx i } a.own[i] = .ok d) : QueueCoded L d := by
   have hmem : a.own[i] ∈ a.own := List.getElem_mem hi
   have hq' : Step.QueueOk P { a with own := a.own.eraseIdx i } := fun x hx => hqk x (List.mem_of_mem_eraseIdx hx)
   have hs : Step.StateSupp a.state := fun P hP => (hsupp P hP).state
   obtain ⟨os, hos, hcod⟩ := queued_at chk hL senv (a0 := { a with own := a.own.eraseIdx i }) hkeys hW hinv hs hq'
-    (hc _ hmem) (hqk _ hmem) hcf d hd
+    (hc _ hmem) (hqk _ hmem) hcf hl d hd
   intro y hy
   rw [hos] at hy
   rcases List.mem_append.1 hy with h | h

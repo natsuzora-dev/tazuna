@@ -106,12 +106,24 @@ theorem begins_coded {P : List AnySite} {E : List AnyEffectSite} {T : List TypeD
       exact E.2.2 (E.1.2 hfit.2.2.2.2.2) _ hb
   · exact (h.2.1 a hb).elim
 
+/-- The cascade a step of a run starts has its own effects among those the input's kind can queue
+(`begins_liveJ`). -/
+theorem begins_live {P : List AnySite} {E : List AnyEffectSite} {T : List TypeDecl} (chk : Checked P E T v)
+    (senv : StepEnv L (shapes v)) {s : State v} {x : Input v} (hinv : Step.Inv P s) (hkeys : Step.KeysOk T s)
+    (hW : Within L (shapes v) s) (hx : (inputVals L chk.callerData x).isSome) {a : Step.Acc v}
+    (hb : Step.Begins T s x a) : ∃ inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v), inp.LiveJ P a := by
+  obtain ⟨ivs, hivs⟩ := Option.isSome_iff_exists.1 hx
+  rcases covered chk senv hkeys hW x hivs with ⟨inp, hmem, _, M, -, -, -, hxd, -⟩ | h
+  · exact ⟨inp, hmem, begins_liveJ chk.reach hinv hxd hb⟩
+  · exact (h.2.1 a hb).elim
+
 /-- T5 for runs, scoped to the slots: in a checked spec's service whose initial state keeps its invariants, and a layout
 whose datatypes have sorts (as the service's, `sorted_ofParts`), take a run from the initial state on valid inputs. Every cascade a step of the run starts, at a state and an input within the
 slots, ends in every order as `settle` does, up to renaming the names the cascade made, or both fault, wherever every
 step in progress it reaches in any order fits the slots, every input kind's step line reads proved or within the
 bounds where the step fits (`StepLine`), and every listed pair of own kinds reads proved or within the bounds where
-the cascade fits (`PairLine`, `CascadeFits`). Where every timer line reads proved, every order of the timers due at
+the cascade fits (`PairLine`, `CascadeFits`), or no input kind's cascade has the two waiting together (`PairOk`,
+`Layout.apart`). Where every timer line reads proved, every order of the timers due at
 one deadline of a clock line ends as `fire` does, wherever every timer set in a state the firing reaches in any order
 has a context that fits. -/
 theorem run_lines (c : CheckedSpec) (hv : v ∈ c.spec.services) (hL : SortedLayout L) (senv : StepEnv L (shapes v))
@@ -123,7 +135,7 @@ theorem run_lines (c : CheckedSpec) (hv : v ∈ c.spec.services) (hL : SortedLay
       (∀ inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v),
         StepLine L c.T c.P v senv (StepFits L c.T c.P v (run c.T v (Step.State.init v) xs).1 x) inp) →
       ∀ {a : Step.Acc v}, Step.Begins c.T (run c.T v (Step.State.init v) xs).1 x a →
-      (∀ p ∈ L.ownPairs v.event, PairLine L c.T c.P v senv (CascadeFits L c.T a) p) →
+      (∀ p ∈ L.ownPairs v.event, PairOk L c.T c.P v senv (CascadeFits L c.T a) p) →
       (∀ b, Diamond.Reach (Step.ownSys c.T v) a b → Within L (shapes v) b.state) →
       ∀ fuel {r}, Diamond.Runs (Step.ownSys c.T v) fuel a r →
         Diamond.Agree (Step.Same a.state.fresh a.state.nextId) r (Step.settle c.T fuel a)) ∧
@@ -133,7 +145,8 @@ theorem run_lines (c : CheckedSpec) (hv : v ∈ c.spec.services) (hL : SortedLay
   obtain ⟨hinv, hs, hk⟩ := run_keeps c hv (Step.ShownRun.valid c.T hxs)
   refine ⟨fun hx hW hvals hsteps _ ha hpairs hfit => ?_, fun _ fuel hfit _ hr => timers_lines htimers fuel _ hfit hr⟩
   exact cascade_lines c hv hL senv (begins_keeps c hv hinv hs hk hx ha) (begins_coded (c.checked v hv) senv hsteps hinv hs
-    (Tazuna.Ir.run_invariants c.T _ xs hinit) hk hW hvals ha) hpairs hfit
+    (Tazuna.Ir.run_invariants c.T _ xs hinit) hk hW hvals ha) (begins_live (c.checked v hv) senv hinv hk hW hvals ha)
+    hpairs hfit
 
 end
 

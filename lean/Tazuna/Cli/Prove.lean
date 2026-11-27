@@ -445,6 +445,11 @@ def serviceItems (sv : CheckedService c) (only : String → Bool) : ServiceItems
       if exact.any (OwnKey.same k) then none else some (ownText owns k)
     let g := Target.pair (ownText owns key1) (ownText owns key2) widened.eraseDups
     let step := ownText owns key1 ++ " then " ++ ownText owns key2
+    -- Two kinds no input kind's cascade can have waiting together never run in either order (`PairOk`, `run_lines`).
+    if L.apart c.P v senv k1 k2 then
+      items := items ++ [if only (v.name ++ "/" ++ g.text ++ "/" ++ step) then .ready (.unsat v.name step (some g))
+        else .skipped v.name g]
+      continue
     match familyItems c v L.ids only g step s!"own {k1} {k2}"
         ((Sound.get (pairQuestions L c.T c.P v senv k1 k2) (pairQuestions_ofService sv.mem c.T senv k1 k2)).map (·.1))
         (pairReport c v L k1 k2 g step) with

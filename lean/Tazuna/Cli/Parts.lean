@@ -119,6 +119,10 @@ def partsOf (c : CheckedSpec) (sv : CheckedService c) : IO Unit := do
     | .error _ => pure ()
   let owns := L.ownsOf v.event
   for (k1, k2) in L.ownPairs v.event do
+    if L.apart c.P v senv k1 k2 then
+      row [("service", Json.str v.name), ("pair", Json.str (ownText owns owns[k1] ++ " then " ++ ownText owns owns[k2])),
+        ("apart", Json.bool true), ("bytes", Lean.toJson 0)]
+      continue
     match pairQuestions L c.T c.P v senv k1 k2 with
     | .ok (q1, q2) => row [("service", Json.str v.name),
         ("pair", Json.str (ownText owns owns[k1] ++ " then " ++ ownText owns owns[k2])),

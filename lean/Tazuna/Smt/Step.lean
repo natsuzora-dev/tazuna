@@ -267,6 +267,51 @@ theorem step_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV} (
     cases hb with
     | clock _ s' effs _ hlt hf h => exact ex.2.2 hcond hlt s' effs hf a h
 
+
+/-- The cascade a step of a kind starts keeps what the kind's encoding reads of it (`SymInput.LiveJ`): its own effects
+are among those the kind can queue. -/
+theorem begins_liveJ {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV} (hv : v.Reach P E)
+    {shs : List (PendingShape v.event)} {n : Nat} {s : State v} (hinv : Step.Inv P s) {inp : SymInput v shs n} {hc}
+    {x : Input v} (hx : inp.decode M L hc = some x) {a : Step.Acc v} (hb : Step.Begins T s x a) : inp.LiveJ P a := by
+  cases inp with
+  | command k sc si =>
+    obtain ⟨caller, input, rfl, -, -⟩ := decode_command hx
+    cases hb with
+    | command _ _ _ _ h =>
+      simp only [Step.execCommand] at h
+      split at h
+      · cases h
+      · split at h
+        · rename_i evs hdec
+          obtain ⟨a1, h1, h⟩ := bind_ok.1 h
+          split at h
+          · cases h
+          · cases h
+            exact liveJ_command T hv k s _ input hdec h1
+        · cases h
+  | query => obtain ⟨_, _, rfl, -, -⟩ := decode_query hx; cases hb
+  | answer k j toT valT =>
+    obtain ⟨-, to, value, rfl, -, -⟩ := decode_answer hx
+    cases hb with
+    | answer _ _ p h _ hp _ happ =>
+      exact liveJ_onAnswer T hv (fun _ _ h' => by rw [← h]; simpa [SymInput.evs] using h') _
+        (hinv.reach p (List.mem_of_find?_eq_some hp)).1 _ _ happ
+  | unmatched t toT valT =>
+    obtain ⟨-, to, value, rfl, -, -⟩ := decode_answer hx
+    cases hb with
+    | answer _ _ p h _ hp _ happ =>
+      subst h
+      exact liveJ_onAnswer T hv (fun _ _ h => by simpa [SymInput.evs] using h) _
+        (hinv.reach p (List.mem_of_find?_eq_some hp)).1 _ _ happ
+  | event k sv =>
+    obtain ⟨value, rfl, -⟩ := decode_event hx
+    cases hb with
+    | event _ _ _ h => exact liveJ_event T hv k _ value h
+  | clock st =>
+    obtain ⟨time, rfl, -⟩ := decode_clock hx
+    cases hb with
+    | clock _ s' effs _ _ hf h => exact liveJ_clock hv _ _ hf h
+
 end
 
 end Tazuna.Smt

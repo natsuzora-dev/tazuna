@@ -146,6 +146,12 @@ def pairQuestions (k1 k2 : OwnPlace L v.event) : Except Refusal (TypedScript × 
     ⟨dts, pairTys v, vars, [wf, below, names] ++ tests ++ [w1, w2] ++ found, asserts⟩
   pure (script [.or (.not o.codes) (.not o.cond)], script [o.codes, o.cond, o.viol])
 
+/-- Whether no input kind's cascade can have effects of the own kinds `k1` and `k2` waiting together (`together`): no
+step ever runs the two in either order, so the pair needs no question and its line reads proved (`PairOk`). -/
+def Layout.apart (k1 k2 : OwnPlace L v.event) : Bool :=
+  !together P (stepInputs v (shapes v) senv.nT (stateWidth v)) (L.ownsOf v.event)[k1].answer.site
+    (L.ownsOf v.event)[k2].answer.site
+
 /-- The data value of type `t` an SMT value codes. -/
 def readData (t : Ty) (z : Val) : Option t.den0 :=
   if h : t.isData = true then (decodeV L t z).map (Ty.down t h) else none
@@ -685,6 +691,31 @@ def PairLine (L : Layout) (T : List TypeDecl) (P : List AnySite) (v : ServiceV) 
 theorem PairLine.mono {P : List AnySite} {senv : StepEnv L (shapes v)} {F G : Prop} (h : F → G) {p : OwnPlace L v.event × OwnPlace L v.event} :
     PairLine L T P v senv F p → PairLine L T P v senv G p
   | ⟨bq, tq, hq, ht, hb⟩ => ⟨bq, tq, hq, ht, hb.imp_right fun ⟨hc, hf⟩ => ⟨hc, h hf⟩⟩
+
+/-- What a listed pair of own kinds' line says: its answers (`PairLine`), or that the two are apart (`Layout.apart`). -/
+def PairOk (L : Layout) (T : List TypeDecl) (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v))
+    (F : Prop) (p : OwnPlace L v.event × OwnPlace L v.event) : Prop :=
+  PairLine L T P v senv F p ∨ L.apart P v senv p.1 p.2 = true
+
+theorem PairOk.mono {P : List AnySite} {senv : StepEnv L (shapes v)} {F G : Prop} (h : F → G)
+    {p : OwnPlace L v.event × OwnPlace L v.event} : PairOk L T P v senv F p → PairOk L T P v senv G p :=
+  Or.imp_left (PairLine.mono h)
+
+/-- An own effect is answered at the site of the own kind whose variant codes it. -/
+theorem OwnKey.holds_site {e : Ty} {key : OwnKey} {x : OwnEffectV e} {vals : List Val} (h : key.Holds L x.effect vals) :
+    key.answer.site = x.site := by
+  cases key <;> cases x <;> simp only [OwnKey.Holds, OwnEffectV.effect] at h <;>
+    first | exact h.elim | exact h.2.2.2.2.1.symm
+
+/-- Effects of two own kinds that some input kind's cascade can have waiting together are of kinds that are not
+apart. -/
+theorem not_apart {P : List AnySite} (senv : StepEnv L (shapes v)) {k1 k2 : OwnPlace L v.event}
+    {x1 x2 : OwnEffectV v.event} {vals1 vals2 : List Val} (h1 : (L.ownsOf v.event)[k1].Holds L x1.effect vals1)
+    (h2 : (L.ownsOf v.event)[k2].Holds L x2.effect vals2)
+    (hl : ∃ inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v), ∀ l, inp.live P = some l → x1.site ∈ l ∧ x2.site ∈ l) :
+    L.apart P v senv k1 k2 = false := by
+  obtain ⟨inp, hm, hl⟩ := hl
+  simp only [Layout.apart, OwnKey.holds_site h1, OwnKey.holds_site h2, together_of hm hl, Bool.not_true]
 
 /-- A pair's questions at a model of their variables whose state is one a pair question assumes (pending ids below
 the next id, names below the counter) and whose effect variables hold the pair's kinds: the questions' context holds,
