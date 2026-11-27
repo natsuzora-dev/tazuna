@@ -1063,38 +1063,96 @@ theorem step_events (hi : 15 ≤ i) (hq : Quiet i v) (hc : ∀ k ∈ v.cascadeEv
 end Step
 
 /-! The own effects a step queues. An own effect names the kept function it runs at its answer, written at a site;
-the cascade's encoding asks only for the own kinds whose answer site some function the step runs can write. A
-machine's `effect` may write any of its sites. A reaction whose code is a `case` on one of its arguments writes only
-the sites of the clauses an allowed value can take: a clause whose pattern is a constructor of the declaration `i`
-that `ok` rules out never runs (`EffectFun.reach_live`). -/
-
-/-- Whether a pattern can match a value of the declaration `i` built with a constructor `ok` allows. -/
-def Pat.live (i : Nat) (ok : Nat → Bool) {t : Ty} {Δ : List Ty} : Pat t Δ → Bool
-  | @Pat.ctor j _ _ _ v _ => j != i || ok v.val
-  | _ => true
+the cascade's encoding asks only for the own kinds whose answer site some function the step runs can write. One
+reading serves reactions and machines: where every variable of a function holds only values of the declaration `i`
+built with constructors `ok` allows, a `let` or `case` whose subject builds only allowed ones keeps that, and such a
+`case` takes only the clauses an allowed value can match (`Expr.reach_live`). A reaction is read for the event's
+declaration and the constructors the kind can apply; a machine's `effect` for its state's declaration and the states a
+step without a clock line can enter: its `initial`, or one its `on` builds, whatever the instance's state was
+(`Expr.pure`). -/
 
 section
-variable (i : Nat) (ok : Nat → Bool) {G : List Ty} (D : Defs G)
+variable (i : Nat) (ok : Nat → Bool)
 
-/-- The kept functions the clauses an allowed value can take write. -/
+mutual
+/-- Whether a pattern can match a value whose values of the declaration `i` are built with constructors `ok` allows. -/
+def Pat.live {t : Ty} {Δ : List Ty} : Pat t Δ → Bool
+  | @Pat.ctor j _ _ _ v ps => (j != i || ok v.val) && Pats.live ps
+  | .tuple ps => Pats.live ps
+  | .as p => Pat.live p
+  | .wild | .bind | .int _ | .str _ => true
+def Pats.live {ts : List Ty} {Δ : List Ty} : Pats ts Δ → Bool
+  | .nil => true
+  | .cons p ps => Pat.live p && Pats.live ps
+end
+
+variable {G : List Ty} (D : Defs G)
+
+/-- Whether every constructor of the declaration `i` the expression can build is allowed. -/
+def Expr.okIn {Γ : List Ty} {t : Ty} (e : Expr G Γ t) : Bool := (e.evs i (D.evs i)).all ok
+
+mutual
+/-- The kept functions an expression writes when its variables hold only allowed values: a `let` or a `case` whose
+subject builds only allowed constructors keeps them allowed, and such a `case` takes only the clauses an allowed value
+can match. -/
+def Expr.liveSites {Γ : List Ty} {t : Ty} : Expr G Γ t → List AnySite
+  | .let_ e body => e.sites D ++ (if e.okIn i ok D then Expr.liveSites body else body.sites D)
+  | .case e cs _ => e.sites D ++ (if e.okIn i ok D then Clauses.liveSites cs else Clauses.sites D cs)
+  | e => e.sites D
 def Clauses.liveSites {Γ : List Ty} {t r : Ty} {sh : List Shape} : Clauses G Γ t r sh → List AnySite
   | .nil => []
-  | .cons p body rest => (if p.live i ok then body.sites D else []) ++ Clauses.liveSites rest
-  | .guarded p g body rest => (if p.live i ok then g.sites D ++ body.sites D else []) ++ Clauses.liveSites rest
+  | .cons p body rest => (if p.live i ok then Expr.liveSites body else []) ++ Clauses.liveSites rest
+  | .guarded p g body rest => (if p.live i ok then g.sites D ++ Expr.liveSites body else []) ++ Clauses.liveSites rest
+end
 
-/-- The globals the clauses an allowed value can take read. -/
+mutual
+/-- The globals an expression reads when its variables hold only allowed values (`Expr.liveSites`). -/
+def Expr.liveGlobals {Γ : List Ty} {t : Ty} : Expr G Γ t → List Nat
+  | .let_ e body => e.globals ++ (if e.okIn i ok D then Expr.liveGlobals body else body.globals)
+  | .case e cs _ => e.globals ++ (if e.okIn i ok D then Clauses.liveGlobals cs else Clauses.globals cs)
+  | e => e.globals
 def Clauses.liveGlobals {Γ : List Ty} {t r : Ty} {sh : List Shape} : Clauses G Γ t r sh → List Nat
   | .nil => []
-  | .cons p body rest => (if p.live i ok then body.globals else []) ++ Clauses.liveGlobals rest
-  | .guarded p g body rest => (if p.live i ok then g.globals ++ body.globals else []) ++ Clauses.liveGlobals rest
+  | .cons p body rest => (if p.live i ok then Expr.liveGlobals body else []) ++ Clauses.liveGlobals rest
+  | .guarded p g body rest => (if p.live i ok then g.globals ++ Expr.liveGlobals body else []) ++ Clauses.liveGlobals rest
+end
 
-/-- The kept functions a function's value writes when its arguments hold only allowed values of the declaration `i`,
-with those of every global it reads: a `case` on an argument right under the function takes only the clauses such a
-value can match; any other source writes what it uses. -/
+/-- The kept functions a function's value writes when its arguments hold only allowed values, with those of every
+global it reads. -/
 def Expr.liveUses {Γ : List Ty} {t : Ty} : Expr G Γ t → List AnySite
-  | .lam (.case (.var _) cs _) =>
-    Clauses.liveSites i ok D cs ++ (Clauses.liveGlobals i ok cs).flatMap (D.usesAt sitesC)
+  | .lam body => Expr.liveSites i ok D body ++ (Expr.liveGlobals i ok D body).flatMap (D.usesAt sitesC)
   | e => e.uses sitesC D
+
+mutual
+/-- Whether every value of the declaration `i` the expression's value holds is built with an allowed constructor,
+whatever its variables hold: what a constructor, a `let`, a `case`, a list or a function returns, a global that builds
+only allowed ones, or any value of a type that cannot hold one. -/
+def Expr.pure {Γ : List Ty} {t : Ty} : Expr G Γ t → Bool
+  | @Expr.ctor _ _ j _ _ v es => (j != i || ok v.val) && Exprs.pure es
+  | .tuple es => Exprs.pure es
+  | .list items => Items.pure items
+  | .let_ _ body => Expr.pure body
+  | .lam body => Expr.pure body
+  | .case _ cs _ => Clauses.pure cs
+  | .global v => !t.mentions i || (D.evsAt i v.idx).all ok
+  | _ => !t.mentions i
+def Exprs.pure {Γ ts : List Ty} : Exprs G Γ ts → Bool
+  | .nil => true
+  | .cons e es => Expr.pure e && Exprs.pure es
+def Items.pure {Γ : List Ty} {t : Ty} : Items G Γ t → Bool
+  | .nil => true
+  | .cons e es => Expr.pure e && Items.pure es
+def Clauses.pure {Γ : List Ty} {t r : Ty} {sh : List Shape} : Clauses G Γ t r sh → Bool
+  | .nil => true
+  | .cons _ body rest => Expr.pure body && Clauses.pure rest
+  | .guarded _ _ body rest => Expr.pure body && Clauses.pure rest
+end
+
+/-- Whether a function's results hold only allowed values of the declaration `i`, whatever its arguments
+(`Expr.pure` of a function written in place). -/
+def Expr.pureFn {Γ : List Ty} {t : Ty} : Expr G Γ t → Bool
+  | .lam body => Expr.pure i ok D body
+  | _ => false
 
 end
 
@@ -1117,64 +1175,212 @@ theorem Alts.index_proj : {vs : List (List Ty)} → (x : Ty.alts vs) → (v : Fi
 section
 variable {i : Nat} {okV : Nat → Prop} {ok : Nat → Bool}
 
+mutual
 /-- A pattern that matches an allowed value is live. -/
 theorem Pat.live_of_match (hok : ∀ k, okV k → ok k = true) {t : Ty} {Δ : List Ty} :
     (p : Pat t Δ) → (x : t.den) → {δ : Ty.dens Δ} → p.match x = some δ → Ok i okV t x → p.live i ok = true
   | @Pat.ctor j _ _ _ v ps, x, _, hm, hx => by
     simp only [Pat.match, Option.bind_eq_some_iff] at hm
-    obtain ⟨y, hy, -⟩ := hm
-    simp only [Pat.live, Bool.or_eq_true, bne_iff_ne, ne_eq]
+    obtain ⟨y, hy, hm⟩ := hm
+    simp only [Pat.live, Bool.and_eq_true, Bool.or_eq_true, bne_iff_ne, ne_eq]
+    refine ⟨?_, Pats.live_of_match hok ps y hm (Alts.ok_proj x v hy hx.2)⟩
     by_cases hj : j = i
     · have := hx.1 hj
       rw [Alts.index_proj x v hy] at this
       exact .inr (hok _ this)
     · exact .inl hj
-  | .wild, _, _, _, _ | .bind, _, _, _, _ | .int _, _, _, _, _ | .str _, _, _, _, _ | .tuple _, _, _, _, _
-  | .as _, _, _, _, _ => rfl
+  | .tuple ps, x, _, hm, hx => by
+    simp only [Pat.live]
+    exact Pats.live_of_match hok ps x hm hx
+  | .as p, x, _, hm, hx => by
+    simp only [Pat.match, Option.map_eq_some_iff] at hm
+    obtain ⟨δ, hδ, -⟩ := hm
+    simp only [Pat.live]
+    exact Pat.live_of_match hok p x hδ hx
+  | .wild, _, _, _, _ | .bind, _, _, _, _ | .int _, _, _, _, _ | .str _, _, _, _, _ => rfl
+theorem Pats.live_of_match (hok : ∀ k, okV k → ok k = true) {ts : List Ty} {Δ : List Ty} :
+    (ps : Pats ts Δ) → (xs : Ty.dens ts) → {δ : Ty.dens Δ} → Pats.match ps xs = some δ → Oks i okV ts xs →
+    Pats.live i ok ps = true
+  | .nil, _, _, _, _ => rfl
+  | .cons p ps, (x, xs), _, hm, h => by
+    simp only [Pats.match, Option.bind_eq_some_iff, Option.map_eq_some_iff] at hm
+    obtain ⟨a, ha, b, hb, -⟩ := hm
+    simp only [Pats.live, Bool.and_eq_true]
+    exact ⟨Pat.live_of_match hok p x ha h.1, Pats.live_of_match hok ps xs hb h.2⟩
+end
 
-variable {P : List AnySite} {E : List AnyEffectSite} {G : List Ty} {D : Defs G} {g : Ty.dens G}
-  (hg : ∀ {t : Ty} (v : Var G t), (∀ s ∈ D.usesAt sitesC v.idx, s ∈ P) → Reach P E t (v.get g))
-  (hDE : ∀ s ∈ D.effectSites, s ∈ E)
-include hg hDE
+variable {G : List Ty} {D : Defs G} (hi : 15 ≤ i) (hok : ∀ k, ok k = true → okV k)
+include hi hok
 
+set_option linter.unusedSectionVars false
+
+mutual
+/-- What an expression that `Expr.pure` accepts returns is allowed, whatever its variables hold. -/
+theorem Expr.ok_pure {Γ : List Ty} {t : Ty} : (e : Expr G Γ t) → Expr.pure i ok D e = true → (ρ : Ty.dens Γ) →
+    Ok i okV t (e.eval D D.eval ρ)
+  | @Expr.ctor _ _ j _ _ v es, h, ρ => by
+    simp only [Expr.pure, Bool.and_eq_true, Bool.or_eq_true, bne_iff_ne, ne_eq] at h
+    refine ⟨fun e => ?_, Alts.okAlts_inj v _ (Exprs.ok_pure es h.2 ρ)⟩
+    simp only [Expr.eval, Alts.index_inj]
+    exact hok _ (h.1.resolve_left (fun hn => hn e))
+  | .tuple es, h, ρ => Exprs.ok_pure es h ρ
+  | .list items, h, ρ => Items.ok_pure items h ρ
+  | .let_ _ body, h, _ => Expr.ok_pure body h _
+  | .lam body, h, _ => fun _ _ => Expr.ok_pure body h _
+  | .case _ cs _, h, ρ => Clauses.ok_pure cs h ρ _ _
+  | .global v, h, _ => by
+    simp only [Expr.pure, Bool.or_eq_true, Bool.not_eq_true'] at h
+    rcases h with h | h
+    · exact ok_free _ h _
+    · exact Defs.ok hi D v (fun k hk => hok k (List.all_eq_true.1 h k hk))
+  | .int _, _, _ | .str _, _, _ | .neg _, _, _ => trivial
+  | .var _, h, _ | .field .., h, _ | .index .., h, _ | .update .., h, _ | .call .., h, _ | .bin .., h, _
+  | .not _, h, _ | .prim .., h, _ | .close .., h, _ | .closeEffect .., h, _ =>
+    ok_free _ (by simpa [Expr.pure] using h) _
+theorem Exprs.ok_pure {Γ ts : List Ty} : (es : Exprs G Γ ts) → Exprs.pure i ok D es = true → (ρ : Ty.dens Γ) →
+    Oks i okV ts (Exprs.eval D D.eval es ρ)
+  | .nil, _, _ => trivial
+  | .cons e es, h, ρ => by
+    simp only [Exprs.pure, Bool.and_eq_true] at h
+    exact ⟨Expr.ok_pure e h.1 ρ, Exprs.ok_pure es h.2 ρ⟩
+theorem Items.ok_pure {Γ : List Ty} {t : Ty} : (items : Items G Γ t) → Items.pure i ok D items = true →
+    (ρ : Ty.dens Γ) → ∀ x ∈ Items.eval D D.eval items ρ, Ok i okV t x
+  | .nil, _, _, _, hx => by cases hx
+  | .cons e es, h, ρ, x, hx => by
+    simp only [Items.pure, Bool.and_eq_true] at h
+    cases hx with
+    | head => exact Expr.ok_pure e h.1 ρ
+    | tail _ hx => exact Items.ok_pure es h.2 ρ x hx
+theorem Clauses.ok_pure {Γ : List Ty} {t r : Ty} {sh : List Shape} : (cs : Clauses G Γ t r sh) →
+    Clauses.pure i ok D cs = true → (ρ : Ty.dens Γ) → (x : t.den) → (h : ∃ s ∈ sh, Shape.Matches t s x) →
+    Ok i okV r (Clauses.eval D D.eval cs ρ x h)
+  | .nil, _, _, _, h => False.elim (by simp at h)
+  | .cons p body rest, hp, ρ, x, h => by
+    simp only [Clauses.pure, Bool.and_eq_true] at hp
+    simp only [Clauses.eval]
+    split
+    · exact Expr.ok_pure body hp.1 _
+    · exact Clauses.ok_pure rest hp.2 ρ x _
+  | .guarded p g body rest, hp, ρ, x, h => by
+    simp only [Clauses.pure, Bool.and_eq_true] at hp
+    simp only [Clauses.eval]
+    split
+    · split
+      · exact Expr.ok_pure body hp.1 _
+      · exact Clauses.ok_pure rest hp.2 ρ x h
+    · exact Clauses.ok_pure rest hp.2 ρ x h
+end
+
+/-- What a function `Expr.pureFn` accepts returns is allowed, whatever its arguments. -/
+theorem Expr.ok_pureFn {Γ ps : List Ty} {r : Ty} (e : Expr G Γ (.fn ps r)) (h : Expr.pureFn i ok D e = true)
+    (ρ : Ty.dens Γ) (xs : Ty.dens ps) : Ok i okV r (e.eval D D.eval ρ xs) := by
+  revert h
+  unfold Expr.pureFn
+  split
+  · rename_i h1 h2
+    simp only [Ty.fn.injEq] at h1
+    obtain ⟨rfl, rfl⟩ := h1
+    cases eq_of_heq h2
+    intro h
+    exact Expr.ok_pure hi hok _ h _
+  · intro h; cases h
+
+end
+
+section
+variable {i : Nat} {okV : Nat → Prop} {ok : Nat → Bool}
+  {P : List AnySite} {E : List AnyEffectSite} {G : List Ty} {D : Defs G}
+  (hg : ∀ {t : Ty} (v : Var G t), (∀ s ∈ D.usesAt sitesC v.idx, s ∈ P) → Reach P E t (v.get D.eval))
+  (hDE : ∀ s ∈ D.effectSites, s ∈ E) (hi : 15 ≤ i) (hok : ∀ k, okV k ↔ ok k = true)
+include hg hDE hi hok
+
+set_option linter.unusedSectionVars false
+
+theorem Expr.okIn_ok {Γ : List Ty} {t : Ty} (e : Expr G Γ t) (h : e.okIn i ok D = true) (ρ : Ty.dens Γ)
+    (hρ : Oks i okV Γ ρ) : Ok i okV t (e.eval D D.eval ρ) :=
+  Expr.ok hi D (Defs.ok hi D) e (fun k hk => (hok k).2 (List.all_eq_true.1 h k hk)) ρ hρ
+
+mutual
+/-- Where its variables hold only allowed values, an expression reaches only the sites it writes for them
+(`Expr.liveSites`). -/
+theorem Expr.reach_live {Γ : List Ty} {t : Ty} : (e : Expr G Γ t) → (∀ s ∈ Expr.liveSites i ok D e, s ∈ P) →
+    GlobalsIn P D (Expr.liveGlobals i ok D e) → (∀ s ∈ e.effectSites D, s ∈ E) → (ρ : Ty.dens Γ) →
+    Reaches P E Γ ρ → Oks i okV Γ ρ → Reach P E t (e.eval D D.eval ρ)
+  | .let_ e body, hs, hu, he, ρ, hρ, hoρ => by
+    simp only [Expr.liveSites, Expr.liveGlobals] at hs hu
+    simp only [Expr.effectSites] at he
+    have hx := Expr.reach P D D.eval hg hDE e (sub_l hs) (sub_l hu) (sub_l he) ρ hρ
+    simp only [Expr.eval]
+    by_cases hk : e.okIn i ok D = true
+    · simp only [hk, ite_true] at hs hu
+      exact Expr.reach_live body (sub_r hs) (sub_r hu) (sub_r he) _ ⟨hx, hρ⟩
+        ⟨Expr.okIn_ok hg hDE hi hok e hk ρ hoρ, hoρ⟩
+    · simp only [hk] at hs hu
+      exact Expr.reach P D D.eval hg hDE body (sub_r hs) (sub_r hu) (sub_r he) _ ⟨hx, hρ⟩
+  | .case e cs hc, hs, hu, he, ρ, hρ, hoρ => by
+    simp only [Expr.liveSites, Expr.liveGlobals] at hs hu
+    by_cases hk : e.okIn i ok D = true
+    · simp only [hk, ite_true] at hs hu
+      simp only [Expr.effectSites] at he
+      have hx := Expr.reach P D D.eval hg hDE e (sub_l hs) (sub_l hu) (sub_l he) ρ hρ
+      simp only [Expr.eval]
+      exact Clauses.reach_live cs (sub_r hs) (sub_r hu) (sub_r he) ρ hρ hoρ _ hx
+        (Expr.okIn_ok hg hDE hi hok e hk ρ hoρ) _
+    · simp only [hk] at hs hu
+      exact Expr.reach P D D.eval hg hDE (.case e cs hc) hs hu he ρ hρ
+  | .int _, hs, hu, he, ρ, hρ, _ | .str _, hs, hu, he, ρ, hρ, _ | .var _, hs, hu, he, ρ, hρ, _
+  | .global _, hs, hu, he, ρ, hρ, _ | .ctor .., hs, hu, he, ρ, hρ, _ | .field .., hs, hu, he, ρ, hρ, _
+  | .index .., hs, hu, he, ρ, hρ, _ | .update .., hs, hu, he, ρ, hρ, _ | .call .., hs, hu, he, ρ, hρ, _
+  | .lam _, hs, hu, he, ρ, hρ, _ | .list _, hs, hu, he, ρ, hρ, _ | .tuple _, hs, hu, he, ρ, hρ, _
+  | .bin .., hs, hu, he, ρ, hρ, _ | .not _, hs, hu, he, ρ, hρ, _ | .neg _, hs, hu, he, ρ, hρ, _
+  | .prim .., hs, hu, he, ρ, hρ, _ | .close .., hs, hu, he, ρ, hρ, _ | .closeEffect .., hs, hu, he, ρ, hρ, _ =>
+    Expr.reach P D D.eval hg hDE _ hs hu he ρ hρ
 /-- The clause an allowed value takes reaches only the sites the live clauses write. -/
-theorem Clauses.reach_live (hok : ∀ k, okV k → ok k = true) {Γ : List Ty} {t r : Ty} {sh : List Shape} :
+theorem Clauses.reach_live {Γ : List Ty} {t r : Ty} {sh : List Shape} :
     (cs : Clauses G Γ t r sh) → (∀ s ∈ Clauses.liveSites i ok D cs, s ∈ P) →
-    GlobalsIn P D (Clauses.liveGlobals i ok cs) → (∀ s ∈ Clauses.effectSites D cs, s ∈ E) → (ρ : Ty.dens Γ) →
-    Reaches P E Γ ρ → (x : t.den) → Reach P E t x → Ok i okV t x →
-    (h : ∃ s ∈ sh, Shape.Matches t s x) → Reach P E r (Clauses.eval D g cs ρ x h)
-  | .nil, _, _, _, _, _, _, _, _, h => False.elim (by simp at h)
-  | .cons p body rest, hs, hu, he, ρ, hρ, x, hx, hox, h => by
+    GlobalsIn P D (Clauses.liveGlobals i ok D cs) → (∀ s ∈ Clauses.effectSites D cs, s ∈ E) → (ρ : Ty.dens Γ) →
+    Reaches P E Γ ρ → Oks i okV Γ ρ → (x : t.den) → Reach P E t x → Ok i okV t x →
+    (h : ∃ s ∈ sh, Shape.Matches t s x) → Reach P E r (Clauses.eval D D.eval cs ρ x h)
+  | .nil, _, _, _, _, _, _, _, _, _, h => False.elim (by simp at h)
+  | .cons p body rest, hs, hu, he, ρ, hρ, hoρ, x, hx, hox, h => by
     simp only [Clauses.eval]
     split
     · rename_i δ hm
-      have hl := Pat.live_of_match hok p x hm hox
+      have hl := Pat.live_of_match (fun k => (hok k).1) p x hm hox
       simp only [Clauses.liveSites, Clauses.liveGlobals, hl, ite_true] at hs hu
-      exact Expr.reach P D g hg hDE body (sub_l hs) (sub_l hu) (sub_l he) _
+      simp only [Clauses.effectSites] at he
+      exact Expr.reach_live body (sub_l hs) (sub_l hu) (sub_l he) _
         (Dens.reach_append P δ ρ (Pat.reach_match P p x hm hx) hρ)
+        (Dens.ok_append δ ρ (Pat.ok_match p x hm hox) hoρ)
     · simp only [Clauses.liveSites, Clauses.liveGlobals] at hs hu
-      exact Clauses.reach_live hok rest (sub_r hs) (sub_r hu) (sub_r he) ρ hρ x hx hox _
-  | .guarded p guard body rest, hs, hu, he, ρ, hρ, x, hx, hox, h => by
+      simp only [Clauses.effectSites] at he
+      exact Clauses.reach_live rest (sub_r hs) (sub_r hu) (sub_r he) ρ hρ hoρ x hx hox _
+  | .guarded p guard body rest, hs, hu, he, ρ, hρ, hoρ, x, hx, hox, h => by
     simp only [Clauses.eval]
     split
     · rename_i δ hm
-      have hl := Pat.live_of_match hok p x hm hox
+      have hl := Pat.live_of_match (fun k => (hok k).1) p x hm hox
       simp only [Clauses.liveSites, Clauses.liveGlobals, hl, ite_true] at hs hu
+      simp only [Clauses.effectSites] at he
       split
-      · exact Expr.reach P D g hg hDE body (sub_r (sub_l hs)) (sub_r (sub_l hu)) (sub_r (sub_l he)) _
+      · exact Expr.reach_live body (sub_r (sub_l hs)) (sub_r (sub_l hu)) (sub_r (sub_l he)) _
           (Dens.reach_append P δ ρ (Pat.reach_match P p x hm hx) hρ)
-      · exact Clauses.reach_live hok rest (sub_r hs) (sub_r hu) (sub_r he) ρ hρ x hx hox h
+          (Dens.ok_append δ ρ (Pat.ok_match p x hm hox) hoρ)
+      · exact Clauses.reach_live rest (sub_r hs) (sub_r hu) (sub_r he) ρ hρ hoρ x hx hox h
     · simp only [Clauses.liveSites, Clauses.liveGlobals] at hs hu
-      exact Clauses.reach_live hok rest (sub_r hs) (sub_r hu) (sub_r he) ρ hρ x hx hox h
+      simp only [Clauses.effectSites] at he
+      exact Clauses.reach_live rest (sub_r hs) (sub_r hu) (sub_r he) ρ hρ hoρ x hx hox h
+end
 
 end
 
 /-- What a function that returns effects returns for allowed arguments reaches only the sites it writes for them
 (`EffectFun.liveUses`), where the values it captured cannot hold a value of the declaration `i`. -/
-theorem EffectFun.reach_live {i : Nat} {okV : Nat → Prop} {ok : Nat → Bool} (hok : ∀ k, okV k → ok k = true)
-    {P P' : List AnySite} {E : List AnyEffectSite} {ps : List Ty} {r : Ty} (f : EffectFun ps r) (hf : f.Reach P E)
-    (hP' : ∀ s ∈ f.liveUses i ok, s ∈ P') (hΓ : (Ty.tuple f.Γ).mentions i = false) (xs : (Ty.tuple ps).den0)
-    (hxs : Oks i okV ps (Ty.up _ f.hps xs)) : Tazuna.Ir.Reach P' E r (f.apply xs) := by
+theorem EffectFun.reach_live {i : Nat} {okV : Nat → Prop} {ok : Nat → Bool} (hi : 15 ≤ i)
+    (hok : ∀ k, okV k ↔ ok k = true) {P P' : List AnySite} {E : List AnyEffectSite} {ps : List Ty} {r : Ty}
+    (f : EffectFun ps r) (hf : f.Reach P E) (hP' : ∀ s ∈ f.liveUses i ok, s ∈ P')
+    (hΓ : (Ty.tuple f.Γ).mentions i = false) (xs : (Ty.tuple ps).den0) (hxs : Oks i okV ps (Ty.up _ f.hps xs)) :
+    Tazuna.Ir.Reach P' E r (f.apply xs) := by
   have hg : ∀ {t : Ty} (v : Var f.G t), (∀ s ∈ f.defs.usesAt sitesC v.idx, s ∈ P') →
       Tazuna.Ir.Reach P' E t (v.get f.defs.eval) := fun v h => Defs.reach P' f.defs hf.defsEffectSites v h
   have hu := hf.effectSites
@@ -1199,19 +1405,118 @@ theorem EffectFun.reach_live {i : Nat} {okV : Nat → Prop} {ok : Nat → Bool} 
     cases eq_of_heq h2
     intro hP' hu _
     simp only [Expr.eval]
-    have hρ' := Dens.reach_append P' (Ty.up _ f.hps xs) _ hps hρ
-    have hok' : Oks i okV (ps ++ f.Γ) (Dens.append (Ty.up _ f.hps xs) (Ty.up _ f.hΓ f.env)) :=
-      Dens.ok_append _ _ hxs (oks_free _ hΓ _)
-    exact Clauses.reach_live hg hf.defsEffectSites hok _ (sub_l hP')
+    exact Expr.reach_live hg hf.defsEffectSites hi hok _ (sub_l hP')
       (fun j hj s hs => sub_r hP' s (List.mem_flatMap.2 ⟨j, hj, hs⟩))
-      (by simpa [Expr.effectSites] using hu) _ hρ' _ (Var.reach P' _ _ hρ') (Var.ok _ _ hok') _
+      (by simpa [Expr.effectSites] using hu) _ (Dens.reach_append P' (Ty.up _ f.hps xs) _ hps hρ)
+      (Dens.ok_append _ _ hxs (oks_free _ hΓ _))
   · intro hP' _ hdflt
     exact hdflt hP'
 
-/-- The kept functions the cascade's own effects can name: every site a machine's `effect` writes, and what each
-reaction writes for an event built with a constructor `ok` allows. -/
-def ServiceV.liveSites (v : ServiceV) (i : Nat) (ok : Nat → Bool) : List AnySite :=
-  v.machines.flatMap (·.effect.usedSites) ++ v.reactions.flatMap (·.react.liveUses i ok)
+/-- The declaration of a custom type of the program's own whose variants hold no value of it, and the variant a value
+of it is. -/
+def stateIndex : (t : Ty) → t.den0 → Option (Nat × Nat)
+  | .adt j _ vs, x => if prelude.length ≤ j && !Ty.mentionsLL j vs then some (j, altIndex vs x) else none
+  | _, _ => none
+
+/-- For a machine whose state is such a type `j` (`stateIndex`): `j` and the states a step without a clock line can
+enter, its `initial` and those its `on` builds, where `on` returns only states it builds (`Expr.pureFn`) and no other
+value its `effect` reads can hold a state. -/
+def MachineV.enters {r e : Ty} (m : MachineV r e) : Option (Nat × List Nat) :=
+  (stateIndex m.state m.initial).bind fun (j, k) =>
+    let ns := k :: m.on.evs j
+    if !m.key.mentions j && !r.mentions j && !(Ty.tuple m.effect.Γ).mentions j &&
+        m.on.body.pureFn j (fun n => ns.contains n) m.on.defs then some (j, ns) else none
+
+/-- The kept functions a machine's `effect` can write in a step: every one at a clock line, where a timer may enter
+any state; else those it writes for the states the step can enter (`MachineV.enters`). -/
+def MachineV.liveSites {r e : Ty} (m : MachineV r e) (clock : Bool) : List AnySite :=
+  match clock, m.enters with
+  | false, some (j, ns) => m.effect.liveUses j (fun n => ns.contains n)
+  | _, _ => m.effect.usedSites
+
+theorem stateIndex_some : {t : Ty} → {x : t.den0} → {j k : Nat} → stateIndex t x = some (j, k) →
+    15 ≤ j ∧ ∀ (okV : Nat → Prop), okV k → ∀ h : t.isData = true, Ok j okV t (Ty.up t h x)
+  | .adt j' a vs, x, j, k, hs => by
+    simp only [stateIndex] at hs
+    split at hs
+    · rename_i hc
+      simp only [Option.some.injEq, Prod.mk.injEq] at hs
+      obtain ⟨rfl, rfl⟩ := hs
+      simp only [Bool.and_eq_true, decide_eq_true_eq, Bool.not_eq_true'] at hc
+      refine ⟨hc.1, fun okV hk h => ⟨fun _ => by rw [altIndex_up vs h x]; exact hk, ?_⟩⟩
+      exact okAlts_free vs hc.2 _
+    · cases hs
+  | .int, _, _, _, hs | .str, _, _, _, hs | .param _, _, _, _, hs | .date, _, _, _, hs | .id, _, _, _, hs
+  | .list _, _, _, _, hs | .bag _, _, _, _, hs | .table .., _, _, _, hs | .tuple _, _, _, _, hs
+  | .fn .., _, _, _, hs | .dsl .., _, _, _, hs => by cases hs
+
+theorem MachineV.enters_some {r e : Ty} {m : MachineV r e} {j : Nat} {ns : List Nat} (h : m.enters = some (j, ns)) :
+    15 ≤ j ∧ (∀ hs : m.state.isData = true, Ok j (· ∈ ns) m.state (Ty.up _ hs m.initial)) ∧
+      m.key.mentions j = false ∧ r.mentions j = false ∧ (Ty.tuple m.effect.Γ).mentions j = false ∧
+      m.on.body.pureFn j (fun n => ns.contains n) m.on.defs = true := by
+  unfold MachineV.enters at h
+  obtain ⟨⟨j', k⟩, hs, h⟩ := Option.bind_eq_some_iff.1 h
+  dsimp only at h
+  split at h
+  · rename_i hc
+    simp only [Option.some.injEq, Prod.mk.injEq] at h
+    obtain ⟨rfl, rfl⟩ := h
+    simp only [Bool.and_eq_true, Bool.not_eq_true'] at hc
+    obtain ⟨⟨⟨hk, hr⟩, hΓ⟩, hp⟩ := hc
+    obtain ⟨h15, hok⟩ := stateIndex_some hs
+    exact ⟨h15, hok _ (List.mem_cons_self ..), hk, hr, hΓ, hp⟩
+  · cases h
+
+/-- A state `on` enters is one `MachineV.enters` lists. -/
+theorem MachineV.on_enters {r e : Ty} {m : MachineV r e} {j : Nat} {ns : List Nat} (hm : m.enters = some (j, ns))
+    (xs : (Ty.tuple [Ty.machineCtx m.key m.state r, e]).den0) {s : m.state.den0}
+    (h : m.on.fn xs = .inr (.inl (s, ()))) (hs : m.state.isData = true) : Ok j (· ∈ ns) m.state (Ty.up _ hs s) := by
+  obtain ⟨h15, -, -, -, -, hp⟩ := MachineV.enters_some hm
+  have hps : (Ty.tuple [Ty.machineCtx m.key m.state r, e]).isData = true := by
+    have := m.on.ht; simp only [Ty.isData, Bool.and_eq_true] at this; exact this.1
+  have hr : (Ty.next m.state).isData = true := by
+    have := m.on.ht; simp only [Ty.isData, Bool.and_eq_true] at this; exact this.2
+  have hok := Expr.ok_pureFn (okV := (· ∈ ns)) h15 (fun k hk => List.mem_of_elem_eq_true hk) m.on.body hp
+    (Ty.up _ m.on.hΓ m.on.env) (Ty.up _ hps xs)
+  have hy : m.on.eval (Ty.up _ hps xs) = Ty.up _ hr (.inr (.inl (s, ()))) := by
+    rw [← h, Fun.fn_app m.on hps hr, Ty.up_down]
+  change Ok j _ _ (m.on.eval (Ty.up _ hps xs)) at hok
+  rw [hy] at hok
+  have hvs : (Ty.adt 6 [m.state] [[m.state]]).isData = true := by simp_all [Ty.next, Ty.isData, Ty.isDatass, Ty.isDatas]
+  have hfs : (Ty.tuple [m.state]).isData = true := by simp_all [Ty.isData, Ty.isDatas]
+  erw [Ty.up_inr 6 [m.state] [] [[m.state]] hr hvs, Ty.up_inl 6 [m.state] [m.state] [] hvs hfs,
+    Ty.up_tuple m.state [] hfs hs rfl] at hok
+  exact hok.2.1
+
+/-- The effects a machine starts on entering a state `MachineV.enters` lists reach only the sites its `effect` writes
+for those states. -/
+theorem MachineV.reach_live_effectAt {r e : Ty} (m : MachineV r e) {P P' : List AnySite} {E : List AnyEffectSite}
+    (hm : m.effect.Reach P E) {j : Nat} {ns : List Nat} (he : m.enters = some (j, ns))
+    (hP' : ∀ s ∈ m.effect.liveUses j (fun n => ns.contains n), s ∈ P') (key : m.key.den0) (st : m.state.den0)
+    (records : r.den0) (now : Int) (hst : ∀ h : m.state.isData = true, Ok j (· ∈ ns) m.state (Ty.up _ h st)) :
+    ∀ eff ∈ m.effectAt key st records now, eff.Reach P' := by
+  obtain ⟨h15, -, hk, hr, hΓ, -⟩ := MachineV.enters_some he
+  have hx := EffectFun.reach_live h15 (fun k => ⟨List.elem_eq_true_of_mem, List.mem_of_elem_eq_true⟩) m.effect hm
+    hP' hΓ (.inl (key, st, records, now, ()), ()) (by
+      refine oks_up_cons _ _ _ (fun hc => ?_) (fun _ => trivial)
+      have hfs : (Ty.tuple [m.key, m.state, r, .int]).isData = true := by
+        simp_all [Ty.machineCtx, Ty.isData, Ty.isDatass, Ty.isDatas]
+      erw [Ty.up_inl 8 _ _ [] hc hfs]
+      refine ⟨fun h8 => absurd h8 (by omega), ?_⟩
+      exact oks_up_cons _ _ _ (fun _ => ok_free _ hk _) (fun _ => oks_up_cons _ _ _ hst (fun _ =>
+        oks_up_cons _ _ _ (fun _ => ok_free _ hr _) (fun _ => oks_up_cons _ _ _ (fun _ => trivial) (fun _ => trivial)))))
+  intro eff heff
+  simp only [MachineV.effectAt] at heff
+  revert hx heff
+  generalize m.effect.apply (.inl (key, st, records, now, ()), ()) = x
+  match x with
+  | .inl (y, ()) => intro hx heff; cases heff; exact hx.1
+  | .inr _ => intro _ heff; cases heff
+
+/-- The kept functions the cascade's own effects can name: what each machine's `effect` writes in the step
+(`MachineV.liveSites`), and what each reaction writes for an event built with a constructor `ok` allows. -/
+def ServiceV.liveSites (v : ServiceV) (i : Nat) (ok : Nat → Bool) (clock : Bool) : List AnySite :=
+  v.machines.flatMap (·.liveSites clock) ++ v.reactions.flatMap (·.react.liveUses i ok)
 
 namespace Step
 
@@ -1220,20 +1525,29 @@ variable (T : List TypeDecl) {v : ServiceV} {i : Nat} {okV : Nat → Prop} {ok :
 
 section
 variable (hi : 15 ≤ i) (hq : Quiet i v) (hc : ∀ k ∈ v.cascadeEvs i, okV k) (hv : v.Reach P E)
-  (hok : ∀ k, okV k → ok k = true) {P' : List AnySite} (hP' : ∀ s ∈ v.liveSites i ok, s ∈ P')
+  (hok : ∀ k, okV k ↔ ok k = true) {clock : Bool} {P' : List AnySite} (hP' : ∀ s ∈ v.liveSites i ok clock, s ∈ P')
 include hi hq hc hv hok hP'
 
 set_option linter.unusedSectionVars false
 
 theorem enter_live {m : MachineV v.records v.event} (hm : m ∈ v.machines) (records : v.records.den0) (now : Int)
-    (key : m.key.den0) (st : m.state.den0) : EffsReach P' (enter m records now key st).2 := by
+    (key : m.key.den0) (st : m.state.den0) (hst : clock = false → ∀ j ns, m.enters = some (j, ns) →
+      ∀ h : m.state.isData = true, Ok j (· ∈ ns) m.state (Ty.up _ h st)) :
+    EffsReach P' (enter m records now key st).2 := by
   intro x hx
   simp only [enter, List.mem_map, Option.mem_toList] at hx
   obtain ⟨eff, heff, rfl⟩ := hx
   have hr := (hv.machines m hm).effect
-  exact MachineV.reach_effectAt P' m ⟨hr.site, fun s hs => hP' s (by
-    simp only [ServiceV.liveSites, List.mem_append, List.mem_flatMap]; exact .inl ⟨m, hm, hs⟩),
-    hr.effectSites, hr.defsEffectSites⟩ key st records now eff heff
+  have hin : ∀ s ∈ m.liveSites clock, s ∈ P' := fun s hs => hP' s (by
+    simp only [ServiceV.liveSites, List.mem_append, List.mem_flatMap]; exact .inl ⟨m, hm, hs⟩)
+  revert hin
+  unfold MachineV.liveSites
+  split
+  · rename_i j ns hen
+    intro hin
+    exact MachineV.reach_live_effectAt m hr hen hin key st records now (hst rfl j ns hen) eff heff
+  · intro hin
+    exact MachineV.reach_effectAt P' m ⟨hr.site, hin, hr.effectSites, hr.defsEffectSites⟩ key st records now eff heff
 
 theorem react_live (s : State v) (ev : v.event.den0)
     (hev : ∀ h : v.event.isData = true, Ok i okV v.event (Ty.up _ h ev)) : EffsReach P' (react T s ev).2 := by
@@ -1248,12 +1562,15 @@ theorem react_live (s : State v) (ev : v.event.den0)
     unfold reactKey
     split
     · split
-      · exact enter_live hi hq hc hv hok hP' (PerMachine.fst_mem hsm) _ _ _ _ x
+      · rename_i hon
+        exact enter_live hi hq hc hv hok hP' (PerMachine.fst_mem hsm) _ _ _ _
+          (fun _ _ _ hen hs => MachineV.on_enters hen _ hon hs) x
       · intro h; cases h
-    · exact enter_live hi hq hc hv hok hP' (PerMachine.fst_mem hsm) _ _ _ _ x
+    · exact enter_live hi hq hc hv hok hP' (PerMachine.fst_mem hsm) _ _ _ _
+        (fun _ _ _ hen hs => (MachineV.enters_some hen).2.1 hs) x
   · simp only [List.mem_flatMap, List.mem_map] at h
     obtain ⟨y, hy, eff, heff, rfl⟩ := h
-    have hr := EffectFun.reach_live hok y.react (hv.reactions y hy) (fun s hs => hP' s (by
+    have hr := EffectFun.reach_live hi hok y.react (hv.reactions y hy) (fun s hs => hP' s (by
       simp only [ServiceV.liveSites, List.mem_append, List.mem_flatMap]; exact .inr ⟨y, hy, hs⟩))
       (hq.reactions y hy) (.inl (records, s.now, ()), ev, ()) (oks_up_cons _ _ _ (fun _ => ok_free _ (by
         simp [Ty.reactionCtx, Ty.mentionsL, Ty.mentions, Ty.mentionsLL, hq.records]; omega) _)
@@ -1372,8 +1689,8 @@ theorem liveOk_runOwn (a : Acc v) (ha : LiveOk i okV P' a) (eff : OwnEffectV v.e
   ⟨runOwn_ok T hi hq hc a ha.1 eff (ha.1.own eff he) h,
     runOwn_live T hi hq hc hv hok hP' a ha.2 eff (ha.1.own eff he) h⟩
 
-theorem fire_live (s : State v) : (fuel : Nat) → {r : State v × List (Sender × EffectV v.event)} →
-    fire s fuel = some r → EffsReach P' r.2
+theorem fire_live (hcl : clock = true) (s : State v) : (fuel : Nat) →
+    {r : State v × List (Sender × EffectV v.event)} → fire s fuel = some r → EffsReach P' r.2
   | 0, _, h => by cases h
   | fuel + 1, r, h => by
     rw [fire] at h
@@ -1381,12 +1698,13 @@ theorem fire_live (s : State v) : (fuel : Nat) → {r : State v × List (Sender 
     · cases h; intro x hx; cases hx
     · rename_i d _
       obtain ⟨r', hr, rfl⟩ := Option.map_eq_some_iff.1 h
-      have h2 := fire_live { s with machines := (fireMachines s.records s.now d false s.machines).1 } fuel hr
+      have h2 := fire_live hcl { s with machines := (fireMachines s.records s.now d false s.machines).1 } fuel hr
       have hfx := mem_fireMachines_effs s.records s.now d false s.machines
       intro x hx
       rcases List.mem_append.1 hx with hx | hx
       · obtain ⟨ms, hms, k, st, hx⟩ := hfx x hx
-        exact enter_live hi hq hc hv hok hP' (PerMachine.fst_mem hms) _ _ _ _ x hx
+        exact enter_live hi hq hc hv hok hP' (PerMachine.fst_mem hms) _ _ _ _
+          (fun h => absurd (hcl.symm.trans h) (by decide)) x hx
       · exact h2 x hx
 
 end

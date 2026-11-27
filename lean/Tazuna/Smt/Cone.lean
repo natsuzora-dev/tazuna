@@ -43,16 +43,17 @@ def SymInput.evs (P : List AnySite) (i : Nat) : SymInput v shs n → Option (Lis
   | .query .. => none
 
 /-- The answer sites of the own effects a step of the kind can queue: what `ServiceV.liveSites` writes for the events
-the kind can apply. None where the code cannot bound them, and then the cascade asks for every own kind. -/
+the kind can apply and, but at a clock line, the machine states it can enter. None where the code cannot bound them,
+and then the cascade asks for every own kind. -/
 def SymInput.live (P : List AnySite) (inp : SymInput v shs n) : Option (List SiteId) :=
   match eventDecl v with
-  | some i => (inp.evs P i).map fun ns => (v.liveSites i (fun k => ns.contains k)).map (·.2.2.site)
+  | some i => (inp.evs P i).map fun ns => (v.liveSites i (fun k => ns.contains k) inp.isClock).map (·.2.2.site)
   | none => none
 
 /-- What the cascade of a step of the kind keeps (`Step.LiveOk`), where the kind bounds its own effects. -/
 def SymInput.LiveJ (P : List AnySite) (inp : SymInput v shs n) (a : Step.Acc v) : Prop :=
   ∀ i ns, eventDecl v = some i → inp.evs P i = some ns →
-    Step.LiveOk i (· ∈ ns) (v.liveSites i (fun k => ns.contains k)) a
+    Step.LiveOk i (· ∈ ns) (v.liveSites i (fun k => ns.contains k) inp.isClock) a
 
 end
 
@@ -179,7 +180,7 @@ theorem liveJ_run (hv : v.Reach P E) {inp : SymInput v shs n} {a : Step.Acc v} (
     (o : OwnEffectV v.event) (ho : o ∈ a.own) {a' : Step.Acc v} (h : Step.runOwn T a o = .ok a') : inp.LiveJ P a' := by
   intro i ns hi hns
   obtain ⟨hq, hc⟩ := evs_quiet hns
-  exact Step.liveOk_runOwn T (eventDecl_some hi).1 hq hc hv (fun k hk => List.elem_eq_true_of_mem hk)
+  exact Step.liveOk_runOwn T (eventDecl_some hi).1 hq hc hv (fun k => ⟨List.elem_eq_true_of_mem, List.mem_of_elem_eq_true⟩)
     (fun _ h => h) a (ha i ns hi hns) o ho h
 
 theorem liveJ_apply (hv : v.Reach P E) {inp : SymInput v shs n} (s : State v) (evs : List v.event.den0)
@@ -190,18 +191,18 @@ theorem liveJ_apply (hv : v.Reach P E) {inp : SymInput v shs n} (s : State v) (e
   obtain ⟨hq, hc⟩ := evs_quiet hns
   have hi15 := (eventDecl_some hi).1
   exact ⟨Step.applyEvents_ok T hi15 hq hc evs (hok i ns hi hns) _ (Step.accOk_start false s) h,
-    Step.applyEvents_live T hi15 hq hc hv (fun k hk => List.elem_eq_true_of_mem hk) (fun _ h => h) evs
+    Step.applyEvents_live T hi15 hq hc hv (fun k => ⟨List.elem_eq_true_of_mem, List.mem_of_elem_eq_true⟩) (fun _ h => h) evs
       (hok i ns hi hns) _ (fun _ h => by cases h) h⟩
 
-theorem liveJ_clock (hv : v.Reach P E) {inp : SymInput v shs n} (s : State v) (fuel : Nat) {s' : State v}
+theorem liveJ_clock (hv : v.Reach P E) {time : Term} (s : State v) (fuel : Nat) {s' : State v}
     {effs : List (Sender × EffectV v.event)} (hf : Step.fire s fuel = some (s', effs)) {a : Step.Acc v}
-    (h : Step.start { state := s' } effs = .ok a) : inp.LiveJ P a := by
+    (h : Step.start { state := s' } effs = .ok a) : (SymInput.clock (shs := shs) (slots := n) time).LiveJ P a := by
   intro i ns hi hns
   obtain ⟨hq, hc⟩ := evs_quiet hns
   have hi15 := (eventDecl_some hi).1
   exact ⟨Step.start_ok _ effs (Step.accOk_start false s') (Step.fire_ok hi15 hq hc _ _ hf) (fun h => by cases h) h,
     Step.start_queue _ _ h (fun _ h => by cases h)
-      (Step.fire_live hi15 hq hc hv (fun k hk => List.elem_eq_true_of_mem hk) (fun _ h => h) _ _ hf)⟩
+      (Step.fire_live hi15 hq hc hv (fun k => ⟨List.elem_eq_true_of_mem, List.mem_of_elem_eq_true⟩) (fun _ h => h) rfl _ _ hf)⟩
 
 theorem liveJ_command (hv : v.Reach P E) (k : Fin v.commands.length) {sc si : Term} (s : State v)
     (caller : (Ty.origin v.caller).den0) (input : (v.commands.get k).input.den0) {evs : List v.event.den0}
