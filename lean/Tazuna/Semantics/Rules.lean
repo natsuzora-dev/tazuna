@@ -55,13 +55,17 @@ inductive Illegal where
   its source. A send whose handle check cannot pin down (a handle passed as a value, or a function that makes more
   than one) is not checked here; running it without `Own` listed is `Fault.invalidEffect`. -/
   | callers
+  /-- A machine's `instances` gives a key at the initial records: the initial state holds no instance, and an instance
+  starts only when an event is applied, so the key would have no instance until the first event. Starting instances
+  at time 0 would need effects at time 0, before any input. -/
+  | initialInstances
 deriving Repr, DecidableEq
 
 namespace Illegal
 
 def all : List Illegal :=
   [wireName, owner, unknownSource, creates, wireType, stateType, bounds, scenario, rejection, machineKey, unknownHandle,
-    handleName, tableKey, response, tagLabel, callers]
+    handleName, tableKey, response, tagLabel, callers, initialInstances]
 
 theorem mem_all (k : Illegal) : k ∈ all := by cases k <;> simp [all]
 
@@ -82,6 +86,7 @@ def name : Illegal → String
   | response => "response"
   | tagLabel => "tagLabel"
   | callers => "callers"
+  | initialInstances => "initialInstances"
 
 end Illegal
 
@@ -418,6 +423,8 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) (c
     s.externals.flatMap fun x => x.declares.filterMap fun | .source n t => some (n, t) | _ => none
   let perService := s.services.flatMap fun v =>
     let requests := v.commands.map (·.name) ++ v.queries.map (·.name)
+    let inits := v.machines.filterMap fun m => if (m.instances.fn (v.init, ())).isEmpty then none else
+      some (Illegal.initialInstances, s!"{v.name}.{m.name}: instances gives keys at the initial records, but no instance runs before the first event; make the initial records give none")
     let wireNames := (duplicates requests ++ duplicates (v.sources.map (·.1))).map (fun n =>
       (Illegal.wireName, s!"{v.name}.{n} names more than one request or source")) ++
       if (v.subscribes.map fun sub => (sub.source, sub.name)).Nodup then [] else
@@ -481,7 +488,7 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) (c
         (Illegal.response, s!"{v.name}, response {n}: more than one response has this name")) ++
       v.responses.filterMap fun r => if r.within < 0 then
         some (Illegal.response, s!"{v.name}, response {r.name}: the within is negative") else none
-    wireNames ++ owners ++ wireTypes ++ stateTypes ++ unknown ++ rejections ++ keys ++ creates ++ negative ++ scenarioNames ++ perScenario ++
+    inits ++ wireNames ++ owners ++ wireTypes ++ stateTypes ++ unknown ++ rejections ++ keys ++ creates ++ negative ++ scenarioNames ++ perScenario ++
       tableKeys ++ responses
   let perExternal := s.externals.flatMap fun x =>
     let all := x.declares

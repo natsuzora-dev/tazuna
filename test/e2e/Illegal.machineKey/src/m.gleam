@@ -3,11 +3,11 @@ import tazuna
 import tazuna/bag
 
 pub type Records {
-  Records(open: List(Int))
+  Records(open: List(List(Int)))
 }
 
 pub type Event {
-  Opened(at: List(Int))
+  Opened(at: List(List(Int)))
 }
 
 pub type Phase {
@@ -23,7 +23,7 @@ fn apply(_r: Records, e: Event) -> Records {
 fn watch() -> tazuna.Machine(Records, Event) {
   tazuna.machine(
     name: "watch",
-    instances: fn(r: Records) { bag.from_list([r.open]) },
+    instances: fn(r: Records) { bag.from_list(r.open) },
     initial: Idle,
     on: fn(_c: tazuna.MachineCtx(List(Int), Phase, Records), _e: Event) {
       tazuna.Stay

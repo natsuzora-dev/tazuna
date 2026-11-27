@@ -138,6 +138,7 @@ def Ir.Illegal.means : Ir.Illegal → String
   | .response => docOf% Ir.Illegal.response
   | .callers => docOf% Ir.Illegal.callers
   | .tagLabel => docOf% Ir.Illegal.tagLabel
+  | .initialInstances => docOf% Ir.Illegal.initialInstances
 
 /-- A fault's line comes from test (at a scenario step) or verify (at a trace line). -/
 def FaultKind.explanation : FaultKind → Explanation

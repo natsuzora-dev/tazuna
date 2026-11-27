@@ -83,6 +83,8 @@ structure Checked (P : List AnySite) (E : List AnyEffectSite) (T : List TypeDecl
   requests : (v.commands.map (·.name) ++ v.queries.map (·.name)).Nodup
   /-- No two subscriptions name one source's event, so an event line picks one. -/
   subscriptions : (v.subscribes.map fun sub => (sub.source, sub.name)).Nodup
+  /-- No machine's `instances` gives a key at the initial records, which hold no instance. -/
+  idle : ∀ m ∈ v.machines, m.instances.fn (v.init, ()) = []
 
 theorem Checked.machines {P : List AnySite} {E : List AnyEffectSite} {T : List TypeDecl} {v : ServiceV}
     (hk : Checked P E T v) : ∀ m ∈ v.machines, m.Reach P E := hk.reach.machines
@@ -287,9 +289,10 @@ theorem check_ok {T : List TypeDecl} {P : List AnySite} {E : List AnyEffectSite}
   have hkeys := List.filterMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL (nilL hs))))))
   have hstate := List.filterMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL hs)))))))))
   have hwire := List.filterMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL hs))))))))))
-  have hnames := nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL hs))))))))))
+  have hnames := nilR (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL hs)))))))))))
+  have hinits := List.filterMap_eq_nil_iff.1 (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL hs))))))))))))
   refine ⟨hP, hreach v hv, fun m hm => ?_, fun q hq => ?_, ⟨?_, fun m hm => ?_⟩, ⟨?_, ?_, ?_, fun c hc => ?_⟩,
-    fun x hx => ?_, htys v hv, hok v hv, ?_, ?_⟩
+    fun x hx => ?_, htys v hv, hok v hv, ?_, ?_, fun m hm => ?_⟩
   · simpa using none_of_ite (hkeys m hm)
   · exact isFn_of_wire _ (none_of_ite (hwire (q.name ++ " output", q.output)
       (List.mem_append_left _ (List.mem_append_right _ (List.mem_flatMap.2 ⟨q, hq, by simp⟩)))))
@@ -317,6 +320,10 @@ theorem check_ok {T : List TypeDecl} {P : List AnySite} {E : List AnyEffectSite}
     split at h2
     · assumption
     · cases h2
+  · have h := hinits m hm
+    cases he : (m.instances.fn (v.init, ())).isEmpty
+    · simp [he] at h
+    · exact List.isEmpty_iff.1 he
 
 /-- A check with no finding names every handle by a literal and finds every external one declared. -/
 theorem handles_ok {T : List TypeDecl} {s : SpecV} {handles : List HandleSite} {captures : List (SiteId × List Ty)}
