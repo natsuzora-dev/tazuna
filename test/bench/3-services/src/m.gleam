@@ -47,9 +47,9 @@ fn put1() -> tazuna.Command(R1, E1, Caller, Int, Nil) {
     name: "put1",
     callers: [tazuna.Outside(User)],
     accepts: fn(k: Int) { [#("small key", k < 10)] },
-    decide: fn(c: Ctx(R1, Int, Caller)) { Ok([Put1(c.input, 1)]) },
+    decide: fn(c: Ctx(R1, Int, Caller)) { Ok([Put1(c.input, c.now + 10)]) },
     ensures: fn(c: Ctx(R1, Int, Caller), r: R1) {
-      [#("kept", table.get(r.items, c.input) == Some(1))]
+      [#("kept", table.get(r.items, c.input) == Some(c.now + 10))]
     },
   )
 }
@@ -87,10 +87,10 @@ fn watch1() -> tazuna.Machine(R1, E1) {
         _, _ -> tazuna.Stay
       }
     },
-    after: fn(c: tazuna.MachineCtx(Int, Phase, R1)) {
-      case c.state {
-        Waiting -> Some(tazuna.Timer(after: 10, enter: Pinging))
-        _ -> None
+    timer: fn(c: tazuna.TimerCtx(Int, Phase, R1)) {
+      case c.state, table.get(c.records.items, c.key) {
+        Waiting, Some(at) -> Some(tazuna.Timer(at: at, enter: Pinging))
+        _, _ -> None
       }
     },
     effect: fn(c: tazuna.MachineCtx(Int, Phase, R1)) {
@@ -121,11 +121,7 @@ fn again1() -> tazuna.Reaction(R1, E1) {
   tazuna.reaction(name: "again1", react: fn(_c: tazuna.ReactionCtx(R1), e: E1) {
     case e {
       Put1(k, _) -> [
-        tazuna.send_command(
-          command: bump1(),
-          input: k,
-          on_answer: fn(_a) { [] },
-        ),
+        tazuna.send_command(command: bump1(), input: k, on_answer: fn(_a) { [] }),
       ]
       _ -> []
     }
@@ -223,9 +219,9 @@ fn put2() -> tazuna.Command(R2, E2, Caller, Int, Nil) {
     name: "put2",
     callers: [tazuna.Outside(User)],
     accepts: fn(k: Int) { [#("small key", k < 10)] },
-    decide: fn(c: Ctx(R2, Int, Caller)) { Ok([Put2(c.input, 1)]) },
+    decide: fn(c: Ctx(R2, Int, Caller)) { Ok([Put2(c.input, c.now + 10)]) },
     ensures: fn(c: Ctx(R2, Int, Caller), r: R2) {
-      [#("kept", table.get(r.items, c.input) == Some(1))]
+      [#("kept", table.get(r.items, c.input) == Some(c.now + 10))]
     },
   )
 }
@@ -263,10 +259,10 @@ fn watch2() -> tazuna.Machine(R2, E2) {
         _, _ -> tazuna.Stay
       }
     },
-    after: fn(c: tazuna.MachineCtx(Int, Phase, R2)) {
-      case c.state {
-        Waiting -> Some(tazuna.Timer(after: 10, enter: Pinging))
-        _ -> None
+    timer: fn(c: tazuna.TimerCtx(Int, Phase, R2)) {
+      case c.state, table.get(c.records.items, c.key) {
+        Waiting, Some(at) -> Some(tazuna.Timer(at: at, enter: Pinging))
+        _, _ -> None
       }
     },
     effect: fn(c: tazuna.MachineCtx(Int, Phase, R2)) {
@@ -297,11 +293,7 @@ fn again2() -> tazuna.Reaction(R2, E2) {
   tazuna.reaction(name: "again2", react: fn(_c: tazuna.ReactionCtx(R2), e: E2) {
     case e {
       Put2(k, _) -> [
-        tazuna.send_command(
-          command: bump2(),
-          input: k,
-          on_answer: fn(_a) { [] },
-        ),
+        tazuna.send_command(command: bump2(), input: k, on_answer: fn(_a) { [] }),
       ]
       _ -> []
     }
@@ -399,9 +391,9 @@ fn put3() -> tazuna.Command(R3, E3, Caller, Int, Nil) {
     name: "put3",
     callers: [tazuna.Outside(User)],
     accepts: fn(k: Int) { [#("small key", k < 10)] },
-    decide: fn(c: Ctx(R3, Int, Caller)) { Ok([Put3(c.input, 1)]) },
+    decide: fn(c: Ctx(R3, Int, Caller)) { Ok([Put3(c.input, c.now + 10)]) },
     ensures: fn(c: Ctx(R3, Int, Caller), r: R3) {
-      [#("kept", table.get(r.items, c.input) == Some(1))]
+      [#("kept", table.get(r.items, c.input) == Some(c.now + 10))]
     },
   )
 }
@@ -439,10 +431,10 @@ fn watch3() -> tazuna.Machine(R3, E3) {
         _, _ -> tazuna.Stay
       }
     },
-    after: fn(c: tazuna.MachineCtx(Int, Phase, R3)) {
-      case c.state {
-        Waiting -> Some(tazuna.Timer(after: 10, enter: Pinging))
-        _ -> None
+    timer: fn(c: tazuna.TimerCtx(Int, Phase, R3)) {
+      case c.state, table.get(c.records.items, c.key) {
+        Waiting, Some(at) -> Some(tazuna.Timer(at: at, enter: Pinging))
+        _, _ -> None
       }
     },
     effect: fn(c: tazuna.MachineCtx(Int, Phase, R3)) {
@@ -473,11 +465,7 @@ fn again3() -> tazuna.Reaction(R3, E3) {
   tazuna.reaction(name: "again3", react: fn(_c: tazuna.ReactionCtx(R3), e: E3) {
     case e {
       Put3(k, _) -> [
-        tazuna.send_command(
-          command: bump3(),
-          input: k,
-          on_answer: fn(_a) { [] },
-        ),
+        tazuna.send_command(command: bump3(), input: k, on_answer: fn(_a) { [] }),
       ]
       _ -> []
     }

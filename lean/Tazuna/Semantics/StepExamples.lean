@@ -2,8 +2,8 @@ import Tazuna.Semantics.Builtin
 import Tazuna.Semantics.Step
 
 /-! One example per step rule, on a small service: the records are a running total, a command adds a positive amount
-below 100, the total stays under 50, and a machine waits 10 ms after the total first moves, then pings an external
-whose answer adds 1. -/
+below 100, the total stays under 50, and a machine that the total's moves bring to state 1 waits for its timer at 10 ms,
+then pings an external whose answer adds 1. -/
 
 namespace Tazuna.Ir.StepExamples
 
@@ -32,6 +32,10 @@ private def iteE {Γ : List Ty} {r : Ty} (c : Expr [] Γ Ty.bool) (a b : Expr []
 /-- A field of the machine context `MachineCtx(key, state, records, now)`. -/
 private def mctxE {Γ : List Ty} {k st r : Ty} (label : String) (n : Fin 4) (x : Expr [] Γ (Ty.machineCtx k st r)) :
     Expr [] Γ ([k, st, r, .int].get n) :=
+  .field label n.val (by intro fs h; simp at h; subst h; simp) x
+/-- A field of the timer context `TimerCtx(key, state, records)`. -/
+private def tctxE {Γ : List Ty} {k st r : Ty} (label : String) (n : Fin 3) (x : Expr [] Γ (Ty.timerCtx k st r)) :
+    Expr [] Γ ([k, st, r].get n) :=
   .field label n.val (by intro fs h; simp at h; subst h; simp) x
 private def enterE {Γ : List Ty} {st : Ty} (x : Expr [] Γ st) : Expr [] Γ (Ty.next st) :=
   .ctor (vs := [[], [st]]) ⟨1, by simp⟩ (.cons x .nil)
@@ -65,7 +69,7 @@ def watch : MachineV .int .int :=
       (.cons (iteE (.bin .lt (.int 0) (.var .here)) (.list (.cons (.int 0) .nil)) (.list .nil)) .nil))),
     initial := (0 : Int),
     on := .closed (.lam (enterE (.bin .add (mctxE "state" 1 (.var .here)) (.int 1)))),
-    after := .closed (.lam (iteE (.bin (.eq rfl) (mctxE "state" 1 (.var .here)) (.int 1)) (timerE 10 (.int 5)) noTimerE)),
+    timer := .closed (.lam (iteE (.bin (.eq rfl) (tctxE "state" 1 (.var .here)) (.int 1)) (timerE 10 (.int 5)) noTimerE)),
     effect := .closed (.lam (iteE (.bin (.eq rfl) (mctxE "state" 1 (.var .here)) (.int 5)) (someE pingE) noneE)),
     invariants := .closed (.lam (.list .nil)) }
 
@@ -121,9 +125,10 @@ def after (s : State svc) (is : List (Input svc)) : State svc := (run prelude sv
 #guard summary (after s0 [cmd 1 5]) (.query ⟨0, by decide⟩ (1 : Int) (0 : Int)) == "answered"
 -- A peer event arrives as one of the service's events.
 #guard I (after s0 [.event ⟨0, by decide⟩ (7 : Int)]).records == 7
--- The first event starts the machine's instance; the next enters state 1, which sets a timer for 10 ms later.
-#guard (after s0 [cmd 1 5]).machines.toSigma.map (·.2.map (·.timer.isSome)) == [[false]]
-#guard (after s0 [cmd 1 5, cmd 1 1]).machines.toSigma.map (·.2.map (·.timer.map (·.1))) == [[some 10]]
+-- The first event starts the machine's instance; the next enters state 1, which waits for the timer at 10 ms.
+#guard let s := after s0 [cmd 1 5]; s.machines.toSigma.map (·.2.map fun i => (timerOf s.records i).isSome) == [[false]]
+#guard let s := after s0 [cmd 1 5, cmd 1 1]
+  s.machines.toSigma.map (·.2.map fun i => (timerOf s.records i).map (·.1)) == [[some 10]]
 -- A clock line before the deadline fires nothing; at it, the instance enters 5, whose effect sends a request.
 #guard (step prelude svc (after s0 [cmd 1 5, cmd 1 1]) (.clock 9)).out.length == 0
 #guard (step prelude svc (after s0 [cmd 1 5, cmd 1 1]) (.clock 10)).out.map (·.name) == ["ping"]
@@ -229,7 +234,7 @@ private def askKeyE {Γ : List Ty} (key : Expr [] Γ .int) : Expr [] Γ (.dsl .e
       (.cons key (.cons (keptE 9 (.lam (.list .nil))) .nil)))
 def perKey : MachineV (.bag .int) .int :=
   { name := "perKey", key := .int, state := .int, instances := .closed (.lam (.var .here)), initial := (0 : Int),
-    on := .closed (.lam (enterE (.int 1))), after := .closed (.lam noTimerE),
+    on := .closed (.lam (enterE (.int 1))), timer := .closed (.lam noTimerE),
     effect := .closed (.lam (someE (askKeyE (mctxE "key" 0 (.var .here))))),
     invariants := .closed (.lam (.list .nil)) }
 def keyed : ServiceV :=

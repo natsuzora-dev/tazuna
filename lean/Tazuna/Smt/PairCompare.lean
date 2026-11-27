@@ -101,17 +101,10 @@ theorem rel0_of_eqFn {t : Ty} (hd : t.isData = true) (hc : t.comparable = true) 
   exact Ty.rel0_deq_right hc (Ty.rel0_refl t hc x) he
 
 /-- An instance from related table entries. -/
-theorem instOf_rel {r e : Ty} {m : MachineV r e} {R : PBij} {k k' : m.key.den0} {x x' : (instEntry m.state).den0}
-    (hk : Ty.rel0 R m.key k k') (hx : Ty.rel0 R (instEntry m.state) x x') :
+theorem instOf_rel {r e : Ty} {m : MachineV r e} {R : PBij} {k k' : m.key.den0} {x x' : m.state.den0}
+    (hk : Ty.rel0 R m.key k k') (hx : Ty.rel0 R m.state x x') :
     Step.Instance.Rel R (instOf m k x) (instOf m k' x') := by
-  obtain ⟨s, t, u⟩ := x
-  obtain ⟨s', t', u'⟩ := x'
-  obtain ⟨hs, ht, -⟩ := hx
-  refine ⟨hk, hs, ?_⟩
-  match t, t', ht with
-  | .inl ((_, _, ()), ()), .inl ((_, _, ()), ()), h => exact .some ⟨h.1.1, h.1.2.1⟩
-  | .inr (.inl ()), .inr (.inl ()), _ => exact .none
-  | .inl _, .inr _, h | .inr _, .inl _, h => exact h.elim
+  exact ⟨hk, hx⟩
 
 theorem keysDistinct_instancesOf {r e : Ty} (m : MachineV r e) (tbl : m.table.den0) :
     Step.KeysDistinct (instancesOf T m tbl) := by

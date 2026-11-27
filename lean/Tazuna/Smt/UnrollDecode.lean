@@ -651,9 +651,9 @@ theorem initTables_rel : (ms : List (MachineV v.records v.event)) → {xs : PerM
       obtain ⟨rest, hrest, rfl⟩ := map_some.1 h
       refine ⟨⟨⟨[], List.Pairwise.nil⟩, ?_, by simp [instancesOf]⟩, initTables_rel ms hrest⟩
       have hnil : (Ty.up m.table m.table_data ⟨[], List.Pairwise.nil⟩).1 = [] := by
-        have := Ty.up_table_length m.key (instEntry m.state) m.table_data ⟨[], List.Pairwise.nil⟩
+        have := Ty.up_table_length m.key m.state m.table_data ⟨[], List.Pairwise.nil⟩
         exact List.eq_nil_of_length_eq_zero this
-      obtain ⟨rfl, rfl⟩ : m.key = k ∧ instEntry m.state = w := by
+      obtain ⟨rfl, rfl⟩ : m.key = k ∧ m.state = w := by
         simp only [MachineV.table, Ty.table.injEq] at hm; exact hm
       refine dataT_rel m.table _ t ?_
       simp only [MachineV.table, dataT] at hnil ⊢

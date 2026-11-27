@@ -84,7 +84,7 @@ The line exits 0, like a compiler warning, because a defensive branch may be mea
 Two kinds of line check that no outcome depends on the order in which the semantics runs own steps and timers ([Concepts](concepts.md#the-spec-writes-every-order)):
 
 - A pair line, `<first> and <second> commute`, asks for a state and two waiting own effects whose two orders end differently, with each effect keeping the ids it made.
-- A timer line, `timers of <machine> fire forward`, asks whether the machine's `after` can set a timer before the current time.
+- A timer line, `timers of <machine> fire forward`, asks whether the state a timer of the machine enters can wait for a timer before the one that fired. A timer is read off the instance's state and the records, so the question has no time in it.
 
 `run_lines` (T5): take a run from the initial state whose inputs satisfy `validInputs`, and a cascade that one of its steps starts at a state and an input within the slots.
 Where every state the cascade reaches in any order fits the slots, and every step line and pair line reads proved or within the bounds, every order of the cascade ends as the semantics' order does, up to renaming the ids the cascade made, or both orders fault.
@@ -96,7 +96,7 @@ A pair line's `widened` names an own kind that a send with no handle or `on_answ
 A violated pair or timer line rests on these theorems:
 
 - `pair_violates`: a pair's counterexample shows that the pair does not commute. Either one order faults or disables the other step and the other order does not, or both orders finish and no renaming of the ids the pair made gives them the same data. Lean searches every such renaming, both counters kept or swapped and each wire id the pair made mapped one to one onto the other order's, so finding none means none exists.
-- `timer_violates`: a timer line's counterexample is a context whose `after` sets a timer before the current time.
+- `timer_violates`: a timer line's counterexample is an instance and records whose timer enters a state that waits for an earlier timer.
 
 ## prove: responses (T7)
 
@@ -108,7 +108,7 @@ A `within 0` response is first asked in one step: whether a step of each input k
 Otherwise `prove` searches the runs from the initial state of 1 to `steps` inputs for one that violates the response, and the line reads:
 
 - `Prove.violated`: `response_sound`: the run's inputs satisfy `validInputs`, its clock lines are timely, and it violates the response.
-- `Prove.withinBounds`: `response_within` (T7), at each depth up to `steps`: no run of that many inputs within the slots, on which the line's `assumes` hold and at whose events the response's functions fit the slots, violates it.
+- `Prove.withinBounds`: `response_within` (T7), at each depth up to `steps`: no run of that many inputs within the slots, on which the line's `assumes` hold, at whose events the response's functions fit the slots and at whose clock lines every `timer` fits them, violates it.
 
 A response is judged per step, so a `then` event in the same step as its trigger counts.
 

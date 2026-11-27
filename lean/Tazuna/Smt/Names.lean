@@ -266,18 +266,8 @@ variable {M : Model} {L : Layout} {T : List TypeDecl} {N : Nat} {r e : Ty}
 
 theorem instance_self {m : MachineV r e} (hk : m.key.comparable = true) (hs : m.state.comparable = true)
     {i j : Step.Instance m} (h : Step.Instance.Rel (PBij.below N) i j) : Step.Instance.Rel (PBij.below N) i i := by
-  obtain ⟨h1, h2, h3⟩ := h
-  have ht : ∀ {a b : Option (Int × m.state.den0)},
-      Option.Rel (fun a b => a.1 = b.1 ∧ Ty.rel0 (PBij.below N) m.state a.2 b.2) a b →
-      Option.Rel (fun a b => a.1 = b.1 ∧ Ty.rel0 (PBij.below N) m.state a.2 b.2) a a := by
-    intro a b h
-    cases h with
-    | none => exact .none
-    | some hab => exact .some ⟨rfl, Ty.self_of_below (PBij.below_fixes N) _ hs hab.2⟩
-  exact ⟨Ty.self_of_below (PBij.below_fixes N) _ hk h1, Ty.self_of_below (PBij.below_fixes N) _ hs h2, ht h3⟩
-
-theorem instEntry_comparable {st : Ty} (hs : st.comparable = true) : (instEntry st).comparable = true := by
-  simp [instEntry, Ty.option, Ty.comparable, Ty.comparables, Ty.comparabless, hs]
+  obtain ⟨h1, h2⟩ := h
+  exact ⟨Ty.self_of_below (PBij.below_fixes N) _ hk h1, Ty.self_of_below (PBij.below_fixes N) _ hs h2⟩
 
 /-- A table whose instances keep their names below `N` keeps them itself. -/
 theorem table_self {m : MachineV r e} (hk : m.key.comparable = true) (hs : m.state.comparable = true)
@@ -285,12 +275,8 @@ theorem table_self {m : MachineV r e} (hk : m.key.comparable = true) (hs : m.sta
     Ty.rel0 (PBij.below N) m.table tbl tbl := by
   have hi := (multi_self_iff (fun _ _ h => instance_self hk hs h)).1 h.1
   refine Multi.of_forall2 (forall2_refl_of fun e he => ?_)
-  obtain ⟨h1, h2, h3⟩ := hi (instOf m e.1 e.2) (List.mem_mergeSort.2 (List.mem_map_of_mem he))
-  obtain ⟨k, st, t, ⟨⟩⟩ := e
-  refine ⟨h1, h2, ?_, trivial⟩
-  match t, h3 with
-  | .inl ((_, _, ()), ()), .some hab => exact ⟨⟨rfl, hab.2, trivial⟩, trivial⟩
-  | .inr (.inl ()), _ => trivial
+  obtain ⟨h1, h2⟩ := hi (instOf m e.1 e.2) (List.mem_mergeSort.2 (List.mem_map_of_mem he))
+  exact ⟨h1, h2⟩
 
 variable {n : Term} {v : ServiceV} (hn : n.denote M = .int (N : Int))
 include hn
@@ -310,7 +296,7 @@ theorem machines_names : (ms : List (MachineV v.records v.event)) →
     have hm := hc m (List.mem_cons_self ..)
     have htc : m.table.comparable = true := by
       simp only [MachineV.table, Ty.comparable, Bool.and_eq_true]
-      exact ⟨hm.1, instEntry_comparable hm.2⟩
+      exact ⟨hm.1, hm.2⟩
     subst hi
     rw [holds_and]
     exact ⟨(names_rel0 hn htc h1 ht).2 (table_self hm.1 hm.2 tbl hrel),

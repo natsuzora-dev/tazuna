@@ -103,8 +103,9 @@ pub type Next(state) {
   Enter(state)
 }
 
+/// A timer an instance waits for: a clock line at or after `at` enters the state `enter`.
 pub type Timer(state) {
-  Timer(after: Duration, enter: state)
+  Timer(at: Instant, enter: state)
 }
 
 pub type MachineCtx(key, state, records) {
@@ -131,6 +132,11 @@ pub type Origin(caller) {
 /// What `apply` sees: the records before the event, and the time of the step that applies it.
 pub type ApplyCtx(records) {
   ApplyCtx(records: records, now: Instant)
+}
+
+/// What `timer` sees of one instance: its key and state and the records, but no time, so a timer it gives cannot move on with the clock.
+pub type TimerCtx(key, state, records) {
+  TimerCtx(key: key, state: state, records: records)
 }
 
 /// A point in time, in milliseconds.
@@ -206,13 +212,13 @@ pub fn query(
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// A machine: one instance per key in `instances`, starting at `initial` when its key appears; `on` reacts to each event with `Stay` or `Enter`, and a due timer enters its state on a clock line. Each entry into a state, the start included, sets the timer `after` gives and runs `effect` once; `Stay` runs neither, and `Enter` of the current state enters it again. A machine's instances react, start and fire in Erlang term order of their keys, so the key type is Int, String, Date, Id, Bool, an enumeration, or a tuple or one-variant record of these.
+/// A machine: one instance per key in `instances`, starting at `initial` when its key appears; `on` reacts to each event with `Stay` or `Enter`. `timer` gives the timer an instance waits for, read off its state and the records: a clock line at or after the timer's `at` enters its state. `timer` sees no time, so a deadline is a time the records keep, which `apply` writes. Each entry into a state, the start included, runs `effect` once; `Stay` runs nothing, and `Enter` of the current state runs it again. A machine's instances react, start and fire in Erlang term order of their keys, so the key type is Int, String, Date, Id, Bool, an enumeration, or a tuple or one-variant record of these.
 pub fn machine(
   name _name: String,
   instances _instances: fn(records) -> Bag(key),
   initial _initial: state,
   on _on: fn(MachineCtx(key, state, records), event) -> Next(state),
-  after _after: fn(MachineCtx(key, state, records)) -> Option(Timer(state)),
+  timer _timer: fn(TimerCtx(key, state, records)) -> Option(Timer(state)),
   effect _effect: fn(MachineCtx(key, state, records)) -> Option(Effect(event)),
   invariants _invariants: fn(MachineCtx(key, state, records)) -> Rules,
 ) -> Machine(records, event) {
@@ -752,7 +758,7 @@ pub const kept = [
   #("tazuna.query", 3, "resolve"),
   #("tazuna.machine", 1, "instances"),
   #("tazuna.machine", 3, "on"),
-  #("tazuna.machine", 4, "after"),
+  #("tazuna.machine", 4, "timer"),
   #("tazuna.machine", 5, "effect"),
   #("tazuna.machine", 6, "invariants"),
   #("tazuna.reaction", 1, "react"),

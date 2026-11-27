@@ -123,7 +123,7 @@ structure MachineV (r e : Ty) where
   instances : Fun (Ty.fn [r] (.bag key))
   initial : state.den0
   on : Fun (Ty.fn [Ty.machineCtx key state r, e] (Ty.next state))
-  after : Fun (Ty.fn [Ty.machineCtx key state r] (Ty.option (Ty.timer state)))
+  timer : Fun (Ty.fn [Ty.timerCtx key state r] (Ty.option (Ty.timer state)))
   effect : EffectFun [Ty.machineCtx key state r] (Ty.option (.dsl .effect [e]))
   invariants : Fun (Ty.fn [Ty.machineCtx key state r] Ty.rules)
 

@@ -291,10 +291,9 @@ namespace Step
 section Rel
 variable {r e : Ty}
 
-/-- Instances related by `R`: their keys, states and timers. -/
+/-- Instances related by `R`: their keys and states. -/
 def Instance.Rel (R : PBij) {m : MachineV r e} (i j : Instance m) : Prop :=
-  Ty.rel0 R m.key i.key j.key ∧ Ty.rel0 R m.state i.state j.state ∧
-    Option.Rel (fun a b => a.1 = b.1 ∧ Ty.rel0 R m.state a.2 b.2) i.timer j.timer
+  Ty.rel0 R m.key i.key j.key ∧ Ty.rel0 R m.state i.state j.state
 
 /-- No key twice among a machine's instances. -/
 def KeysDistinct {m : MachineV r e} (l : List (Instance m)) : Prop :=
@@ -626,15 +625,21 @@ theorem broken_rel : {xs ys : Ty.rules.den0} → Ty.rel0 R Ty.rules xs ys → br
     rw [toB_rel hb]
   | [], _ :: _, h | _ :: _, [], h => h.elim
 
-theorem timerAt_rel {st : Ty} (now : Int) {x y : (Ty.option (Ty.timer st)).den0}
+theorem timerVal_rel {st : Ty} {x y : (Ty.option (Ty.timer st)).den0}
     (h : Ty.rel0 R (Ty.option (Ty.timer st)) x y) :
-    Option.Rel (fun a b => a.1 = b.1 ∧ Ty.rel0 R st a.2 b.2) (timerAt now x) (timerAt now y) := by
+    Option.Rel (fun a b => a.1 = b.1 ∧ Ty.rel0 R st a.2 b.2) (timerVal x) (timerVal y) := by
   match x, y, h with
   | .inl (.inl (d, t, ()), ()), .inl (.inl (d', t', ()), ()), ⟨⟨hd, ht, _⟩, _⟩ =>
     have hd : d = d' := hd
     subst hd
     exact .some ⟨rfl, ht⟩
   | .inr _, .inr _, _ => exact .none
+
+/-- Related keys, states and records wait for timers with the same deadline and related states. -/
+theorem timerAt_rel {m : MachineV r e} (hm : m.Equi) {records records' : r.den0} (hrec : Ty.rel0 R r records records')
+    {k k' : m.key.den0} (hk : Ty.rel0 R m.key k k') {st st' : m.state.den0} (hst : Ty.rel0 R m.state st st') :
+    Option.Rel (fun a b => a.1 = b.1 ∧ Ty.rel0 R m.state a.2 b.2) (m.timerAt records k st) (m.timerAt records' k' st') :=
+  timerVal_rel ((hm.self R).timer _ _ ⟨⟨hk, hst, hrec, trivial⟩, trivial⟩)
 
 theorem enter_rel {m : MachineV r e} (hm : m.Equi) {records records' : r.den0} (hrec : Ty.rel0 R r records records')
     (now : Int) {k k' : m.key.den0} (hk : Ty.rel0 R m.key k k') {st st' : m.state.den0}
@@ -643,7 +648,7 @@ theorem enter_rel {m : MachineV r e} (hm : m.Equi) {records records' : r.den0} (
       Forall2 (Started.Rel R) (enter m records now k st).2 (enter m records' now k' st').2 := by
   have hctx : Ty.rel0 R (.tuple [Ty.machineCtx m.key m.state r]) (.inl (k, st, records, now, ()), ())
       (.inl (k', st', records', now, ()), ()) := ⟨⟨hk, hst, hrec, rfl, trivial⟩, trivial⟩
-  refine ⟨⟨hk, hst, timerAt_rel now ((hm.self R).after _ _ hctx)⟩, ?_⟩
+  refine ⟨⟨hk, hst⟩, ?_⟩
   have he := hm.effect R hctx
   simp only [enter]
   unfold MachineV.effectAt
@@ -691,7 +696,7 @@ theorem reactKey_rel {m : MachineV r e} (hm : m.Equi) {insts insts' : List (Inst
   | @some i i' hi =>
     dsimp only
     have hon := (hm.self R).on (.inl (i.key, i.state, records, now, ()), ev, ()) (.inl (i'.key, i'.state, records', now, ()), ev', ())
-      ⟨⟨hi.1, hi.2.1, hrec, rfl, trivial⟩, hev, trivial⟩
+      ⟨⟨hi.1, hi.2, hrec, rfl, trivial⟩, hev, trivial⟩
     revert hon
     generalize m.on.fn (.inl (i.key, i.state, records, now, ()), ev, ()) = x
     generalize m.on.fn (.inl (i'.key, i'.state, records', now, ()), ev', ()) = y
@@ -1000,15 +1005,8 @@ variable {r e : Ty}
 
 theorem Instance.rel_inv {R : PBij} {m : MachineV r e} {i j : Instance m} (h : Instance.Rel R i j) :
     Instance.Rel R.inv j i := by
-  obtain ⟨hk, hs, ht⟩ := h
-  refine ⟨Ty.rel0_inv.1 hk, Ty.rel0_inv.1 hs, ?_⟩
-  revert ht
-  generalize i.timer = x
-  generalize j.timer = y
-  intro ht
-  cases ht with
-  | none => exact .none
-  | some h => exact .some ⟨h.1.symm, Ty.rel0_inv.1 h.2⟩
+  obtain ⟨hk, hs⟩ := h
+  exact ⟨Ty.rel0_inv.1 hk, Ty.rel0_inv.1 hs⟩
 
 theorem Machines.rel_inv {R : PBij} : {ms : List (MachineV r e)} → {l l' : Machines ms} → Machines.Rel R l l' →
     Machines.Rel R.inv l' l

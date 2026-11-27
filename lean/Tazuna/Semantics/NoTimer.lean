@@ -1,8 +1,8 @@
 import Tazuna.Semantics.Interleave
 
-/-! Machines whose `after` never sets a timer, read off the definition. Such a machine fires forward by itself
+/-! Machines whose `timer` never gives a timer, read off the definition. Such a machine fires forward by itself
 (`timerForward_of_noTimer`), so prove asks its timer question only of the other machines. The reading is syntactic and
-errs one way: `after` written as a constructor of `None`, or a `let` or `case` whose bodies all are, never sets a
+errs one way: `timer` written as a constructor of `None`, or a `let` or `case` whose bodies all are, never sets a
 timer; anything else (a call, a global, a variable) is read as one that may. -/
 
 namespace Tazuna.Ir
@@ -69,43 +69,47 @@ namespace Step
 
 variable {r e : Ty}
 
-/-- Whether the machine's `after`, read off its definition, never sets a timer. -/
+/-- Whether the machine's `timer`, read off its definition, never gives a timer. -/
 def _root_.Tazuna.Ir.MachineV.noTimer (m : MachineV r e) : Bool :=
-  match m.after.body with
+  match m.timer.body with
   | .lam b => b.laterVariant
   | _ => false
 
-/-- A machine whose `after` never sets a timer fires forward. -/
-theorem timerForward_of_noTimer {m : MachineV r e} (h : m.noTimer = true) : TimerForward m := by
-  intro records now key st x hx
-  exfalso
-  revert hx
+/-- A machine whose `timer` never gives a timer has none at any key, state and records. -/
+theorem timerAt_of_noTimer {m : MachineV r e} (h : m.noTimer = true) (records : r.den0) (key : m.key.den0)
+    (st : m.state.den0) : m.timerAt records key st = none := by
   unfold MachineV.noTimer at h
-  have hall := m.after.ht
+  have hall := m.timer.ht
   simp only [Ty.isData, Ty.isDatas, Bool.and_eq_true] at hall
   have hr : (Ty.option (Ty.timer m.state)).isData = true := hall.2
-  have hps : (Ty.tuple [Ty.machineCtx m.key m.state r]).isData = true := by
+  have hps : (Ty.tuple [Ty.timerCtx m.key m.state r]).isData = true := by
     simp only [Ty.isData, Ty.isDatas, Bool.and_eq_true]; exact ⟨hall.1.1, trivial⟩
-  have hup := Ty.up_fn _ _ m.after.ht hps hr m.after.fn (.inl (key, st, records, now, ()), ())
+  have hup := Ty.up_fn _ _ m.timer.ht hps hr m.timer.fn (.inl (key, st, records, ()), ())
   conv at hup => lhs; rw [Fun.fn, Ty.up_down, Fun.eval]
   split at h
   next b hb =>
-    have hl := b.laterVariant_eval m.after.defs m.after.defs.eval h
-      (Dens.append (Ty.up _ hps (.inl (key, st, records, now, ()), ())) (Ty.up _ m.after.hΓ m.after.env))
-    have he : Expr.eval m.after.defs m.after.defs.eval m.after.body (Ty.up _ m.after.hΓ m.after.env)
-        (Ty.up _ hps (.inl (key, st, records, now, ()), ())) =
-        Expr.eval m.after.defs m.after.defs.eval b
-          (Dens.append (Ty.up _ hps (.inl (key, st, records, now, ()), ())) (Ty.up _ m.after.hΓ m.after.env)) := by
+    have hl := b.laterVariant_eval m.timer.defs m.timer.defs.eval h
+      (Dens.append (Ty.up _ hps (.inl (key, st, records, ()), ())) (Ty.up _ m.timer.hΓ m.timer.env))
+    have he : Expr.eval m.timer.defs m.timer.defs.eval m.timer.body (Ty.up _ m.timer.hΓ m.timer.env)
+        (Ty.up _ hps (.inl (key, st, records, ()), ())) =
+        Expr.eval m.timer.defs m.timer.defs.eval b
+          (Dens.append (Ty.up _ hps (.inl (key, st, records, ()), ())) (Ty.up _ m.timer.hΓ m.timer.env)) := by
       rw [hb]; rfl
     rw [← he, hup] at hl
-    generalize m.after.fn (.inl (key, st, records, now, ()), ()) = y at hl ⊢
+    unfold MachineV.timerAt
+    generalize m.timer.fn (.inl (key, st, records, ()), ()) = y at hl ⊢
     rcases y with y | y
     · have hfs : (Ty.tuple [Ty.timer m.state]).isData = true := by
         simp only [Ty.option, Ty.isData, Ty.isDatass, Ty.isDatas, Bool.and_eq_true] at hr ⊢; exact ⟨hr.1.1, trivial⟩
       erw [Ty.up_inl 3 _ _ _ hr hfs] at hl
       exact (hl rfl).elim
-    · simp [timerAt]
+    · simp [timerVal]
   · simp at h
+
+/-- A machine whose `timer` never gives a timer fires forward. -/
+theorem timerForward_of_noTimer {m : MachineV r e} (h : m.noTimer = true) : TimerForward m := by
+  intro records key st x hx
+  simp [timerAt_of_noTimer h records key st] at hx
 
 end Step
 

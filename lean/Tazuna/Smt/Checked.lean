@@ -152,8 +152,8 @@ theorem Checked.machinesComparable {P : List AnySite} {E : List AnyEffectSite} {
   have h := hk.stateTys
   simp only [ServiceV.stateTys, Bool.and_eq_true, List.all_eq_true] at h
   have hm' := (h.1.1.1.2 m hm)
-  simp only [MachineV.table, instEntry, Ty.embeddable, Ty.embeddables, Bool.and_eq_true] at hm'
-  exact comparable_of_embeddable _ hm'.1.2.1
+  simp only [MachineV.table, Ty.embeddable, Bool.and_eq_true] at hm'
+  exact comparable_of_embeddable _ hm'.1.2
 
 /-- The handle has a literal name, and an external one is declared in each service's `declared`, as check's
 unknownHandle rule compares them. -/

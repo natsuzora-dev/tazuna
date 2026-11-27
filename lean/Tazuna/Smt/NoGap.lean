@@ -2532,7 +2532,7 @@ theorem root_query {q : QueryV v.records v.caller} (hq : q ∈ v.queries) :
   exact ⟨.inr (.inr (.inr (.inl ⟨q, hq, .inl rfl⟩))), .inr (.inr (.inr (.inl ⟨q, hq, .inr rfl⟩)))⟩
 
 theorem root_machine {m : MachineV v.records v.event} (hm : m ∈ v.machines) :
-    m.instances.uses ∈ rootUses v ∧ m.on.uses ∈ rootUses v ∧ m.after.uses ∈ rootUses v ∧
+    m.instances.uses ∈ rootUses v ∧ m.on.uses ∈ rootUses v ∧ m.timer.uses ∈ rootUses v ∧
       m.invariants.uses ∈ rootUses v ∧ m.effect.uses ∈ rootUses v := by
   simp only [rootUses, List.mem_append, List.mem_cons, List.mem_flatMap, List.not_mem_nil, or_false, or_assoc]
   exact ⟨.inr (.inr (.inr (.inr (.inl ⟨m, hm, .inl rfl⟩)))), .inr (.inr (.inr (.inr (.inl ⟨m, hm, .inr (.inl rfl)⟩)))),

@@ -3,7 +3,7 @@ import tazuna.{type Ctx, type Id, type QueryCtx}
 import tazuna/bag
 
 pub type Records {
-  Records(total: Int)
+  Records(total: Int, moved_at: Int)
 }
 
 pub type Event {
@@ -33,7 +33,11 @@ fn send() -> tazuna.ExternalCommand(Int, Nil, Nil) {
 fn apply(ctx: tazuna.ApplyCtx(Records), e: Event) -> Records {
   let r = ctx.records
   case e {
-    Added(n) -> Records(total: r.total + n)
+    Added(n) ->
+      Records(total: r.total + n, moved_at: case r.total {
+        0 -> ctx.now
+        _ -> r.moved_at
+      })
     Tagged(_) | Pinged -> r
   }
 }
@@ -78,9 +82,10 @@ fn watch() -> tazuna.Machine(Records, Event) {
         _, _ -> tazuna.Stay
       }
     },
-    after: fn(c: tazuna.MachineCtx(Int, Phase, Records)) {
+    timer: fn(c: tazuna.TimerCtx(Int, Phase, Records)) {
       case c.state {
-        Waiting -> Some(tazuna.Timer(after: 10, enter: Pinging))
+        Waiting ->
+          Some(tazuna.Timer(at: c.records.moved_at + 10, enter: Pinging))
         _ -> None
       }
     },
@@ -109,7 +114,7 @@ fn watch() -> tazuna.Machine(Records, Event) {
 fn counter() -> tazuna.Service {
   tazuna.service(
     name: "counter",
-    init: Records(total: 0),
+    init: Records(total: 0, moved_at: 0),
     apply: apply,
     subscribes: [],
     declares: [tazuna.declare_command(add()), tazuna.declare_query(total())],
@@ -134,11 +139,7 @@ fn again() -> tazuna.Reaction(Records, Event) {
     react: fn(_c: tazuna.ReactionCtx(Records), e: Event) {
       case e {
         Added(_) -> [
-          tazuna.send_command(
-            command: add(),
-            input: 1,
-            on_answer: fn(_a) { [] },
-          ),
+          tazuna.send_command(command: add(), input: 1, on_answer: fn(_a) { [] }),
         ]
         _ -> []
       }

@@ -129,6 +129,7 @@ variable {L : Layout} {P : List AnySite} {ds : List (String × DeclaredV)} {H : 
 structure MachineGot (L : Layout) (m : MachineV r e) : Prop where
   table : Got L m.table
   ctx : Avail L (Ty.machineCtx m.key m.state r)
+  tctx : Avail L (Ty.timerCtx m.key m.state r)
   next : Got L (Ty.next m.state)
   timer : Got L (Ty.option (Ty.timer m.state))
   bag : Got L (.bag m.key)
@@ -144,7 +145,7 @@ structure MachineCodes (L : Layout) (P : List AnySite) (ds : List (String × Dec
     (m : MachineV r e) : Prop where
   instances : Sound (fun p => CodeOk L P ds H _ p.1) (m.instances.code L)
   on : Sound (fun p => CodeOk L P ds H _ p.1) (m.on.code L)
-  after : Sound (fun p => CodeOk L P ds H _ p.1) (m.after.code L)
+  timer : Sound (fun p => CodeOk L P ds H _ p.1) (m.timer.code L)
   effect : Sound (fun p => CodeOk L P ds H _ p.1) (m.effect.code L)
   invariants : Sound (fun p => CodeOk L P ds H _ p.1) (m.invariants.code L)
 
@@ -158,22 +159,16 @@ variable {m : MachineV r e} (h : MachineGot L m)
 include h
 
 theorem key : Got L m.key := (got_table h.table).1
-theorem entry : Got L (instEntry m.state) := (got_table h.table).2.1
-theorem timerEntry : Got L (Ty.option (.tuple [.int, m.state])) := got_tuple h.entry _ (by simp)
-theorem due : Got L (.tuple [.int, m.state]) := got_adt h.timerEntry ⟨0, by simp⟩ _ (by simp)
+theorem entry : Got L m.state := (got_table h.table).2.1
 theorem timerOne : Got L (Ty.timer m.state) := got_adt h.timer ⟨0, by simp⟩ _ (by simp)
-theorem table_find : (L.find? m.table).isSome = true ∧ (L.find? (.tuple [Ty.bool, m.key, instEntry m.state])).isSome = true :=
+theorem table_find : (L.find? m.table).isSome = true ∧ (L.find? (.tuple [Ty.bool, m.key, m.state])).isSome = true :=
   ⟨(got_table h.table).2.2.1, (got_table h.table).2.2.2⟩
 
 end MachineGot
 
 theorem collD_table_sound (hL : SortedLayout L) {m : MachineV r e} (h : MachineGot L m) :
-    Sound (fun x => L.find? m.table = some (x.1, x.2.1)) (collD L m.table [m.key, instEntry m.state]) :=
+    Sound (fun x => L.find? m.table = some (x.1, x.2.1)) (collD L m.table [m.key, m.state]) :=
   sound_mono (collD_sound hL (avail_of_got h.table) fun _ => h.table_find) fun _ hx => hx.1
-
-theorem entryD_sound (hL : SortedLayout L) {m : MachineV r e} (h : MachineGot L m) :
-    Sound (fun _ => True) (tupleD L [m.state, Ty.option (.tuple [.int, m.state])]) :=
-  sound_mono (tupleD_sound hL (avail_of_got h.entry)) fun _ _ => trivial
 
 theorem instCtxT_sound {m : MachineV r e} (h : MachineGot L m) (key state records now : Term) :
     Sound (fun _ => True) (instCtxT L m key state records now) :=
@@ -188,7 +183,7 @@ theorem encodeInstInvariants_sound (hL : SortedLayout L) (T : List TypeDecl) {m 
     (h : MachineGot L m) {inv : Code (Ty.fn [Ty.machineCtx m.key m.state r] Ty.rules)} (hinv : CodeOk L P ds H _ inv)
     (tbl records now : Term) : Sound (fun _ => True) (encodeInstInvariants L T m inv tbl records now) := by
   unfold encodeInstInvariants
-  refine sound_bind (collD_table_sound hL h) fun _ _ => sound_bind (entryD_sound hL h) fun _ _ => ?_
+  refine sound_bind (collD_table_sound hL h) fun _ _ => ?_
   refine sound_bind (sound_mapM _ fun ⟨f, key, entry⟩ _ => ?_) fun _ _ =>
     sound_bind (ordKey_sound T h tt tt) fun _ _ => trivial
   simp only [instCheckAt]
@@ -198,11 +193,11 @@ theorem encodeInstInvariants_sound (hL : SortedLayout L) (T : List TypeDecl) {m 
   exact sound_bind (ruleTerms_sound hL h.rules _) fun _ _ => trivial
 
 theorem reactCode_sound {m : MachineV r e} (hc : MachineCodes L P ds H m) :
-    Sound (fun p => CodeOk L P ds H _ p.1.instances ∧ CodeOk L P ds H _ p.1.on ∧ CodeOk L P ds H _ p.1.after ∧
+    Sound (fun p => CodeOk L P ds H _ p.1.instances ∧ CodeOk L P ds H _ p.1.on ∧
       CodeOk L P ds H _ p.1.effect) (ReactCode.of L m) := by
   unfold ReactCode.of
-  exact sound_bind hc.instances fun _ h1 => sound_bind hc.on fun _ h2 => sound_bind hc.after fun _ h3 =>
-    sound_bind hc.effect fun _ h4 => ⟨h1, h2, h3, h4⟩
+  exact sound_bind hc.instances fun _ h1 => sound_bind hc.on fun _ h2 =>
+    sound_bind hc.effect fun _ h4 => ⟨h1, h2, h4⟩
 
 theorem firstSlots_sound (hL : SortedLayout L) {t : Ty} (ht : Avail L t) :
     (prev S : List (Slot 1)) → Sound (fun _ => True) (firstSlots L t prev S)
@@ -215,19 +210,11 @@ theorem firstSlots_sound (hL : SortedLayout L) {t : Ty} (ht : Avail L t) :
     exact sound_bind (ofDataE_sound (P := []) (ds := []) (H := []) _ ht) fun c hc =>
       sound_bind (eqCode_sound hL c k hc) fun _ _ => trivial
 
-theorem timerT_sound (hL : SortedLayout L) {m : MachineV r e} (h : MachineGot L m) (now a : Term) :
-    Sound (fun _ => True) (timerT L m now a) := by
-  unfold timerT
-  refine sound_bind (findE_sound hL (avail_of_got h.timer) has_find) fun _ _ => ?_
-  refine sound_bind (findE_sound hL (avail_of_got h.timerOne) has_find) fun _ _ => ?_
-  refine sound_bind (findE_sound hL (avail_of_got h.timerEntry) has_find) fun _ _ => ?_
-  exact sound_bind (tupleD_sound hL (avail_of_got h.due)) fun _ _ => trivial
-
 theorem reactAt_sound (hL : SortedLayout L) {m : MachineV r e} (h : MachineGot L m) {rc : ReactCode m}
-    (hon : CodeOk L P ds H _ rc.on) (haf : CodeOk L P ds H _ rc.after) (hfx : CodeOk L P ds H _ rc.effect)
-    (de dn : Nat) (So : List InstSlot) (init : Val) (dflt noneT records now : Term) (evc : Code e)
+    (hon : CodeOk L P ds H _ rc.on) (hfx : CodeOk L P ds H _ rc.effect)
+    (dn : Nat) (So : List InstSlot) (init : Val) (dflt noneT records now : Term) (evc : Code e)
     (hevc : CodeOk L P ds H e evc) (x : Slot 1 × Term) :
-    Sound (fun _ => True) (reactAt L m rc de dn So init dflt noneT records now evc x) := by
+    Sound (fun _ => True) (reactAt L m rc dn So init dflt noneT records now evc x) := by
   obtain ⟨⟨f, xs⟩, first⟩ := x
   simp only [reactAt]
   refine sound_bind (ofDataE_sound (P := P) (ds := ds) (H := H) _ (avail_of_got h.key)) fun kc _ => ?_
@@ -241,19 +228,15 @@ theorem reactAt_sound (hL : SortedLayout L) {m : MachineV r e} (h : MachineGot L
   refine sound_bind (dataTermE_sound _) fun _ _ => ?_
   refine sound_bind (instCtxT_sound h _ _ _ _) fun _ _ => ?_
   refine sound_bind (ofDataE_sound (P := P) (ds := ds) (H := H) _ h.ctx) fun nc hnc => ?_
-  refine sound_bind (apply_sound haf ⟨hnc, trivial⟩ (avail_of_got h.timer)) fun _ _ => ?_
-  refine sound_bind (dataTermE_sound _) fun _ _ => ?_
-  refine sound_bind (timerT_sound hL h _ _) fun _ _ => ?_
   refine sound_bind (apply_sound hfx ⟨hnc, trivial⟩ (avail_of_got h.effect)) fun _ _ => ?_
   exact sound_bind (dataTermE_sound _) fun _ _ => trivial
 
 theorem encodeReact_sound (hL : SortedLayout L) {m : MachineV r e} (h : MachineGot L m) {rc : ReactCode m}
-    (hin : CodeOk L P ds H _ rc.instances) (hon : CodeOk L P ds H _ rc.on) (haf : CodeOk L P ds H _ rc.after)
+    (hin : CodeOk L P ds H _ rc.instances) (hon : CodeOk L P ds H _ rc.on)
     (hfx : CodeOk L P ds H _ rc.effect) (tbl records now ev : Term) :
     Sound (fun _ => True) (encodeReact L m rc tbl records now ev) := by
   unfold encodeReact
   refine sound_bind (collD_table_sound hL h) fun ⟨d, n, dt⟩ hd => ?_
-  refine sound_bind (entryD_sound hL h) fun _ _ => ?_
   refine sound_bind (findE_sound hL (avail_of_got h.next) has_find) fun _ _ => ?_
   refine sound_bind (findE_sound hL (avail_of_got h.effect) has_find) fun _ _ => ?_
   refine sound_bind (ofDataE_sound (P := P) (ds := ds) (H := H) _ h.records) fun rcd hrcd => ?_
@@ -267,7 +250,7 @@ theorem encodeReact_sound (hL : SortedLayout L) {m : MachineV r e} (h : MachineG
   obtain ⟨dflt, hdflt⟩ := defaultE_ok hL h.entry
   refine sound_bind_ok hdflt ?_
   refine sound_bind (firstSlots_sound hL (avail_of_got h.key) _ _) fun _ _ => ?_
-  refine sound_bind (sound_mapM _ fun x _ => reactAt_sound hL h hon haf hfx _ _ _ _ _ _ _ _ _ hevc x) fun _ _ => ?_
+  refine sound_bind (sound_mapM _ fun x _ => reactAt_sound hL h hon hfx _ _ _ _ _ _ _ _ hevc x) fun _ _ => ?_
   have hle : nb ≤ n := h.slots _ _ hb.1 hd
   simp only [need', hle, decide_true, ite_true]
   obtain ⟨dk, hdk⟩ := defaultE_ok hL h.key
@@ -278,8 +261,8 @@ theorem encodeMachine_sound (hL : SortedLayout L) {m : MachineV r e} (h : Machin
     (hc : MachineCodes L P ds H m) (tbl records now ev : Term) :
     Sound (fun _ => True) (encodeMachine L m tbl records now ev) := by
   unfold encodeMachine
-  exact sound_bind (reactCode_sound hc) fun _ ⟨h1, h2, h3, h4⟩ =>
-    sound_bind (encodeReact_sound hL h h1 h2 h3 h4 _ _ _ _) fun _ _ => trivial
+  exact sound_bind (reactCode_sound hc) fun _ ⟨h1, h2, h4⟩ =>
+    sound_bind (encodeReact_sound hL h h1 h2 h4 _ _ _ _) fun _ _ => trivial
 
 theorem encodeMachines_sound (hL : SortedLayout L) :
     (ms : List (MachineV r e)) → (∀ m ∈ ms, MachineGot L m ∧ MachineCodes L P ds H m) →
@@ -747,55 +730,77 @@ end
 section
 variable {L : Layout} {P : List AnySite} {ds : List (String × DeclaredV)} {H : List HandleSite} {r e : Ty}
 
+theorem encodeTimers_sound (hL : SortedLayout L) {m : MachineV r e} (h : MachineGot L m)
+    {tc : Code (Ty.fn [Ty.timerCtx m.key m.state r] (Ty.option (Ty.timer m.state)))} (htc : CodeOk L P ds H _ tc)
+    (tbl records : Term) : Sound (fun _ => True) (encodeTimers L m tc tbl records) := by
+  unfold encodeTimers
+  refine sound_bind (collD_table_sound hL h) fun _ _ => ?_
+  refine sound_bind (sound_mapM _ fun ⟨f, key, st⟩ _ => ?_) fun _ _ => trivial
+  simp only [timerSlot]
+  refine sound_bind (adtCtor_sound h.tctx _ _) fun _ _ => ?_
+  refine sound_bind (ofDataE_sound (P := P) (ds := ds) (H := H) _ h.tctx) fun cx hcx => ?_
+  refine sound_bind (apply_sound htc ⟨hcx, trivial⟩ (avail_of_got h.timer)) fun _ _ => ?_
+  exact sound_bind (dataTermE_sound _) fun _ _ => trivial
+
 theorem encodeFire_sound (hL : SortedLayout L) (T : List TypeDecl) {m : MachineV r e} (h : MachineGot L m)
-    {af : Code (Ty.fn [Ty.machineCtx m.key m.state r] (Ty.option (Ty.timer m.state)))} (haf : CodeOk L P ds H _ af)
     {fx : Code (Ty.fn [Ty.machineCtx m.key m.state r] (Ty.option (.dsl .effect [e])))} (hfx : CodeOk L P ds H _ fx)
-    (tbl done d records now : Term) : Sound (fun _ => True) (encodeFire L T m af fx tbl done d records now) := by
+    (tms : List Term) (tbl done d records now : Term) :
+    Sound (fun _ => True) (encodeFire L T m fx tms tbl done d records now) := by
   unfold encodeFire
-  refine sound_bind (collD_table_sound hL h) fun _ _ => sound_bind (entryD_sound hL h) fun _ _ => ?_
-  refine sound_bind (findE_sound hL (avail_of_got h.timerEntry) has_find) fun _ _ => ?_
-  refine sound_bind (tupleD_sound hL (avail_of_got h.due)) fun _ _ => ?_
+  refine sound_bind (collD_table_sound hL h) fun _ _ => ?_
+  refine sound_bind (findE_sound hL (avail_of_got h.timer) has_find) fun _ _ => ?_
+  refine sound_bind (findE_sound hL (avail_of_got h.timerOne) has_find) fun _ _ => ?_
   refine sound_bind (findE_sound hL (avail_of_got h.effect) has_find) fun _ _ => ?_
   refine sound_bind (ordKey_sound T h tt tt) fun _ _ => ?_
-  refine sound_bind (sound_mapM _ fun ⟨f, key, entry⟩ _ => ?_) fun _ _ => trivial
+  refine sound_bind (sound_mapM _ fun ⟨⟨f, key, entry⟩, tm⟩ _ => ?_) fun _ _ => trivial
   simp only [fireAt]
   refine sound_bind (instCtxT_sound h _ _ _ _) fun _ _ => ?_
   refine sound_bind (ofDataE_sound (P := P) (ds := ds) (H := H) _ h.ctx) fun nc hnc => ?_
-  refine sound_bind (apply_sound haf ⟨hnc, trivial⟩ (avail_of_got h.timer)) fun _ _ => ?_
-  refine sound_bind (dataTermE_sound _) fun _ _ => ?_
   refine sound_bind (apply_sound hfx ⟨hnc, trivial⟩ (avail_of_got h.effect)) fun _ _ => ?_
-  refine sound_bind (dataTermE_sound _) fun _ _ => ?_
-  exact sound_bind (timerT_sound hL h _ _) fun _ _ => trivial
+  exact sound_bind (dataTermE_sound _) fun _ _ => trivial
+
+theorem timersAll_sound (hL : SortedLayout L) :
+    (ms : List (MachineV r e)) → (∀ m ∈ ms, MachineGot L m ∧ MachineCodes L P ds H m) →
+    (xs : PerMachine (fun _ => Term) ms) → (records : Term) → Sound (fun _ => True) (timersAll L ms xs records)
+  | [], _, .nil, _ => trivial
+  | m :: ms, h, .cons x xs, records => by
+    have hm := h m (by simp)
+    simp only [timersAll]
+    refine sound_bind hm.2.timer fun _ htc => ?_
+    exact sound_bind (encodeTimers_sound hL hm.1 htc _ _) fun _ _ =>
+      sound_bind (timersAll_sound hL ms (fun m' hm' => h m' (by simp [hm'])) xs _) fun _ _ => trivial
 
 theorem encodeFires_sound (hL : SortedLayout L) (T : List TypeDecl) :
     (ms : List (MachineV r e)) → (∀ m ∈ ms, MachineGot L m ∧ MachineCodes L P ds H m) →
-    (xs : PerMachine (fun _ => Term) ms) → (done d records now : Term) →
-    Sound (fun _ => True) (encodeFires L T ms xs done d records now)
-  | [], _, .nil, _, _, _, _ => trivial
-  | m :: ms, h, .cons x xs, done, d, records, now => by
+    (xs : PerMachine (fun _ => Term) ms) → (tmss : PerMachine (fun _ => List Term) ms) → (done d records now : Term) →
+    Sound (fun _ => True) (encodeFires L T ms xs tmss done d records now)
+  | [], _, .nil, .nil, _, _, _, _ => trivial
+  | m :: ms, h, .cons x xs, .cons tms tmss, done, d, records, now => by
     have hm := h m (by simp)
     simp only [encodeFires]
-    refine sound_bind hm.2.after fun _ haf => sound_bind hm.2.effect fun _ hfx => ?_
-    exact sound_bind (encodeFire_sound hL T hm.1 haf hfx _ _ _ _ _) fun _ _ =>
-      sound_bind (encodeFires_sound hL T ms (fun m' hm' => h m' (by simp [hm'])) xs _ _ _ _) fun _ _ => trivial
+    refine sound_bind hm.2.effect fun _ hfx => ?_
+    exact sound_bind (encodeFire_sound hL T hm.1 hfx _ _ _ _ _ _) fun _ _ =>
+      sound_bind (encodeFires_sound hL T ms (fun m' hm' => h m' (by simp [hm'])) xs tmss _ _ _ _) fun _ _ => trivial
 
 theorem dueAll_sound (hL : SortedLayout L) : (ms : List (MachineV r e)) → (∀ m ∈ ms, MachineGot L m) →
-    (xs : PerMachine (fun _ => Term) ms) → (now : Term) → Sound (fun _ => True) (dueAll L ms xs now)
-  | [], _, .nil, _ => trivial
-  | m :: ms, h, .cons x xs, now => by
+    (xs : PerMachine (fun _ => Term) ms) → (tmss : PerMachine (fun _ => List Term) ms) → (now : Term) →
+    Sound (fun _ => True) (dueAll L ms xs tmss now)
+  | [], _, .nil, .nil, _ => trivial
+  | m :: ms, h, .cons x xs, .cons tms tmss, now => by
     have hm := h m (by simp)
     simp only [dueAll]
-    refine sound_bind (collD_table_sound hL hm) fun _ _ => sound_bind (entryD_sound hL hm) fun _ _ => ?_
-    refine sound_bind (findE_sound hL (avail_of_got hm.timerEntry) has_find) fun _ _ => ?_
-    refine sound_bind (tupleD_sound hL (avail_of_got hm.due)) fun _ _ => ?_
-    exact sound_bind (dueAll_sound hL ms (fun m' hm' => h m' (by simp [hm'])) xs now) fun _ _ => trivial
+    refine sound_bind (collD_table_sound hL hm) fun _ _ => ?_
+    refine sound_bind (findE_sound hL (avail_of_got hm.timer) has_find) fun _ _ => ?_
+    refine sound_bind (findE_sound hL (avail_of_got hm.timerOne) has_find) fun _ _ => ?_
+    exact sound_bind (dueAll_sound hL ms (fun m' hm' => h m' (by simp [hm'])) xs tmss now) fun _ _ => trivial
 
 theorem encodeRound_sound (hL : SortedLayout L) (T : List TypeDecl) (ms : List (MachineV r e))
     (h : ∀ m ∈ ms, MachineGot L m ∧ MachineCodes L P ds H m) (xs : PerMachine (fun _ => Term) ms)
     (active records now : Term) : Sound (fun _ => True) (encodeRound L T ms xs active records now) := by
   unfold encodeRound
-  exact sound_bind (dueAll_sound hL ms (fun m hm => (h m hm).1) xs now) fun _ _ =>
-    sound_bind (encodeFires_sound hL T ms h xs _ _ _ _) fun _ _ => trivial
+  exact sound_bind (timersAll_sound hL ms h xs records) fun _ _ =>
+    sound_bind (dueAll_sound hL ms (fun m hm => (h m hm).1) xs _ now) fun _ _ =>
+    sound_bind (encodeFires_sound hL T ms h xs _ _ _ _ _) fun _ _ => trivial
 
 theorem roundStarts_sound (hL : SortedLayout L) {shs : List (PendingShape e)} (senv : StepEnv L shs)
     (hent : Got L (pendingEntry shs)) : (ms : List (MachineV r e)) →
@@ -929,13 +934,15 @@ theorem machineGot_ofService {m : MachineV v.records v.event} (hm : m ∈ v.mach
   have ht := sorted_of_embeddable _ (hms m hm).1
   have hkey : m.key.sorted = true := by simp only [MachineV.table, Ty.sorted, Bool.and_eq_true] at ht; exact ht.1
   have hst : m.state.sorted = true := by
-    simp only [MachineV.table, instEntry, Ty.sorted, Ty.sorteds, Bool.and_eq_true] at ht; exact ht.2.1
-  have hu : ∀ t ∈ [Ty.machineCtx m.key m.state v.records, Ty.next m.state, Ty.option (Ty.timer m.state), .bag m.key],
+    simp only [MachineV.table, Ty.sorted, Bool.and_eq_true] at ht; exact ht.2
+  have hu : ∀ t ∈ [Ty.machineCtx m.key m.state v.records, Ty.next m.state, Ty.option (Ty.timer m.state), .bag m.key,
+      Ty.timerCtx m.key m.state v.records],
       t ∈ useTys v (Layout.kindsOf c.program.defs.parts v) := fun t ht => by
     simp only [useTys, List.mem_append, List.mem_flatMap]
     exact .inl (.inl (.inl (.inl (.inl (.inr ⟨m, hm, ht⟩)))))
   refine ⟨got_of_avail (avail_stepTy c v
       (List.mem_append_left _ (List.mem_append_right _ (List.mem_map_of_mem (f := (·.table)) hm)))) ht, avail_use c v (hu _ (by simp)),
+    avail_use c v (hu _ (by simp)),
     got_of_avail (avail_use c v (hu _ (by simp))) (by simp [Ty.next, Ty.sorted, Ty.sortedss, Ty.sorteds, hst]),
     got_of_avail (avail_use c v (hu _ (by simp)))
       (by simp [Ty.option, Ty.timer, Ty.sorted, Ty.sortedss, Ty.sorteds, hst]),
@@ -1174,7 +1181,7 @@ theorem rootUses_sub : ∀ r ∈ rootUses v, ∀ s ∈ r.1, s ∈ c.P := by
   · exact Fun.uses_sub hv (chk.reach.queries q hq).resolve
   · exact Fun.uses_sub hv (chk.reach.machines m hm).instances
   · exact Fun.uses_sub hv (chk.reach.machines m hm).on
-  · exact Fun.uses_sub hv (chk.reach.machines m hm).after
+  · exact Fun.uses_sub hv (chk.reach.machines m hm).timer
   · exact Fun.uses_sub hv (chk.reach.machines m hm).invariants
   · exact EffectFun.uses_sub hv (chk.reach.machines m hm).effect.site
   · exact EffectFun.uses_sub hv (chk.reach.reactions x hx).site
@@ -1324,7 +1331,7 @@ theorem serviceGot_ofService :
       simp only [MachineV.table, Ty.sorted, Bool.and_eq_true] at ht; exact ht.1
     have hm' := root_machine hm
     refine ⟨⟨machineGot_ofService hv hm, Fun.code_ofService c hv _ hr.instances hm'.1,
-      Fun.code_ofService c hv _ hr.on hm'.2.1, Fun.code_ofService c hv _ hr.after hm'.2.2.1,
+      Fun.code_ofService c hv _ hr.on hm'.2.1, Fun.code_ofService c hv _ hr.timer hm'.2.2.1,
       EffectFun.code_ofService c hv _ hr.effect.site hm'.2.2.2.2 rfl, Fun.code_ofService c hv _ hr.invariants hm'.2.2.2.1⟩,
       got_of_avail (avail_stepTy c v (List.mem_append_right _ (List.mem_map_of_mem (f := fun m => Ty.tuple [m.key]) hm)))
         (by simp [Ty.sorted, Ty.sorteds, hkey]), ?_⟩

@@ -101,9 +101,9 @@ end
 section
 variable {L : Layout} {T : List TypeDecl} {M : Model} {r e : Ty}
 
-theorem instCheckAt_cond (m : MachineV r e) {inv : Code (Ty.fn [Ty.machineCtx m.key m.state r] Ty.rules)} {de : Nat}
+theorem instCheckAt_cond (m : MachineV r e) {inv : Code (Ty.fn [Ty.machineCtx m.key m.state r] Ty.rules)}
     {records now : Term} {sl : InstSlot} {c : InstCheck} {cj : Term}
-    (hg : instCheckAt L m inv de records now sl = .ok (c, cj)) : ∃ X, cj = .ite sl.flag X tt := by
+    (hg : instCheckAt L m inv records now sl = .ok (c, cj)) : ∃ X, cj = .ite sl.flag X tt := by
   repeat obtain ⟨_, _, hg⟩ := bind_ok.1 hg
   cases pure_ok.1 hg
   exact ⟨_, rfl⟩
@@ -113,13 +113,12 @@ instance. -/
 theorem instCheck_exact (m : MachineV r e) {inv : Code (Ty.fn [Ty.machineCtx m.key m.state r] Ty.rules)} {ci : Term}
     (hci : m.invariants.code L = .ok (inv, ci)) (hcic : Holds M ci) (recs : r.den0) (tnow : Int) {records now : Term}
     (hrec : RelV L r (Ty.up _ m.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow)
-    {de : Nat} (hde : tupleD L [m.state, Ty.option (.tuple [.int, m.state])] = .ok de)
     {f tk te : Term} {zk zv : Val} (hf : f.denote M = .bool true) (hxs : Term.denotes M [tk, te] = [zk, zv])
-    (k0 : m.key.den0) (e0 : (instEntry m.state).den0)
+    (k0 : m.key.den0) (e0 : m.state.den0)
     (hk : RelV L m.key (Ty.up _ m.key_data k0) zk)
-    (he : RelV L (instEntry m.state) (Ty.up _ m.entry_data e0) zv)
-    {c : InstCheck} {cj : Term} (hg : instCheckAt L m inv de records now ⟨f, tk, te⟩ = .ok (c, cj)) :
-    Holds M cj ↔ m.invariants.appFits L.count (.inl (k0, e0.1, recs, tnow, ()), ()) := by
+    (he : RelV L m.state (Ty.up _ m.state_data e0) zv)
+    {c : InstCheck} {cj : Term} (hg : instCheckAt L m inv records now ⟨f, tk, te⟩ = .ok (c, cj)) :
+    Holds M cj ↔ m.invariants.appFits L.count (.inl (k0, e0, recs, tnow, ()), ()) := by
   simp only [Term.denotes, List.cons.injEq, and_true] at hxs
   obtain ⟨htk, hte⟩ := hxs
   obtain ⟨ctx, h1, hg⟩ := bind_ok.1 hg
@@ -127,21 +126,11 @@ theorem instCheck_exact (m : MachineV r e) {inv : Code (Ty.fn [Ty.machineCtx m.k
   obtain ⟨⟨rs, c1⟩, h3, hg⟩ := bind_ok.1 hg
   obtain ⟨rules, h4, hg⟩ := bind_ok.1 hg
   cases pure_ok.1 hg
-  have hst : Ty.isData m.state = true := m.state_data
-  have hopt : (Ty.tuple [Ty.option (.tuple [.int, m.state])]).isData = true := by
-    simp [Ty.option, Ty.isData, Ty.isDatas, Ty.isDatass, hst]
-  obtain ⟨d', n', vals, hfd, hzv, hvals⟩ := he
-  obtain ⟨n'', hfd'⟩ := tupleD_ok hde
-  have := find_det hfd hfd'
-  subst this
-  erw [Ty.up_tuple _ _ _ hst hopt] at hvals
-  obtain ⟨v0, vs0, rfl, hv0, -⟩ := hvals
-  have hsel : (Term.sel d' 0 0 te).denote M = v0 := by rw [sel_ctor _ (hte.trans hzv)]; rfl
   have hctx := adtCtor_rel (L := L) (M := M) (vs := [[m.key, m.state, r, .int]]) ⟨0, by simp⟩ _ _ h1
-    (Ty.up _ m.key_data k0, Ty.up _ m.state_data e0.1, Ty.up _ m.records_data recs, tnow, ())
-    ⟨_, _, rfl, htk ▸ hk, _, _, rfl, hsel ▸ hv0, _, _, rfl, hrec, _, _, rfl, hnow, rfl⟩
+    (Ty.up _ m.key_data k0, Ty.up _ m.state_data e0, Ty.up _ m.records_data recs, tnow, ())
+    ⟨_, _, rfl, htk ▸ hk, _, _, rfl, hte ▸ he, _, _, rfl, hrec, _, _, rfl, hnow, rfl⟩
   rw [← up_mctx m m.ctx_data] at hctx
-  have hcx : Smt.Rel M L _ (Ty.up _ m.ctx_data (.inl (k0, e0.1, recs, tnow, ()))) cx :=
+  have hcx : Smt.Rel M L _ (Ty.up _ m.ctx_data (.inl (k0, e0, recs, tnow, ()))) cx :=
     (rel_ofTerm (need_ok.1 h2) _).2 hctx
   have hite : Holds M (.ite f c1 tt) ↔ Holds M c1 := by simp [holds_ite, hf, Val.toBool]
   rw [hite]
@@ -157,23 +146,22 @@ theorem instInvariants_exact (m : MachineV r e) {inv : Code (Ty.fn [Ty.machineCt
     {checks : List InstCheck} {cond : Term} (henc : encodeInstInvariants L T m inv x records now = .ok (checks, cond)) :
     Holds M cond ↔ ∀ i ∈ instancesOf T m tbl, m.invariants.appFits L.count (.inl (i.key, i.state, recs, tnow, ()), ()) := by
   obtain ⟨⟨d, n, dt⟩, h1, henc⟩ := bind_ok.1 henc
-  obtain ⟨de, h2, henc⟩ := bind_ok.1 henc
   obtain ⟨cs, h3, henc⟩ := bind_ok.1 henc
   obtain ⟨p0, -, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
-  have htbl' : Smt.Rel M L (.table m.key (instEntry m.state)) (Ty.up _ m.table_data tbl) x := htbl
+  have htbl' : Smt.Rel M L (.table m.key m.state) (Ty.up _ m.table_data tbl) x := htbl
   obtain ⟨sv, ys, hS, -, -, hp, hh⟩ := table_view htbl' h1
   rw [← instSlotsOf_slot] at hS
-  let inst : m.key.den × (instEntry m.state).den → Step.Instance m :=
-    fun y => instOf m (Ty.down _ m.key_data y.1) (Ty.down _ m.entry_data y.2)
-  have hF : Forall2 (fun sl c => ∃ s, s.slot = sl ∧ ∃ ch, instCheckAt L m inv de records now s = .ok (ch, c))
+  let inst : m.key.den × m.state.den → Step.Instance m :=
+    fun y => instOf m (Ty.down _ m.key_data y.1) (Ty.down _ m.state_data y.2)
+  have hF : Forall2 (fun sl c => ∃ s, s.slot = sl ∧ ∃ ch, instCheckAt L m inv records now s = .ok (ch, c))
       ((instSlotsOf d dt n x).map InstSlot.slot) (cs.map (·.2)) :=
     forall2_map _ (fun s c h => ⟨s, rfl, h⟩) (forall2_snd (mapM_ok _ _ _ h3))
   rw [allT_slots_exact (P := fun y => m.invariants.appFits L.count (.inl ((inst y).key, (inst y).state, recs, tnow, ()), ()))
     _ ?_ hS hh hF]
   · have hperm : (ys.map inst).Perm (instancesOf T m tbl) := by
       have := hp.map inst
-      erw [Ty.up_table m.key (instEntry m.state) m.table_data m.key_data m.entry_data tbl, List.map_map] at this
+      erw [Ty.up_table m.key m.state m.table_data m.key_data m.state_data tbl, List.map_map] at this
       refine (this.trans (List.Perm.of_eq (List.map_congr_left fun q _ => ?_))).trans (List.mergeSort_perm _ _).symm
       simp [inst, Ty.down_up]
     constructor
@@ -188,8 +176,8 @@ theorem instInvariants_exact (m : MachineV r e) {inv : Code (Ty.fn [Ty.machineCt
     · simp only [InstSlot.slot] at hf
       rw [hX]; simp [holds_ite, hf, Val.toBool, holds_tt]
     · obtain ⟨zk, zv, hz, hk, he⟩ := hey
-      exact instCheck_exact m hci hcic recs tnow hrec hnow h2 hf hz (Ty.down _ m.key_data y.1)
-        (Ty.down _ m.entry_data y.2) (by rw [Ty.up_down]; exact hk) (by rw [Ty.up_down]; exact he) hg
+      exact instCheck_exact m hci hcic recs tnow hrec hnow hf hz (Ty.down _ m.key_data y.1)
+        (Ty.down _ m.state_data y.2) (by rw [Ty.up_down]; exact hk) (by rw [Ty.up_down]; exact he) hg
 
 end
 
@@ -204,8 +192,7 @@ theorem machine_encode (m : MachineV r e) (hor : m.key.orderable = true)
     (hevT : RelV L e (Ty.up _ m.event_data ev) (evT.denote M))
     (tbl : m.table.den0) {x : Term} (htbl : RelV L m.table (Ty.up _ m.table_data tbl) (x.denote M))
     {mo : ReactOut} {c : Term} (henc : encodeMachine L m x records now evT = .ok (mo, c)) :
-    (Holds M c ↔ ((m.instances.fits L.count).1 ∧ (m.on.fits L.count).1 ∧ (m.after.fits L.count).1 ∧
-        (m.effect.fits L.count).1) ∧
+    (Holds M c ↔ ((m.instances.fits L.count).1 ∧ (m.on.fits L.count).1 ∧ (m.effect.fits L.count).1) ∧
       (m.instances.appFits L.count (recs, ()) ∧
         allFit (m.instances.fn (recs, ())) (keyFits L.count m (instancesOf T m tbl) recs tnow ev))) ∧
     (Holds M c → ∃ tbl', RelV L m.table (Ty.up _ m.table_data tbl') (mo.table.denote M) ∧
@@ -229,7 +216,7 @@ variable {r e : Ty}
 /-- Whether the functions one machine's reaction to an event applies fit: its kept sources and its reaction
 (`keyFits` for each key of the bag `instances` returns). -/
 def machineFits (S : Ty → Nat) (sm : Step.MachineState r e) (recs : r.den0) (tnow : Int) (ev : e.den0) : Prop :=
-  ((sm.1.instances.fits S).1 ∧ (sm.1.on.fits S).1 ∧ (sm.1.after.fits S).1 ∧ (sm.1.effect.fits S).1) ∧
+  ((sm.1.instances.fits S).1 ∧ (sm.1.on.fits S).1 ∧ (sm.1.effect.fits S).1) ∧
     (sm.1.instances.appFits S (recs, ()) ∧ allFit (sm.1.instances.fn (recs, ())) (keyFits S sm.1 sm.2 recs tnow ev))
 
 /-- Whether every machine's invariants fit at its instances: the source, and applied at each instance. -/

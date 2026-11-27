@@ -321,7 +321,7 @@ def svcParts (v : ServiceV) : ProgramParts :=
   joinParts ([funParts v.apply, funParts v.invariants] ++ v.subscribes.map (funParts ·.wrap) ++
     v.commands.flatMap (fun c => [funParts c.accepts, funParts c.decide, funParts c.ensures]) ++
     v.queries.flatMap (fun q => [funParts q.accepts, funParts q.resolve]) ++
-    v.machines.flatMap (fun m => [funParts m.instances, funParts m.on, funParts m.after, effParts m.effect,
+    v.machines.flatMap (fun m => [funParts m.instances, funParts m.on, funParts m.timer, effParts m.effect,
       funParts m.invariants]) ++
     v.reactions.map (effParts ·.react))
 
@@ -578,7 +578,7 @@ def evM : MachineV recordsT evT :=
   { name := "calm", key := .int, state := .int,
     instances := .closed (.lam (.call (.prim .tableKeys [.int, .int] rfl) (.cons (.var .here) .nil))),
     initial := (0 : Int), on := .closed evOnE,
-    after := .closed (.lam (.ctor (vs := [[Ty.timer .int], []]) ⟨1, by decide⟩ .nil)),
+    timer := .closed (.lam (.ctor (vs := [[Ty.timer .int], []]) ⟨1, by decide⟩ .nil)),
     effect := .closed (.lam (.ctor (vs := [[Ty.dsl .effect [evT]], []]) ⟨1, by decide⟩ .nil)),
     invariants := .closed evInvE }
 
@@ -588,8 +588,7 @@ def evMLayout : Layout :=
   Layout.addTys (listSlots (fun _ => 3)
       (Tazuna.Smt.Expr.lits applyE ++ Tazuna.Smt.Expr.lits invariantsE ++ Tazuna.Smt.Expr.lits evInvE)) {}
     ([recordsT, evT, evM.table, .bag .int, evCtxT, Ty.next .int, Ty.option (Ty.timer .int), Ty.timer .int,
-      Ty.option (.tuple [.int, .int]), .tuple [.int, .int], instEntry .int, Ty.option (.dsl .effect [evT]),
-      noPending evMSvc, .tuple [.int]] ++
+      Ty.timerCtx .int .int recordsT, Ty.option (.dsl .effect [evT]), noPending evMSvc, .tuple [.int]] ++
       Tazuna.Smt.Expr.tys applyE ++ Tazuna.Smt.Expr.tys invariantsE ++ Tazuna.Smt.Expr.tys evOnE ++
       Tazuna.Smt.Expr.tys evInvE)
 
@@ -954,7 +953,7 @@ well-formed. -/
 def doorM : MachineV recordsT .int :=
   { name := "door", key := .int, state := .int, instances := .closed (.lam (.call (.prim .tableKeys [.int, .int] rfl)
       (.cons (.var .here) .nil))), initial := (0 : Int), on := .closed (.lam (.ctor (vs := [[], [.int]]) ⟨0, by decide⟩ .nil)),
-    after := .closed (.lam (.ctor (vs := [[Ty.timer .int], []]) ⟨1, by decide⟩ .nil)), effect := .closed (.lam (.ctor (vs := [[Ty.dsl .effect [.int]], []]) ⟨1, by decide⟩ .nil)),
+    timer := .closed (.lam (.ctor (vs := [[Ty.timer .int], []]) ⟨1, by decide⟩ .nil)), effect := .closed (.lam (.ctor (vs := [[Ty.dsl .effect [.int]], []]) ⟨1, by decide⟩ .nil)),
     invariants := .closed (.lam (.list .nil)) }
 
 def doorSvc : ServiceV := { querySvc with name := "d", queries := [], machines := [doorM] }
@@ -971,22 +970,16 @@ def doorScript (withWf : Bool) (goal : List Term) : Except String Script := do
   pure { datatypes := dts, vars := [rsrt, .int, .int, .int, psrt, msrt], asserts := (if withWf then [wf] else []) ++ goal,
          shows := List.range 6 }
 
-/-- Goals on the instance table in v5: slot 0 holds key 3 in state 1 with a timer due at 10 for state 2, slot 1 key 1
-in state 0 with no timer; with one key in two slots the well-formedness makes the goal unsat. -/
+/-- Goals on the instance table in v5: slot 0 holds key 3 in state 1, slot 1 key 1 in state 0; with one key in two
+slots the well-formedness makes the goal unsat. -/
 def doorGoals : Option (List Term × List (String × Term)) := do
   let (d, n) ← doorLayout.find? doorM.table
-  let (dt, _) ← doorLayout.find? (.tuple [Ty.bool, .int, instEntry .int])
-  let (de, _) ← doorLayout.find? (instEntry .int)
-  let (dopt, _) ← doorLayout.find? (Ty.option (.tuple [.int, .int]))
-  let (dtm, _) ← doorLayout.find? (.tuple [.int, .int])
+  let (dt, _) ← doorLayout.find? (.tuple [Ty.bool, .int, .int])
   let S := slotsOf d dt n 2 (.var 5)
   let key (j : Nat) := S[j]!.2[0]
-  let entry (j : Nat) := S[j]!.2[1]
-  let timer (j : Nat) := Term.sel de 0 1 (entry j)
-  pure ([S[0]!.1, S[1]!.1, .not S[2]!.1, .eq (key 0) (.int 3), .eq (.sel de 0 0 (entry 0)) (.int 1),
-      .is dopt 0 (timer 0), .eq (.sel dtm 0 0 (.sel dopt 0 0 (timer 0))) (.int 10),
-      .eq (.sel dtm 0 1 (.sel dopt 0 0 (timer 0))) (.int 2),
-      .eq (key 1) (.int 1), .eq (.sel de 0 0 (entry 1)) (.int 0), .is dopt 1 (timer 1)],
+  let state (j : Nat) := S[j]!.2[1]
+  pure ([S[0]!.1, S[1]!.1, .not S[2]!.1, .eq (key 0) (.int 3), .eq (state 0) (.int 1),
+      .eq (key 1) (.int 1), .eq (state 1) (.int 0)],
     [("well-formedness excludes an instance key twice", .and (.and S[0]!.1 S[1]!.1) (.eq (key 0) (key 1)))])
 
 def doorCheck (solver : Solver) : IO Bool := do
@@ -1001,8 +994,8 @@ def doorCheck (solver : Solver) : IO Bool := do
       | some s =>
         -- Slot 0 holds key 3 and slot 1 key 1, yet the instances come in key order.
         let insts := s.machines.toSigma.map fun ⟨_, is⟩ => is.map fun i =>
-          (intDen _ i.key, intDen _ i.state, i.timer.map fun (d, st) => (d, intDen _ st))
-        if insts != [[(some 1, some 0, none), (some 3, some 1, some (10, some 2))]] then
+          (intDen _ i.key, intDen _ i.state)
+        if insts != [[(some 1, some 0), (some 3, some 1)]] then
           IO.println s!"smt-check: instances: the decoded instances differ from the model: {insts}"; ok := false
       | none => IO.println "smt-check: instances: the model does not decode"; ok := false
     | a => IO.println s!"smt-check: instances: {repr a}"; ok := false
@@ -1460,7 +1453,7 @@ def machineEffectE : Expr [] [] (.fn [mctxT] (Ty.option (.dsl .effect [.int]))) 
 def effectM : MachineV .int .int :=
   { name := "m", key := .int, state := .int, instances := .closed (.lam (.call (.prim .bagFromList [.int] rfl)
       (.cons (.list .nil) .nil))), initial := (0 : Int), on := .closed (.lam (.ctor (vs := [[], [.int]]) ⟨0, by decide⟩ .nil)),
-    after := .closed (.lam (.ctor (vs := [[Ty.timer .int], []]) ⟨1, by decide⟩ .nil)), effect := .closed machineEffectE,
+    timer := .closed (.lam (.ctor (vs := [[Ty.timer .int], []]) ⟨1, by decide⟩ .nil)), effect := .closed machineEffectE,
     invariants := .closed (.lam (.list .nil)) }
 
 def machineEffectLayout : Layout :=
@@ -1499,42 +1492,44 @@ def machineEffectCheck (solver : Solver) : IO Bool := do
       | a => IO.println s!"smt-check: machine effect: {repr a}"; ok := false
   return ok
 
-/-! T5's timer question for one machine (`timerQuestions`), with `after` from its kept source over Int keys, states and
-records. `forwardE` sets `Timer(ctx.state, ctx.state)` where the state is not negative and no timer otherwise, so its
-target question is unsat; `backE` sets `Timer(ctx.key, ctx.state)`, so a negative key sets a timer before the time and
-the target question is sat, and the model's context must be one where Lean's `after` sets such a timer. Nothing has
-slots here, so both bound questions are unsat. -/
+/-! T5's timer question for one machine (`timerQuestions`), with `timer` from its kept source over Int keys, states and
+records. `forwardE` gives `Timer(ctx.state, ctx.state + 1)` where the state is not negative and no timer otherwise, so
+the state a timer enters waits for a later timer and the target question is unsat; `backE` gives
+`Timer(0 - ctx.state, ctx.state + 1)`, so the state it enters waits for an earlier one and the target question is
+sat, and the model's context must be one where Lean's `timer` does so. Nothing has slots here, so both bound
+questions are unsat. -/
 
-def timerAfterE (delay : Expr [] [mctxT] .int) (guard : Bool) : Expr [] [] (.fn [mctxT] (Ty.option (Ty.timer .int))) :=
-  let ctx : Expr [] [mctxT] mctxT := .var .here
-  let st : Expr [] [mctxT] .int := .field (ft := .int) "state" 1 (by simp) ctx
-  let some' : Expr [] [mctxT] (Ty.option (Ty.timer .int)) := .ctor (vs := [[Ty.timer .int], []]) ⟨0, by decide⟩
-    (.cons (.ctor (vs := [[.int, .int]]) ⟨0, by decide⟩ (.cons delay (.cons st .nil))) .nil)
-  let none' : Expr [] [mctxT] (Ty.option (Ty.timer .int)) := .ctor (vs := [[Ty.timer .int], []]) ⟨1, by decide⟩ .nil
+def tctxT : Ty := Ty.timerCtx .int .int .int
+
+def timerE (at_ : Expr [] [tctxT] .int) (guard : Bool) : Expr [] [] (.fn [tctxT] (Ty.option (Ty.timer .int))) :=
+  let ctx : Expr [] [tctxT] tctxT := .var .here
+  let st : Expr [] [tctxT] .int := .field (ft := .int) "state" 1 (by simp) ctx
+  let some' : Expr [] [tctxT] (Ty.option (Ty.timer .int)) := .ctor (vs := [[Ty.timer .int], []]) ⟨0, by decide⟩
+    (.cons (.ctor (vs := [[.int, .int]]) ⟨0, by decide⟩ (.cons at_ (.cons (.bin .add st (.int 1)) .nil))) .nil)
+  let none' : Expr [] [tctxT] (Ty.option (Ty.timer .int)) := .ctor (vs := [[Ty.timer .int], []]) ⟨1, by decide⟩ .nil
   if guard then
     .lam (.case (.bin .lt st (.int 0))
       (.cons (.ctor (vs := [[], []]) ⟨0, by decide⟩ .nil) none' (.cons (.ctor (vs := [[], []]) ⟨1, by decide⟩ .nil) some' .nil))
       ⟨4, rfl⟩)
   else .lam some'
 
-def timerM (af : Expr [] [] (.fn [mctxT] (Ty.option (Ty.timer .int)))) : MachineV .int .int :=
+def timerM (tf : Expr [] [] (.fn [tctxT] (Ty.option (Ty.timer .int)))) : MachineV .int .int :=
   { name := "t", key := .int, state := .int, instances := effectM.instances, initial := (0 : Int), on := effectM.on,
-    after := .closed af, effect := .closed (.lam (.ctor (vs := [[Ty.dsl .effect [.int]], []]) ⟨1, by decide⟩ .nil)),
+    timer := .closed tf, effect := .closed (.lam (.ctor (vs := [[Ty.dsl .effect [.int]], []]) ⟨1, by decide⟩ .nil)),
     invariants := effectM.invariants }
 
-def forwardE : Expr [] [] (.fn [mctxT] (Ty.option (Ty.timer .int))) :=
-  timerAfterE (.field (ft := .int) "state" 1 (by simp) (.var .here)) true
-def backE : Expr [] [] (.fn [mctxT] (Ty.option (Ty.timer .int))) :=
-  timerAfterE (.field (ft := .int) "key" 0 (by simp) (.var .here)) false
+def forwardE : Expr [] [] (.fn [tctxT] (Ty.option (Ty.timer .int))) :=
+  timerE (.field (ft := .int) "state" 1 (by simp) (.var .here)) true
+def backE : Expr [] [] (.fn [tctxT] (Ty.option (Ty.timer .int))) :=
+  timerE (.bin .sub (.int 0) (.field (ft := .int) "state" 1 (by simp) (.var .here))) false
 
 def timerLayout : Layout :=
-  Layout.addTys (fun _ => 2) {} [mctxT, Ty.option (Ty.timer .int), Ty.timer .int, Ty.option (.tuple [.int, .int]),
-    .tuple [.int, .int], Ty.bool]
+  Layout.addTys (fun _ => 2) {} [tctxT, Ty.option (Ty.timer .int), Ty.timer .int, Ty.bool]
 
 def timerCheck (solver : Solver) : IO Bool := do
   let mut ok := true
-  for (name, af, back) in [("forward", forwardE, false), ("back", backE, true)] do
-    match timerQuestions timerLayout (timerM af) with
+  for (name, tf, back) in [("forward", forwardE, false), ("back", backE, true)] do
+    match timerQuestions timerLayout (timerM tf) with
     | .error r => IO.println s!"smt-check: timer {name}: no questions: {repr r}"; ok := false
     | .ok (bq, tq) =>
       match ← solver.run bq.script with
@@ -1543,13 +1538,15 @@ def timerCheck (solver : Solver) : IO Bool := do
       match ← solver.run tq.script, back with
       | .unsat, false => pure ()
       | .sat vs, true =>
-        match vs.lookup 0, vs.lookup 1, vs.lookup 2, vs.lookup 3 with
-        | some (.int key), some (.int st), some (.int recs), some (.int now) =>
-          match Step.timerAt now ((timerM af).after.fn (.inl (key, st, recs, now, ()), ())) with
-          | some (d, _) => unless d < now do
-              IO.println s!"smt-check: timer back: Lean's timer at {d} is not before {now}"; ok := false
-          | none => IO.println "smt-check: timer back: Lean's after sets no timer"; ok := false
-        | _, _, _, _ => IO.println "smt-check: timer back: no values"; ok := false
+        match vs.lookup 0, vs.lookup 1, vs.lookup 2 with
+        | some (.int key), some (.int st), some (.int recs) =>
+          match (timerM tf).timerAt (recs : Int) (key : Int) (st : Int) with
+          | some (d, tg) => match (timerM tf).timerAt (recs : Int) (key : Int) tg with
+            | some (d', _) => unless d' < d do
+                IO.println s!"smt-check: timer back: Lean's next timer at {d'} is not before {d}"; ok := false
+            | none => IO.println "smt-check: timer back: the state Lean's timer enters has no timer"; ok := false
+          | none => IO.println "smt-check: timer back: Lean's timer gives none"; ok := false
+        | _, _, _ => IO.println "smt-check: timer back: no values"; ok := false
       | a, _ => IO.println s!"smt-check: timer {name}: target question: {repr a}"; ok := false
   return ok
 
@@ -1578,8 +1575,7 @@ def invLayout : Layout :=
 def invariantCheck (solver : Solver) : IO Bool := do
   let L := invLayout
   let some (d, n) := L.find? invM.table | IO.println "smt-check: machine invariants: no table"; return false
-  let some (dt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | IO.println "smt-check: machine invariants: no slot"; return false
-  let some (de, _) := L.find? (instEntry .int) | IO.println "smt-check: machine invariants: no entry"; return false
+  let some (dt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | IO.println "smt-check: machine invariants: no slot"; return false
   let some wf := (SymState.vars 0).wf L (v := invSvc) [] | IO.println "smt-check: machine invariants: no wf"; return false
   let some rsrt := L.srt? recordsT | IO.println "smt-check: machine invariants: no records sort"; return false
   let some msrt := L.srt? invM.table | IO.println "smt-check: machine invariants: no table sort"; return false
@@ -1591,7 +1587,7 @@ def invariantCheck (solver : Solver) : IO Bool := do
   | .ok (checks, cond) =>
     let S := slotsOf d dt n 2 (.var 5)
     let key (j : Nat) := S[j]!.2[0]
-    let state (j : Nat) := Term.sel de 0 0 (S[j]!.2[1])
+    let state (j : Nat) := S[j]!.2[1]
     let goal := [S[0]!.1, S[1]!.1, .not S[2]!.1, .eq (key 0) (.int 3), .eq (state 0) (.int 7), .eq (key 1) (.int 1),
       .eq (state 1) (.int 9)]
     let script : Script :=
@@ -1615,29 +1611,23 @@ def invariantCheck (solver : Solver) : IO Bool := do
     | a => IO.println s!"smt-check: machine invariants: {repr a}"; return false
 
 /-! A machine's reaction to an event as a new instance table: instances are the records' keys {3, 5}; the old table
-holds key 3 in state 0 and key 7 in state 1. `on` enters 1 from state 0, `after` starts a timer (5 ms, to state 2) in
-state 1. So key 3 enters 1 with a timer due at now + 5, key 5 starts at 0 without one, and key 7 goes. The decoded new
-table's instances must be the step's (`machineStep`); the step from no instances (key 3 starting afresh) must differ. -/
+holds key 3 in state 0 and key 7 in state 1. `on` enters 1 from state 0. So key 3 enters 1, key 5 starts at 0, and
+key 7 goes. The decoded new table's instances must be the step's (`machineStep`); the step from no instances (key 3
+starting afresh) must differ. -/
 
 def reactM : MachineV recordsT .int :=
   let st : Expr [] [invCtxT, .int] .int := .field (ft := .int) "state" 1 (by simp) (.var .here)
-  let st1 : Expr [] [invCtxT] .int := .field (ft := .int) "state" 1 (by simp) (.var .here)
   { invM with
     name := "react"
     on := .closed (.lam (.case (.bin (.eq rfl) st (.int 0))
       (.cons (.ctor (vs := [[], []]) ⟨0, by decide⟩ .nil) (.ctor (vs := [[], [.int]]) ⟨1, by decide⟩ (.cons (.int 1) .nil))
-        (.cons (.ctor (vs := [[], []]) ⟨1, by decide⟩ .nil) (.ctor (vs := [[], [.int]]) ⟨0, by decide⟩ .nil) .nil)) ⟨4, rfl⟩))
-    after := .closed (.lam (.case (.bin (.eq rfl) st1 (.int 1))
-      (.cons (.ctor (vs := [[], []]) ⟨0, by decide⟩ .nil) (.ctor (vs := [[Ty.timer .int], []]) ⟨0, by decide⟩
-          (.cons (.ctor (vs := [[.int, .int]]) ⟨0, by decide⟩ (.cons (.int 5) (.cons (.int 2) .nil))) .nil))
-        (.cons (.ctor (vs := [[], []]) ⟨1, by decide⟩ .nil) (.ctor (vs := [[Ty.timer .int], []]) ⟨1, by decide⟩ .nil) .nil)) ⟨4, rfl⟩)) }
+        (.cons (.ctor (vs := [[], []]) ⟨1, by decide⟩ .nil) (.ctor (vs := [[], [.int]]) ⟨0, by decide⟩ .nil) .nil)) ⟨4, rfl⟩)) }
 
 def reactSvc : ServiceV := { querySvc with name := "r", queries := [], machines := [reactM] }
 
 def reactTys : List Ty :=
   [recordsT, reactM.table, .bag .int, invCtxT, Ty.next .int, Ty.option (Ty.timer .int), Ty.timer .int,
-    Ty.option (.tuple [.int, .int]), .tuple [.int, .int], instEntry .int, Ty.option (.dsl .effect [.int]),
-    noPending querySvc]
+    Ty.timerCtx .int .int recordsT, Ty.option (.dsl .effect [.int]), noPending querySvc]
 
 def reactLayout : Layout := Layout.addTys (fun _ => 3) {} reactTys
 
@@ -1645,9 +1635,7 @@ def reactCheck (solver : Solver) : IO Bool := do
   let L := reactLayout
   let fail (m : String) : IO Bool := do IO.println s!"smt-check: machine reaction: {m}"; return false
   let some (d, n) := L.find? reactM.table | fail "no table"
-  let some (dt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | fail "no slot"
-  let some (de, _) := L.find? (instEntry .int) | fail "no entry"
-  let some (dopt, _) := L.find? (Ty.option (.tuple [.int, .int])) | fail "no timer option"
+  let some (dt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no slot"
   let some (dr, nr) := L.find? recordsT | fail "no records"
   let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
   let some wf := (SymState.vars 0).wf L (v := reactSvc) [] | fail "no wf"
@@ -1662,10 +1650,9 @@ def reactCheck (solver : Solver) : IO Bool := do
     let So := slotsOf d dt n 2 (.var 5)
     let Sr := slotsOf dr drt nr 2 (.var 0)
     let key (j : Nat) := So[j]!.2[0]
-    let state (j : Nat) := Term.sel de 0 0 (So[j]!.2[1])
-    let timer (j : Nat) := Term.sel de 0 1 (So[j]!.2[1])
-    let goal := [So[0]!.1, So[1]!.1, .not So[2]!.1, .eq (key 0) (.int 3), .eq (state 0) (.int 0), .is dopt 1 (timer 0),
-      .eq (key 1) (.int 7), .eq (state 1) (.int 1), .is dopt 1 (timer 1), Sr[0]!.1, Sr[1]!.1, .not Sr[2]!.1,
+    let state (j : Nat) := So[j]!.2[1]
+    let goal := [So[0]!.1, So[1]!.1, .not So[2]!.1, .eq (key 0) (.int 3), .eq (state 0) (.int 0),
+      .eq (key 1) (.int 7), .eq (state 1) (.int 1), Sr[0]!.1, Sr[1]!.1, .not Sr[2]!.1,
       .eq (Sr[0]!.2[0]) (.int 5), .eq (Sr[1]!.2[0]) (.int 3), .eq (.var 1) (.int 100),
       .eq (.var 6) newT]
     let script : Script :=
@@ -1680,28 +1667,28 @@ def reactCheck (solver : Solver) : IO Bool := do
       let read := instancesOf prelude reactM (Ty.down _ reactM.table_data tbl)
       let some [⟨m, insts⟩] := some s.machines.toSigma | fail "not one machine"
       let view {r e : Ty} (m : MachineV r e) (is : List (Step.Instance m)) := is.map fun i =>
-        (intDen _ i.key, intDen _ i.state, i.timer.map fun (d, st) => (d, intDen _ st))
+        (intDen _ i.key, intDen _ i.state)
       let step (insts : List (Step.Instance m)) :=
         view m (Step.machineStep (e := reactSvc.event) prelude s.records s.now ev m insts).1
       let mut ok := true
-      if view reactM read != step insts || view reactM read != [(some 3, some 1, some (105, some 2)), (some 5, some 0, none)] then
+      if view reactM read != step insts || view reactM read != [(some 3, some 1), (some 5, some 0)] then
         ok ← fail s!"the new table holds {view reactM read}, the step {step insts}"
       if view reactM read == step [] then ok ← fail "the step from no instances passes the comparison"
       return ok
     | a => fail s!"{repr a}"
 
-/-! A staying instance whose `after` would outgrow a slot: `after` builds a four-item list, one more than the three
+/-! A staying instance whose `effect` would outgrow a slot: `effect` builds a four-item list, one more than the three
 slots of every type, so wherever it is evaluated the bound is reached. `on` always stays. With key 3 in the old table
-in state 1 and in the records, the instance stays and `after` is not evaluated, so the step is within the bounds and
-the script must be sat with the step's table; with key 3 missing from the old table it starts afresh, `after` is
+in state 1 and in the records, the instance stays and `effect` is not evaluated, so the step is within the bounds and
+the script must be sat with the step's table; with key 3 missing from the old table it starts afresh, `effect` is
 evaluated, and the script must be unsat. -/
 
 def stayM : MachineV recordsT .int :=
   { reactM with
     name := "stay"
     on := .closed (.lam (.ctor (vs := [[], [.int]]) ⟨0, by decide⟩ .nil))
-    after := .closed (.lam (.let_ (.list (.cons (.int 1) (.cons (.int 2) (.cons (.int 3) (.cons (.int 4) .nil)))))
-      (.ctor (vs := [[Ty.timer .int], []]) ⟨1, by decide⟩ .nil))) }
+    effect := .closed (.lam (.let_ (.list (.cons (.int 1) (.cons (.int 2) (.cons (.int 3) (.cons (.int 4) .nil)))))
+      (.ctor (vs := [[Ty.dsl .effect [.int]], []]) ⟨1, by decide⟩ .nil))) }
 
 def staySvc : ServiceV := { querySvc with name := "s", queries := [], machines := [stayM] }
 
@@ -1711,8 +1698,7 @@ def stayCheck (solver : Solver) : IO Bool := do
   let L := stayLayout
   let fail (m : String) : IO Bool := do IO.println s!"smt-check: staying instance: {m}"; return false
   let some (d, n) := L.find? stayM.table | fail "no table"
-  let some (dt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | fail "no slot"
-  let some (de, _) := L.find? (instEntry .int) | fail "no entry"
+  let some (dt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no slot"
   let some (dr, nr) := L.find? recordsT | fail "no records"
   let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
   let some wf := (SymState.vars 0).wf L (v := staySvc) [] | fail "no wf"
@@ -1731,7 +1717,7 @@ def stayCheck (solver : Solver) : IO Bool := do
       { datatypes := dts, vars := [rsrt, .int, .int, .int, psrt, msrt, msrt, .int],
         asserts := wf :: cond :: old ++ records, shows := List.range 8 }
     let stays := [So[0]!.1, .not So[1]!.1, .not So[2]!.1, .eq (So[0]!.2[0]) (.int 3),
-      .eq (Term.sel de 0 0 (So[0]!.2[1])) (.int 1)]
+      .eq (So[0]!.2[1]) (.int 1)]
     let stayed ← match ← solver.run (script stays) with
     | .sat vs => do
       let M := modelOf vs
@@ -1741,10 +1727,10 @@ def stayCheck (solver : Solver) : IO Bool := do
       let read := instancesOf prelude stayM (Ty.down _ stayM.table_data tbl)
       let some [⟨m, insts⟩] := some s.machines.toSigma | fail "not one machine"
       let view {r e : Ty} (m : MachineV r e) (is : List (Step.Instance m)) := is.map fun i =>
-        (intDen _ i.key, intDen _ i.state, i.timer.map fun (d, st) => (d, intDen _ st))
+        (intDen _ i.key, intDen _ i.state)
       let step (insts : List (Step.Instance m)) :=
         view m (Step.machineStep (e := staySvc.event) prelude s.records s.now ev m insts).1
-      if view stayM read != step insts || (view stayM read).map (fun (k, st, _) => (k, st)) != [((some 3 : Option Int), (some 1 : Option Int))] then
+      if view stayM read != step insts || view stayM read != [((some 3 : Option Int), (some 1 : Option Int))] then
         return ← fail s!"the new table holds {view stayM read}, the step {step insts}"
       if view stayM read == step [] then return ← fail "the step from no instances passes the comparison"
       return true
@@ -1752,7 +1738,7 @@ def stayCheck (solver : Solver) : IO Bool := do
     let mut ok := stayed
     match ← solver.run (script [.not So[0]!.1, .not So[1]!.1, .not So[2]!.1]) with
     | .unsat => pure ()
-    | a => ok ← fail s!"the instance starts and after outgrows a slot, yet the script is {repr a}"
+    | a => ok ← fail s!"the instance starts and effect outgrows a slot, yet the script is {repr a}"
     return ok
 
 /-! The effects a machine's instances start on an event, with their wire ids: the reaction above, whose `effect` is
@@ -1772,7 +1758,19 @@ def startEffectE : Expr [] [] (.fn [invCtxT] (Ty.option (.dsl .effect [.int]))) 
     .call (.prim .requestCommand effArgs rfl) (.cons handle (.cons (.bin .add key (.int 1)) (.cons clo .nil)))
   .lam (.ctor (vs := [[Ty.dsl .effect [.int]], []]) ⟨0, by decide⟩ (.cons req .nil))
 
-def startM : MachineV recordsT .int := { reactM with name := "start", effect := .closed startEffectE }
+/-- In state 0, a timer at `115 - 5 * key` that enters state 1: key 7's is at 80 and key 3's at 100. -/
+def keyTimerE : Expr [] [] (.fn [Ty.timerCtx .int .int recordsT] (Ty.option (Ty.timer .int))) :=
+  let key : Expr [] [Ty.timerCtx .int .int recordsT] .int := .field (ft := .int) "key" 0 (by simp) (.var .here)
+  let st : Expr [] [Ty.timerCtx .int .int recordsT] .int := .field (ft := .int) "state" 1 (by simp) (.var .here)
+  .lam (.case (.bin (.eq rfl) st (.int 0))
+    (.cons (.ctor (vs := [[], []]) ⟨0, by decide⟩ .nil) (.ctor (vs := [[Ty.timer .int], []]) ⟨0, by decide⟩
+        (.cons (.ctor (vs := [[.int, .int]]) ⟨0, by decide⟩
+          (.cons (.bin .sub (.int 115) (.bin .mul (.int 5) key)) (.cons (.int 1) .nil))) .nil))
+      (.cons (.ctor (vs := [[], []]) ⟨1, by decide⟩ .nil) (.ctor (vs := [[Ty.timer .int], []]) ⟨1, by decide⟩ .nil) .nil))
+    ⟨4, rfl⟩)
+
+def startM : MachineV recordsT .int :=
+  { reactM with name := "start", effect := .closed startEffectE, timer := .closed keyTimerE }
 
 def startSvc : ServiceV := { querySvc with name := "st", queries := [], machines := [startM] }
 
@@ -1827,55 +1825,62 @@ def startsCheck (solver : Solver) : IO Bool := do
       return ok
     | a => fail s!"{repr a}"
 
-/-! One firing round on a machine's table at the deadline 90, now 100: keys 7 and 3 (slots in that order) both wait
-for 90, entering state 1. The least key fires: key 3 enters 1, where `after` starts a timer due at 105 to state 2 and
-`effect` requests `send` with 4; key 7 keeps its timer. The decoded table must be `fireFirst` on the instances in key
-order, and the start slots flagged must hold `fireFirst`'s one effect, key 3's; firing the first slot (key 7) must
-fail both comparisons. -/
+/-! One firing round on a machine's table at the deadline 90, now 100: `timer` gives state 0 a timer at 90 that enters
+state 1, and state 1 none; keys 7 and 3 (slots in that order) are in state 0. The least key fires: key 3 enters 1, where
+`effect` requests `send` with 4; key 7 stays. The decoded table must be `fireFirst` on the instances in key order, and
+the start slots flagged must hold `fireFirst`'s one effect, key 3's; firing the first slot (key 7) must fail both
+comparisons. -/
+
+def fireTimerE : Expr [] [] (.fn [Ty.timerCtx .int .int recordsT] (Ty.option (Ty.timer .int))) :=
+  let st : Expr [] [Ty.timerCtx .int .int recordsT] .int := .field (ft := .int) "state" 1 (by simp) (.var .here)
+  .lam (.case (.bin (.eq rfl) st (.int 0))
+    (.cons (.ctor (vs := [[], []]) ⟨0, by decide⟩ .nil) (.ctor (vs := [[Ty.timer .int], []]) ⟨0, by decide⟩
+        (.cons (.ctor (vs := [[.int, .int]]) ⟨0, by decide⟩ (.cons (.int 90) (.cons (.int 1) .nil))) .nil))
+      (.cons (.ctor (vs := [[], []]) ⟨1, by decide⟩ .nil) (.ctor (vs := [[Ty.timer .int], []]) ⟨1, by decide⟩ .nil) .nil))
+    ⟨4, rfl⟩)
+
+def fireM : MachineV recordsT .int := { startM with name := "fire", timer := .closed fireTimerE }
+
+def fireSvc : ServiceV := { startSvc with name := "fi", machines := [fireM] }
 
 def fireCheck (solver : Solver) : IO Bool := do
   let L := startLayout
   let fail (m : String) : IO Bool := do IO.println s!"smt-check: timer round: {m}"; return false
-  let some (d, n) := L.find? startM.table | fail "no table"
-  let some (dt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | fail "no slot"
-  let some (de, _) := L.find? (instEntry .int) | fail "no entry"
-  let some (dopt, _) := L.find? (Ty.option (.tuple [.int, .int])) | fail "no timer option"
-  let some (dp, _) := L.find? (.tuple [.int, .int]) | fail "no timer"
+  let some (d, n) := L.find? fireM.table | fail "no table"
+  let some (dt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no slot"
   let some (dxo, _) := L.find? (Ty.option (.dsl .effect [.int])) | fail "no effect option"
-  let some wf := (SymState.vars 0).wf L (v := startSvc) [] | fail "no wf"
+  let some wf := (SymState.vars 0).wf L (v := fireSvc) [] | fail "no wf"
   let some rsrt := L.srt? recordsT | fail "no records sort"
-  let some msrt := L.srt? startM.table | fail "no table sort"
+  let some msrt := L.srt? fireM.table | fail "no table sort"
   let some psrt := L.srt? (noPending querySvc) | fail "no pending sort"
   let some dts := L.datatypes? | fail "no datatypes"
-  match startM.after.code L >>= fun (af, c0) => startM.effect.code L >>= fun (fx, c1) =>
-      (encodeFire L prelude startM af fx (.var 5) (.bool false) (.var 7) (.var 0) (.var 1)).map fun (o, c) =>
-        (o, andT c0 (andT c1 c)) with
+  match fireM.timer.code L >>= fun (tc, c0) => fireM.effect.code L >>= fun (fx, c1) =>
+      encodeTimers L fireM tc (.var 5) (.var 0) >>= fun (tms, ct) =>
+      (encodeFire L prelude fireM fx tms (.var 5) (.bool false) (.var 7) (.var 0) (.var 1)).map fun (o, c) =>
+        (o, andT c0 (andT c1 (andT ct c))) with
   | .error r => fail s!"no encoding: {repr r}"
   | .ok (o, cond) =>
     let So := slotsOf d dt n 2 (.var 5)
     let key (j : Nat) := So[j]!.2[0]
-    let state (j : Nat) := Term.sel de 0 0 (So[j]!.2[1])
-    let timer (j : Nat) := Term.sel de 0 1 (So[j]!.2[1])
-    let waits (j : Nat) := [Term.is dopt 0 (timer j), .eq (.sel dp 0 0 (.sel dopt 0 0 (timer j))) (.int 90),
-      .eq (.sel dp 0 1 (.sel dopt 0 0 (timer j))) (.int 1)]
+    let state (j : Nat) := So[j]!.2[1]
     let goal := [So[0]!.1, So[1]!.1, .not So[2]!.1, .eq (key 0) (.int 7), .eq (state 0) (.int 0), .eq (key 1) (.int 3),
-      .eq (state 1) (.int 0), .eq (.var 1) (.int 100), .eq (.var 7) (.int 90), .eq (.var 6) o.table] ++ waits 0 ++ waits 1
+      .eq (state 1) (.int 0), .eq (.var 1) (.int 100), .eq (.var 7) (.int 90), .eq (.var 6) o.table]
     let script : Script :=
       { datatypes := dts, vars := [rsrt, .int, .int, .int, psrt, msrt, msrt, .int], asserts := wf :: cond :: goal,
         shows := List.range 8 }
     match ← solver.run script with
     | .sat vs =>
       let M := modelOf vs
-      let some s := (SymState.vars 0).decode M L (v := startSvc) prelude [] | fail "the model does not decode"
-      let some tbl := decodeV L startM.table ((Term.var 6).denote M) | fail "the new table does not decode"
-      let some tbl0 := decodeV L startM.table ((Term.var 5).denote M) | fail "the old table does not decode"
-      let read := instancesOf prelude startM (Ty.down _ startM.table_data tbl)
+      let some s := (SymState.vars 0).decode M L (v := fireSvc) prelude [] | fail "the model does not decode"
+      let some tbl := decodeV L fireM.table ((Term.var 6).denote M) | fail "the new table does not decode"
+      let some tbl0 := decodeV L fireM.table ((Term.var 5).denote M) | fail "the old table does not decode"
+      let read := instancesOf prelude fireM (Ty.down _ fireM.table_data tbl)
       let view {r e : Ty} (m : MachineV r e) (is : List (Step.Instance m)) := is.map fun i =>
-        (intDen _ i.key, intDen _ i.state, i.timer.map fun (d, st) => (d, intDen _ st))
+        (intDen _ i.key, intDen _ i.state)
       let some [⟨m, insts⟩] := some s.machines.toSigma | fail "not one machine"
       let step := Step.fireFirst m s.records s.now 90 insts
-      let bySlot := Step.fireFirst startM s.records s.now 90
-        ((Ty.down _ startM.table_data tbl0).1.map fun (k, x) => instOf startM k x)
+      let bySlot := Step.fireFirst fireM s.records s.now 90
+        ((Ty.down _ fireM.table_data tbl0).1.map fun (k, x) => instOf fireM k x)
       let starts := o.starts.filterMap fun ⟨f, k, x⟩ =>
         if ((Term.and f (.is dxo 0 x)).denote M).toBool then
           match k.denote M, (Term.sel dxo 0 0 x).denote M with
@@ -1886,10 +1891,10 @@ def fireCheck (solver : Solver) : IO Bool := do
         starts.length == effs.length && (starts.zip effs).all fun ((k, w), (snd, eff)) =>
           (match snd with | .machine _ ⟨_, kv⟩ => intDen _ kv == some k | _ => false) && effMatches L eff w
       let mut ok := true
-      if view startM read != view m step.1 ||
-          view m step.1 != [(some 3, some 1, some (105, some 2)), (some 7, some 0, some (90, some 1))] then
-        ok ← fail s!"the new table holds {view startM read}, the step {view m step.1}"
-      if (view startM bySlot.1).mergeSort (fun a b => decide (a.1.getD 0 ≤ b.1.getD 0)) == view m step.1 then
+      if view fireM read != view m step.1 ||
+          view m step.1 != [(some 3, some 1), (some 7, some 0)] then
+        ok ← fail s!"the new table holds {view fireM read}, the step {view m step.1}"
+      if (view fireM bySlot.1).mergeSort (fun a b => decide (a.1.getD 0 ≤ b.1.getD 0)) == view m step.1 then
         ok ← fail "firing the first slot passes the table comparison"
       if !agrees step.2.1 || step.2.1.length != 1 then
         ok ← fail s!"the start slots hold {starts.map (·.1)}, the step {step.2.1.length} effects"
@@ -1967,13 +1972,12 @@ def writeCheck (solver : Solver) : IO Bool := do
   let some (dr, nr) := L.find? recordsT | fail "no records"
   let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
   let some (dm, nm) := L.find? startM.table | fail "no instance table"
-  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | fail "no instance slot"
-  let some (de, _) := L.find? (instEntry .int) | fail "no instance entry"
+  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no instance slot"
   let Sr := slotsOf dr drt nr 2 (.var 0)
   let Sm := slotsOf dm dmt nm 2 (.var 5)
   let state (Sp : List (Slot 2)) (pend : List Term) := [Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1,
     .eq (Sr[0]!.2[0]) (.int 3), Sm[0]!.1, .not Sm[1]!.1, .not Sm[2]!.1, .eq (Sm[0]!.2[0]) (.int 3),
-    .eq (Term.sel de 0 0 (Sm[0]!.2[1])) (.int 0), .eq (.var 6) (.int 5), .eq (.var 3) (.int 40)] ++
+    .eq (Sm[0]!.2[1]) (.int 0), .eq (.var 6) (.int 5), .eq (.var 3) (.int 40)] ++
     pend.zipIdx.map (fun (id, j) => .and Sp[j]!.1 (.eq (Sp[j]!.2[0]) id)) ++
     (List.range (3 - pend.length)).map fun j => .not Sp[pend.length + j]!.1
   match writeScript 3 [] with
@@ -2029,7 +2033,7 @@ def quietCheck (solver : Solver) : IO Bool := do
   let some (dr, nr) := L.find? recordsT | fail "no records"
   let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
   let some (dm, nm) := L.find? quietM.table | fail "no instance table"
-  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | fail "no instance slot"
+  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no instance slot"
   let Sr := slotsOf dr drt nr 2 (.var 0)
   let Sm := slotsOf dm dmt nm 2 (.var 5)
   match writeScriptOf quietM (writeLayoutOf quietM [] 3) [] with
@@ -2114,15 +2118,15 @@ def fanCheck (solver : Solver) : IO Bool := do
   let state (slots : Nat) (Sp : List (Slot 2)) : List Term :=
     let L := fanLayout slots
     match L.find? recordsT, L.find? (.tuple [Ty.bool, .int, .int]), L.find? startM.table,
-        L.find? (.tuple [Ty.bool, .int, instEntry .int]), L.find? (instEntry .int) with
-    | some (dr, nr), some (drt, _), some (dm, nm), some (dmt, _), some (de, _) =>
+        L.find? (.tuple [Ty.bool, .int, .int]) with
+    | some (dr, nr), some (drt, _), some (dm, nm), some (dmt, _) =>
       let Sr := slotsOf dr drt nr 2 (.var 0)
       let Sm := slotsOf dm dmt nm 2 (.var 5)
       [Sr[0]!.1, .eq (Sr[0]!.2[0]) (.int 3), Sm[0]!.1, .eq (Sm[0]!.2[0]) (.int 3),
-        .eq (Term.sel de 0 0 (Sm[0]!.2[1])) (.int 0), .eq (.var 6) (.int 5), .eq (.var 3) (.int 40),
+        .eq (Sm[0]!.2[1]) (.int 0), .eq (.var 6) (.int 5), .eq (.var 3) (.int 40),
         Sp[0]!.1, .eq (Sp[0]!.2[0]) (.int 2)] ++
         ((List.range (slots - 1)).flatMap fun j => [.not Sr[j + 1]!.1, .not Sm[j + 1]!.1, .not Sp[j + 1]!.1])
-    | _, _, _, _, _ => [.bool false]
+    | _, _, _, _ => [.bool false]
   let mut ok := true
   match fanScript 5 [] with
   | .error m => ok ← fail m
@@ -2166,7 +2170,7 @@ def fanCheck (solver : Solver) : IO Bool := do
   return ok
 
 /-! A clock line with timers, for `step_encode`: the service `w` above with the cascade bound `cascade`. Key 7
-waits for 80 and key 3 for 90, both entering state 1, which starts a timer due at now + 5 and requests `send`. The
+waits for 80 and key 3 for 100 (`keyTimerE`), both entering state 1, which has no timer and requests `send`. The
 state holds one request pending at wire id 2, next id 40, now 50; the line's time is 100. Round one fires key 7 (the
 earliest deadline, though key 3 is smaller), round two key 3, and round three finds no due timer. With cascade 2 the
 step is accepted: the decoded pending table, next id and instance table must be the step's (key 7's request at 40,
@@ -2206,24 +2210,19 @@ def clockFireCheck (solver : Solver) : IO Bool := do
   let some (dr, nr) := L.find? recordsT | fail "no records"
   let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
   let some (dm, nm) := L.find? startM.table | fail "no instance table"
-  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | fail "no instance slot"
-  let some (de, _) := L.find? (instEntry .int) | fail "no instance entry"
-  let some (dto, _) := L.find? (Ty.option (.tuple [.int, .int])) | fail "no timer option"
-  let some (dp, _) := L.find? (.tuple [.int, .int]) | fail "no timer"
+  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no instance slot"
   let some (d, n) := L.find? (pendingTable (clockShapes 2)) | fail "no pending table"
   let some (dt, _) := L.find? (.tuple [Ty.bool, .dsl .fresh [], pendingEntry (clockShapes 2)]) | fail "no pending slot"
   let Sr := slotsOf dr drt nr 2 (.var 0)
   let Sm := slotsOf dm dmt nm 2 (.var 5)
   let Sp := slotsOf d dt n 2 (.var 4)
-  let waits (j : Nat) (key dl : Int) := [Sm[j]!.1, .eq (Sm[j]!.2[0]) (.int key),
-    .eq (Term.sel de 0 0 (Sm[j]!.2[1])) (.int 0), .is dto 0 (Term.sel de 0 1 (Sm[j]!.2[1])),
-    .eq (.sel dp 0 0 (.sel dto 0 0 (Term.sel de 0 1 (Sm[j]!.2[1])))) (.int dl),
-    .eq (.sel dp 0 1 (.sel dto 0 0 (Term.sel de 0 1 (Sm[j]!.2[1])))) (.int 1)]
+  -- Key 7's timer is at 80 and key 3's at 100 (`keyTimerE`).
+  let waits (j : Nat) (key : Int) := [Sm[j]!.1, .eq (Sm[j]!.2[0]) (.int key), .eq (Sm[j]!.2[1]) (.int 0)]
   let goal := [Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1, .eq (Sr[0]!.2[0]) (.int 3), .not Sm[2]!.1,
     .eq (.var 1) (.int 50), .eq (.var 6) (.int 100), .eq (.var 3) (.int 40), Sp[0]!.1, .eq (Sp[0]!.2[0]) (.int 2),
-    .not Sp[1]!.1, .not Sp[2]!.1] ++ waits 0 7 80 ++ waits 1 3 90
+    .not Sp[1]!.1, .not Sp[2]!.1] ++ waits 0 7 ++ waits 1 3
   let view {r e : Ty} (m : MachineV r e) (is : List (Step.Instance m)) := is.map fun i =>
-    (intDen _ i.key, intDen _ i.state, i.timer.map fun (d, st) => (d, intDen _ st))
+    (intDen _ i.key, intDen _ i.state)
   let mut ok := true
   match clockFireScript 2 3 goal with
   | .error m => ok ← fail m
@@ -2342,7 +2341,7 @@ def eventsCheck (solver : Solver) : IO Bool := do
   let some (dr, nr) := L.find? recordsT | fail "no records"
   let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
   let some (dm, nm) := L.find? startM.table | fail "no instance table"
-  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | fail "no instance slot"
+  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no instance slot"
   let Sr := slotsOf dr drt nr 2 (.var 0)
   let Sm := slotsOf dm dmt nm 2 (.var 5)
   match eventsScript 3 [] with
@@ -2365,7 +2364,7 @@ def eventsCheck (solver : Solver) : IO Bool := do
         | some s, some s', some evs =>
           let evs : List Int := Ty.down (.list .int) rfl evs
           let view (sms : List (Step.MachineState writeSvc.records writeSvc.event)) :=
-            sms.map fun ⟨_, is⟩ => is.map fun i => (intDen _ i.key, intDen _ i.state, i.timer.map fun (d, st) => (d, intDen _ st))
+            sms.map fun ⟨_, is⟩ => is.map fun i => (intDen _ i.key, intDen _ i.state)
           let sorted (ps : List (Step.Pending writeSvc.event)) := (ps.map pendView).mergeSort fun a b => a.1 ≤ b.1
           match Step.applyEvents prelude ({ state := s } : Step.Acc writeSvc) evs,
               Step.applyEvents prelude ({ state := { s with records := writeSvc.apply.fn (.inl (s.records, s.now, ()), (3 : Int), ()) } } :
@@ -2373,7 +2372,7 @@ def eventsCheck (solver : Solver) : IO Bool := do
           | .ok a, .ok b =>
             let mut ok := true
             if !sameAs L recordsT rfl a.state.records (vs.lookup 9) then ok ← fail "the records differ from the step's"
-            if view s'.machines.toSigma != view a.state.machines.toSigma || view s'.machines.toSigma != [[(some 3, some 1, some (105, some 2))]] then
+            if view s'.machines.toSigma != view a.state.machines.toSigma || view s'.machines.toSigma != [[(some 3, some 1)]] then
               ok ← fail s!"the new table holds {view s'.machines.toSigma}, the step {view a.state.machines.toSigma}"
             if sorted s'.pending != sorted a.state.pending || s'.nextId != a.state.nextId then
               ok ← fail s!"the model's pending table holds {sorted s'.pending} and next id {s'.nextId}, the step {sorted a.state.pending} and {a.state.nextId}"
@@ -2438,7 +2437,7 @@ def twiceCheck (solver : Solver) : IO Bool := do
   let some (dr, nr) := L.find? recordsT | fail "no records"
   let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
   let some (dm, nm) := L.find? startM.table | fail "no instance table"
-  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | fail "no instance slot"
+  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no instance slot"
   let Sr := slotsOf dr drt nr 2 (.var 0)
   let Sm := slotsOf dm dmt nm 2 (.var 5)
   match twiceScript [] with
@@ -2460,12 +2459,12 @@ def twiceCheck (solver : Solver) : IO Bool := do
         | some s, some s' =>
           let r := step prelude twiceSvc s (.command ⟨0, by decide⟩ (str! "alice") (3 : Int))
           let view (sms : List (Step.MachineState twiceSvc.records twiceSvc.event)) :=
-            sms.map fun ⟨_, is⟩ => is.map fun i => (intDen _ i.key, intDen _ i.state, i.timer.map fun (d, st) => (d, intDen _ st))
+            sms.map fun ⟨_, is⟩ => is.map fun i => (intDen _ i.key, intDen _ i.state)
           let ids (ps : List (Step.Pending twiceSvc.event)) := (ps.map (·.id)).mergeSort (· ≤ ·)
           let mut ok := true
           if r.outcome.summary != "accepted" then ok ← fail s!"the step says {r.outcome.summary}"
           if !sameAs L recordsT rfl r.state.records (vs.lookup 10) then ok ← fail "the records differ from the step's"
-          if view s'.machines.toSigma != view r.state.machines.toSigma || view s'.machines.toSigma != [[(some 3, some 1, some (105, some 2))]] then
+          if view s'.machines.toSigma != view r.state.machines.toSigma || view s'.machines.toSigma != [[(some 3, some 1)]] then
             ok ← fail s!"the new table holds {view s'.machines.toSigma}, the step {view r.state.machines.toSigma}"
           if ids s'.pending != ids r.state.pending || s'.nextId != r.state.nextId || ids s'.pending != [2, 40, 41] then
             ok ← fail s!"the model's pending ids are {ids s'.pending} and next id {s'.nextId}, the step's {ids r.state.pending} and {r.state.nextId}"
@@ -2478,8 +2477,8 @@ def twiceCheck (solver : Solver) : IO Bool := do
 
 /-! An answer whose events reach machines, for `step_encode`: the service `w` above, with key 3 in the records and its
 instance in state 0, at now 100 and next id 40. Request 2 in slot 0 is the instance's `send`, whose `on_answer`
-captured key 3. The answer Ok to 2 makes `on_answer` return [3]; applying 3 lets the instance enter 1 (timer due at
-105) and request `send` again at id 40, and request 2 leaves the table. The records, instance table, pending table
+captured key 3. The answer Ok to 2 makes `on_answer` return [3]; applying 3 lets the instance enter 1 and request
+`send` again at id 40, and request 2 leaves the table. The records, instance table, pending table
 and next id read from the model must be the step's; the table before the machine reacts must not pass the
 comparison. -/
 
@@ -2518,9 +2517,7 @@ def answerMCheck (solver : Solver) : IO Bool := do
   let some (dr, nr) := L.find? recordsT | fail "no records"
   let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
   let some (dm, nm) := L.find? startM.table | fail "no instance table"
-  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | fail "no instance slot"
-  let some (de, _) := L.find? (instEntry .int) | fail "no instance entry"
-  let some (dtop, _) := L.find? (Ty.option (.tuple [.int, .int])) | fail "no timer option"
+  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no instance slot"
   let some (dp, np) := L.find? (pendingTable writeShapes) | fail "no pending table"
   let some (dpt, _) := L.find? (.tuple [Ty.bool, .dsl .fresh [], pendingEntry writeShapes]) | fail "no pending slot"
   let some (dpe, _) := L.find? (pendingEntry writeShapes) | fail "no pending entry"
@@ -2531,8 +2528,7 @@ def answerMCheck (solver : Solver) : IO Bool := do
   let Sp := slotsOf dp dpt np 2 (.var 4)
   let entry := Sp[0]!.2[1]
   let goal := [Sr[0]!.1, .eq (Sr[0]!.2[0]) (.int 3), .not Sr[1]!.1, .not Sr[2]!.1,
-    Sm[0]!.1, .eq (Sm[0]!.2[0]) (.int 3), .eq (Term.sel de 0 0 (Sm[0]!.2[1])) (.int 0),
-    .is dtop 1 (Term.sel de 0 1 (Sm[0]!.2[1])), .not Sm[1]!.1, .not Sm[2]!.1,
+    Sm[0]!.1, .eq (Sm[0]!.2[0]) (.int 3), .eq (Sm[0]!.2[1]) (.int 0), .not Sm[1]!.1, .not Sm[2]!.1,
     .eq (Term.sel d1 0 0 (Term.sel dpe 0 3 entry)) (.int 3), .not Sp[1]!.1, .not Sp[2]!.1,
     .eq (.var 1) (.int 100), .eq (.var 3) (.int 40), .is dres 0 (.var 6)]
   match answerMScript goal with
@@ -2549,12 +2545,12 @@ def answerMCheck (solver : Solver) : IO Bool := do
       | some s, some s', some y =>
         let r := step prelude writeSvc s (.answer 2 ⟨answerTy Ty.nil Ty.nil, Ty.down _ rfl y⟩)
         let view (sms : List (Step.MachineState writeSvc.records writeSvc.event)) :=
-          sms.map fun ⟨_, is⟩ => is.map fun i => (intDen _ i.key, intDen _ i.state, i.timer.map fun (d, st) => (d, intDen _ st))
+          sms.map fun ⟨_, is⟩ => is.map fun i => (intDen _ i.key, intDen _ i.state)
         let sorted (ps : List (Step.Pending writeSvc.event)) := (ps.map pendView).mergeSort fun a b => a.1 ≤ b.1
         let mut ok := true
         if r.outcome.summary != "accepted" then ok ← fail s!"the step says {r.outcome.summary}"
         if !sameAs L recordsT rfl r.state.records (vs.lookup 9) then ok ← fail "the records differ from the step's"
-        if view s'.machines.toSigma != view r.state.machines.toSigma || view s'.machines.toSigma != [[(some 3, some 1, some (105, some 2))]] then
+        if view s'.machines.toSigma != view r.state.machines.toSigma || view s'.machines.toSigma != [[(some 3, some 1)]] then
           ok ← fail s!"the new table holds {view s'.machines.toSigma}, the step {view r.state.machines.toSigma}"
         if sorted s'.pending != sorted r.state.pending || s'.nextId != r.state.nextId ||
             (sorted s'.pending).map (·.1) != [40] then
@@ -2642,7 +2638,7 @@ def mixCheck (solver : Solver) : IO Bool := do
   let some (dr, nr) := L.find? recordsT | fail "no records"
   let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
   let some (dm, nm) := L.find? startM.table | fail "no instance table"
-  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | fail "no instance slot"
+  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no instance slot"
   let some (dp, np) := L.find? (pendingTable mixShapes) | fail "no pending table"
   let some (dpt, _) := L.find? (.tuple [Ty.bool, .dsl .fresh [], pendingEntry mixShapes]) | fail "no pending slot"
   let Sr := slotsOf dr drt nr 2 (.var 0)
@@ -2748,7 +2744,7 @@ def internalCheck (solver : Solver) : IO Bool := do
   let some (dr, nr) := L.find? recordsT | fail "no records"
   let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
   let some (dm, nm) := L.find? startM.table | fail "no instance table"
-  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | fail "no instance slot"
+  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no instance slot"
   let some (dp, np) := L.find? (pendingTable twiceShapes) | fail "no pending table"
   let some (dpt, _) := L.find? (.tuple [Ty.bool, .dsl .fresh [], pendingEntry twiceShapes]) | fail "no pending slot"
   let Sr := slotsOf dr drt nr 2 (.var 0)
@@ -2770,7 +2766,7 @@ def internalCheck (solver : Solver) : IO Bool := do
       | some s, some s' =>
         let view (sms : List (Step.MachineState twiceSvc.records twiceSvc.event)) :=
           sms.map fun ⟨m, is⟩ => is.map fun (i : Step.Instance m) =>
-            (intDen _ i.key, intDen _ i.state, i.timer.map fun (p : Int × m.state.den0) => (p.1, intDen _ p.2))
+            (intDen _ i.key, intDen _ i.state)
         let flag (n : Nat) := vs.lookup n == some (.bool true)
         let ids := ((List.range nn).filterMap fun j =>
           if flag (11 + 2 * j) then natOf ((vs.lookup (12 + 2 * j)).getD (.int (-1))) else none).mergeSort (· ≤ ·)
@@ -2850,7 +2846,7 @@ def ownQueryCheck (solver : Solver) : IO Bool := do
   let some (dr, nr) := L.find? recordsT | fail "no records"
   let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
   let some (dm, nm) := L.find? startM.table | fail "no instance table"
-  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | fail "no instance slot"
+  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no instance slot"
   let some (dp, np) := L.find? (pendingTable twiceShapes) | fail "no pending table"
   let some (dpt, _) := L.find? (.tuple [Ty.bool, .dsl .fresh [], pendingEntry twiceShapes]) | fail "no pending slot"
   let Sr := slotsOf dr drt nr 2 (.var 0)
@@ -2872,7 +2868,7 @@ def ownQueryCheck (solver : Solver) : IO Bool := do
       | some s, some s' =>
         let view (sms : List (Step.MachineState twiceSvc.records twiceSvc.event)) :=
           sms.map fun ⟨m, is⟩ => is.map fun (i : Step.Instance m) =>
-            (intDen _ i.key, intDen _ i.state, i.timer.map fun (p : Int × m.state.den0) => (p.1, intDen _ p.2))
+            (intDen _ i.key, intDen _ i.state)
         let flag (n : Nat) := vs.lookup n == some (.bool true)
         let ids := ((List.range nn).filterMap fun j =>
           if flag (11 + 2 * j) then natOf ((vs.lookup (12 + 2 * j)).getD (.int (-1))) else none).mergeSort (· ≤ ·)
@@ -2955,7 +2951,7 @@ def dispCheck (solver : Solver) : IO Bool := do
   let some (dr, nr) := L.find? recordsT | fail "no records"
   let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
   let some (dm, nm) := L.find? startM.table | fail "no instance table"
-  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | fail "no instance slot"
+  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no instance slot"
   let some (dp, np) := L.find? (pendingTable dispShapes) | fail "no pending table"
   let some (dpt, _) := L.find? (.tuple [Ty.bool, .dsl .fresh [], pendingEntry dispShapes]) | fail "no pending slot"
   let Sr := slotsOf dr drt nr 2 (.var 0)
@@ -2986,7 +2982,7 @@ def dispCheck (solver : Solver) : IO Bool := do
         | some s, some s' =>
           let view (sms : List (Step.MachineState dispSvc.records dispSvc.event)) :=
             sms.map fun ⟨m, is⟩ => is.map fun (i : Step.Instance m) =>
-              (intDen _ i.key, intDen _ i.state, i.timer.map fun (p : Int × m.state.den0) => (p.1, intDen _ p.2))
+              (intDen _ i.key, intDen _ i.state)
           let flag (n : Nat) := vs.lookup n == some (.bool true)
           let ids := ((List.range nn).filterMap fun j =>
             if flag (12 + 2 * j) then natOf ((vs.lookup (13 + 2 * j)).getD (.int (-1))) else none).mergeSort (· ≤ ·)
@@ -3087,7 +3083,7 @@ def cascadeCheck (solver : Solver) : IO Bool := do
   let some (dr, nr) := L.find? recordsT | fail "no records"
   let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
   let some (dm, nm) := L.find? startM.table | fail "no instance table"
-  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | fail "no instance slot"
+  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no instance slot"
   let some (dp, np) := L.find? (pendingTable dispShapes) | fail "no pending table"
   let some (dpt, _) := L.find? (.tuple [Ty.bool, .dsl .fresh [], pendingEntry dispShapes]) | fail "no pending slot"
   let Sr := slotsOf dr drt nr 2 (.var 0)
@@ -3121,7 +3117,7 @@ def cascadeCheck (solver : Solver) : IO Bool := do
         | some s, some s' =>
           let view (sms : List (Step.MachineState dispSvc.records dispSvc.event)) :=
             sms.map fun ⟨m, is⟩ => is.map fun (i : Step.Instance m) =>
-              (intDen _ i.key, intDen _ i.state, i.timer.map fun (p : Int × m.state.den0) => (p.1, intDen _ p.2))
+              (intDen _ i.key, intDen _ i.state)
           let flag (n : Nat) := vs.lookup n == some (.bool true)
           let ids := ((List.range nn).filterMap fun j =>
             if flag (12 + 2 * j) then natOf ((vs.lookup (13 + 2 * j)).getD (.int (-1))) else none).mergeSort (· ≤ ·)
@@ -3277,7 +3273,7 @@ def cascEventCheck (solver : Solver) : IO Bool := do
     let some (dr, nr) := L.find? recordsT | return ← fail "no records"
     let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | return ← fail "no records slot"
     let some (dm, nm) := L.find? startM.table | return ← fail "no instance table"
-    let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | return ← fail "no instance slot"
+    let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | return ← fail "no instance slot"
     let some (dp, np) := L.find? (pendingTable shs) | return ← fail "no pending table"
     let some (dpt, _) := L.find? (.tuple [Ty.bool, .dsl .fresh [], pendingEntry shs]) | return ← fail "no pending slot"
     let Sr := slotsOf dr drt nr 2 (.var 0)
@@ -3298,7 +3294,7 @@ def cascEventCheck (solver : Solver) : IO Bool := do
         | some s, some s' =>
           let view (sms : List (Step.MachineState v.records v.event)) :=
             sms.map fun ⟨m, is⟩ => is.map fun (i : Step.Instance m) =>
-              (intDen _ i.key, intDen _ i.state, i.timer.map fun (p : Int × m.state.den0) => (p.1, intDen _ p.2))
+              (intDen _ i.key, intDen _ i.state)
           let ids (st : State v) := (st.pending.map (·.id)).mergeSort (· ≤ ·)
           let same (st : State v) : Bool :=
             sameAs L recordsT rfl st.records (vs.lookup 7) && view s'.machines.toSigma == view st.machines.toSigma &&
@@ -3323,7 +3319,7 @@ def cascEventCheck (solver : Solver) : IO Bool := do
 /-! A clock line whose timers queue own commands, for `step_encode`: the machine `tick` is `start` whose effect, for a key
 below 10, is alice's `put (key + 10)` answered with no events, in the service `c` above without its reaction. Its
 program makes no request, so nothing is pending. From the state of `clock fires timers` without its record and its
-request (keys 7 and 3 due at 80 and 90, next id 40, now 50), the line at 100
+request (keys 7 and 3 due at 80 and 100, next id 40, now 50), the line at 100
 fires key 7 then key 3, each round queueing its `put` at the round's queue place; with bound 2 both internal steps run
 and the step is accepted. The records, table, pending ids, next id and fresh counter read from the model must be the
 step's, and must differ from what the rounds alone leave. -/
@@ -3383,21 +3379,16 @@ def tickClockCheck (solver : Solver) : IO Bool := do
   let some (dr, nr) := L.find? recordsT | fail "no records"
   let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
   let some (dm, nm) := L.find? tickM.table | fail "no instance table"
-  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | fail "no instance slot"
-  let some (de, _) := L.find? (instEntry .int) | fail "no instance entry"
-  let some (dto, _) := L.find? (Ty.option (.tuple [.int, .int])) | fail "no timer option"
-  let some (dp, _) := L.find? (.tuple [.int, .int]) | fail "no timer"
+  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no instance slot"
   let some (d, n) := L.find? (pendingTable shs) | fail "no pending table"
   let some (dt, _) := L.find? (.tuple [Ty.bool, .dsl .fresh [], pendingEntry shs]) | fail "no pending slot"
   let Sr := slotsOf dr drt nr 2 (.var 0)
   let Sm := slotsOf dm dmt nm 2 (.var 5)
   let Sp := slotsOf d dt n 2 (.var 4)
-  let waits (j : Nat) (key dl : Int) := [Sm[j]!.1, .eq (Sm[j]!.2[0]) (.int key),
-    .eq (Term.sel de 0 0 (Sm[j]!.2[1])) (.int 0), .is dto 0 (Term.sel de 0 1 (Sm[j]!.2[1])),
-    .eq (.sel dp 0 0 (.sel dto 0 0 (Term.sel de 0 1 (Sm[j]!.2[1])))) (.int dl),
-    .eq (.sel dp 0 1 (.sel dto 0 0 (Term.sel de 0 1 (Sm[j]!.2[1])))) (.int 1)]
+  -- Key 7's timer is at 80 and key 3's at 100 (`keyTimerE`).
+  let waits (j : Nat) (key : Int) := [Sm[j]!.1, .eq (Sm[j]!.2[0]) (.int key), .eq (Sm[j]!.2[1]) (.int 0)]
   let goal := [.eq (.var 1) (.int 50), .eq (.var 6) (.int 100), .eq (.var 3) (.int 40), .eq (.var 2) (.int 7)] ++
-    ((Sr ++ Sm.drop 2 ++ Sp).map fun sl => Term.not sl.1) ++ waits 0 7 80 ++ waits 1 3 90
+    ((Sr ++ Sm.drop 2 ++ Sp).map fun sl => Term.not sl.1) ++ waits 0 7 ++ waits 1 3
   match tickClockTermsOf 2 5 goal with
   | .error m => fail m
   | .ok (script, _) =>
@@ -3410,7 +3401,7 @@ def tickClockCheck (solver : Solver) : IO Bool := do
       | some s, some s' =>
         let view (sms : List (Step.MachineState v.records v.event)) :=
           sms.map fun ⟨m, is⟩ => is.map fun (i : Step.Instance m) =>
-            (intDen _ i.key, intDen _ i.state, i.timer.map fun (p : Int × m.state.den0) => (p.1, intDen _ p.2))
+            (intDen _ i.key, intDen _ i.state)
         let ids (st : State v) := (st.pending.map (·.id)).mergeSort (· ≤ ·)
         let same (st : State v) : Bool :=
           sameAs L recordsT rfl st.records (vs.lookup 7) && view s'.machines.toSigma == view st.machines.toSigma &&
@@ -3926,7 +3917,7 @@ def genGoalCheck (solver : Solver) : IO Bool := do
 /-! A response's goal on `sum` (`respGoalE`). "After 5, 99 within 10" is violated by add 5 then a clock line past 10:
 no model at depth 1, one at depth 2 whose run, played back in Lean, violates it with timely clock lines. A last step
 at time 10 is in time, so asking for one is unsat; dropping the deadline's strictness (within 9 over Ints) makes it
-sat. A clock line past a waiting timer is ruled out (timelyClock): after adds of 5 and 1, which set a timer due at 10,
+sat. A clock line past a waiting timer is ruled out (timelyClock): after adds of 5 and 1, which leave a timer at 10,
 a violation of "after any event, 99 within 5" whose third step comes at 11 is unsat, and at 10 sat. `then` sees the
 trigger: "after any event, the same event within 5" is answered by its trigger, so it has no model; "after 5, the event
 one above the trigger within 10" has one at depth 2. -/

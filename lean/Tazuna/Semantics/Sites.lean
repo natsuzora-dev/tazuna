@@ -419,7 +419,7 @@ def rootUses (v : ServiceV) : List Uses :=
   [v.apply.uses, v.invariants.uses] ++
     v.commands.flatMap (fun x => [x.accepts.uses, x.decide.uses, x.ensures.uses]) ++
     v.queries.flatMap (fun q => [q.accepts.uses, q.resolve.uses]) ++
-    v.machines.flatMap (fun m => [m.instances.uses, m.on.uses, m.after.uses, m.invariants.uses, m.effect.uses]) ++
+    v.machines.flatMap (fun m => [m.instances.uses, m.on.uses, m.timer.uses, m.invariants.uses, m.effect.uses]) ++
     v.reactions.map (·.react.uses) ++ v.subscribes.map (·.wrap.uses) ++
     v.responses.flatMap (fun r => [r.after.uses, r.then_.uses]) ++ v.bounds.creates.map (·.table.uses)
 
@@ -436,9 +436,9 @@ def keptUses : ServiceV → List Uses
         [accepts.uses, decide.uses, ensures.uses]) ++
       queries.flatMap (fun (⟨_name, _input, _output, _callers, accepts, resolve⟩ : QueryV _records _caller) =>
         [accepts.uses, resolve.uses]) ++
-      machines.flatMap (fun (⟨_name, _key, _state, instances, _initial, on, after, effect, invariants⟩ :
+      machines.flatMap (fun (⟨_name, _key, _state, instances, _initial, on, timer, effect, invariants⟩ :
           MachineV _records _event) =>
-        [instances.uses, on.uses, after.uses, invariants.uses, effect.uses]) ++
+        [instances.uses, on.uses, timer.uses, invariants.uses, effect.uses]) ++
       reactions.map (fun (⟨_name, react⟩ : ReactionV _records _event) => react.uses) ++
       subscribes.map (fun (⟨_source, _name, _sourceEvent, wrap⟩ : SubscriptionV _event) => wrap.uses) ++
       responses.flatMap (fun (⟨_name, after, then_, _within⟩ : ResponseV _event) => [after.uses, then_.uses]) ++

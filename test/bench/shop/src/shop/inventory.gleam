@@ -293,7 +293,7 @@ fn low_stock() -> tazuna.Machine(Records, Event) {
         _, _ -> tazuna.Stay
       }
     },
-    after: fn(_ctx: MachineCtx(String, Level, Records)) { None },
+    timer: fn(_ctx: tazuna.TimerCtx(String, Level, Records)) { None },
     effect: fn(ctx: MachineCtx(String, Level, Records)) {
       case ctx.state {
         Plenty -> None

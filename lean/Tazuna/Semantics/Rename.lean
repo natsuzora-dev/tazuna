@@ -699,7 +699,7 @@ structure QueryV.Self (x : QueryV r c) : Prop where
 structure MachineV.Self (m : MachineV r e) : Prop where
   instances : Fun.Rel R m.instances m.instances
   on : Fun.Rel R m.on m.on
-  after : Fun.Rel R m.after m.after
+  timer : Fun.Rel R m.timer m.timer
   initial : Ty.rel0 R m.state m.initial m.initial
   effect : Ty.rel0 R (.tuple m.effect.Γ) m.effect.env m.effect.env
   invariants : Fun.Rel R m.invariants m.invariants

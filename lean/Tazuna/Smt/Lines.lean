@@ -104,35 +104,33 @@ theorem cascade_lines (c : CheckedSpec) (hv : v ∈ c.spec.services) (hL : Sorte
   exact pairs_at chk hL senv (fun p hp => (hall p hp).mono fun h => (h b hb.1).2 i j hi hj hij) hk (hfit b hb.1)
     hb.2.1.inv hs hq hsa (hb.2.2 _ (List.getElem_mem hi)) (hb.2.2 _ (List.getElem_mem hj)) hr1 hr2
 
-/-- A timer's context fits the slots: the instance's key, the state its timer moves it to and the records embed. -/
+/-- A timer's context fits the slots: the instance's key, its state and the records embed. -/
 def CtxFits (L : Layout) {r e : Ty} (m : MachineV r e) (records : r.den0) (key : m.key.den0) (st : m.state.den0) :
     Prop :=
   (embedV L m.key (Ty.up _ m.key_data key)).isSome ∧ (embedV L m.state (Ty.up _ m.state_data st)).isSome ∧
     (embedV L r (Ty.up _ m.records_data records)).isSome
 
-/-- Every set timer of `l` has a context that fits the slots. -/
+/-- Every instance of `l` has a timer context that fits the slots. -/
 def TimersFit (L : Layout) {r e : Ty} (records : r.den0) : {ms : List (MachineV r e)} → Step.Machines ms → Prop
   | [], .nil => True
-  | m :: _, .cons insts rest =>
-    (∀ i ∈ insts, ∀ p, i.timer = some p → CtxFits L m records i.key p.2) ∧ TimersFit L records rest
+  | m :: _, .cons insts rest => (∀ i ∈ insts, CtxFits L m records i.key i.state) ∧ TimersFit L records rest
 
-/-- What a timer line's answers say: the machine sets no timer (it gets no line), or both its questions are unsat
+/-- What a timer line's answers say: the machine gives no timer (it gets no line), or both its questions are unsat
 (`Prove.proved`). -/
 def TimerLine (L : Layout) {r e : Ty} (m : MachineV r e) : Prop :=
   m.noTimer = true ∨ ∃ bq tq, timerQuestions L m = .ok (bq, tq) ∧ Unsat L bq ∧ Unsat L tq
 
-/-- What a timer line says: the timer `after` sets at a context that fits the slots is no earlier than the time it is
-set at. -/
+/-- What a timer line says: at a context that fits the slots, the state the timer enters waits for no earlier timer. -/
 theorem forward_of_line {r e : Ty} {m : MachineV r e}
     (hq : TimerLine L m)
-    {records : r.den0} {now : Int} {key : m.key.den0} {st : m.state.den0} (hc : CtxFits L m records key st) :
-    ∀ y ∈ Step.timerAt now (m.after.fn (.inl (key, st, records, now, ()), ())), now ≤ y.1 := by
+    {records : r.den0} {key : m.key.den0} {st : m.state.den0} (hc : CtxFits L m records key st) :
+    ∀ y ∈ m.timerAt records key st, ∀ z ∈ m.timerAt records key y.2, y.1 ≤ z.1 := by
   rcases hq with hn | ⟨bq, tq, hq, hb, ht⟩
-  · exact Step.timerForward_of_noTimer hn records now key st
+  · exact Step.timerForward_of_noTimer hn records key st
   obtain ⟨zk, hk⟩ := Option.isSome_iff_exists.1 hc.1
   obtain ⟨zs, hs⟩ := Option.isSome_iff_exists.1 hc.2.1
   obtain ⟨zr, hr⟩ := Option.isSome_iff_exists.1 hc.2.2
-  let M := coverModel L [zk, zs, zr, .int now]
+  let M := coverModel L [zk, zs, zr]
   have hM : ∀ n (h : n < (timerTys m).length), Sorted L (timerTys m)[n] (M.vars n) := by
     intro n hn
     simp only [timerTys, List.length_cons, List.length_nil] at hn
@@ -140,19 +138,16 @@ theorem forward_of_line {r e : Ty} {m : MachineV r e}
     | 0, _ => exact sorted_of_embed hk
     | 1, _ => exact sorted_of_embed hs
     | 2, _ => exact sorted_of_embed hr
-    | 3, _ => exact ⟨now, rfl⟩
-  have hsrt : Forall2 (SrtVal L) (timerTys m) [zk, zs, zr, .int now] :=
-    ⟨embedV_srtVal hk, embedV_srtVal hs, embedV_srtVal hr, srtVal_int ⟨now, rfl⟩, trivial⟩
+  have hsrt : Forall2 (SrtVal L) (timerTys m) [zk, zs, zr] :=
+    ⟨embedV_srtVal hk, embedV_srtVal hs, embedV_srtVal hr, trivial⟩
   have hdata : ∀ t ∈ timerTys m, t.isData = true := by
     simp only [timerTys, List.mem_cons, List.not_mem_nil, or_false]
-    rintro t (rfl | rfl | rfl | rfl)
+    rintro t (rfl | rfl | rfl)
     · exact m.key_data
     · exact m.state_data
     · exact m.records_data
-    · rfl
-  exact (timer_sound m hq ht hM (layoutSorted_coverModel hsrt hdata) ⟨key, st, records, now, decode_embed _ _ _ hk,
-    decode_embed _ _ _ hs,
-    decode_embed _ _ _ hr, rfl⟩).2 hb
+  exact (timer_sound m hq ht hM (layoutSorted_coverModel hsrt hdata) ⟨key, st, records, decode_embed _ _ _ hk,
+    decode_embed _ _ _ hs, decode_embed _ _ _ hr⟩).2 hb
 
 theorem firesAt_of_lines {r e : Ty} {records : r.den0} {now : Int} : {ms : List (MachineV r e)} →
     (∀ m ∈ ms, TimerLine L m) →
@@ -160,19 +155,22 @@ theorem firesAt_of_lines {r e : Ty} {records : r.den0} {now : Int} : {ms : List 
   | [], _, .nil, _ => trivial
   | m :: _, hq, .cons insts rest, hf => by
     obtain ⟨hi, hrest⟩ : _ ∧ _ := hf
-    refine ⟨fun i hmem d hd hdn y hy => ?_,
+    refine ⟨fun i hmem d hd _ y hy => ?_,
       firesAt_of_lines (fun m' hm' => hq m' (List.mem_cons_of_mem _ hm')) rest hrest⟩
-    obtain ⟨key, st, tm⟩ := i
-    cases tm with
-    | none => simp [Step.hitsAt] at hd
-    | some p =>
-      have hc := hi _ hmem p rfl
-      exact Int.le_trans hdn (forward_of_line (hq m List.mem_cons_self) hc y hy)
+    unfold Step.hitsAt at hd
+    unfold Step.fired at hy
+    split at hd
+    · next d' tg ht =>
+      have hdd : d' = d := by simpa using hd
+      subst hdd
+      rw [ht] at hy
+      exact forward_of_line (hq m List.mem_cons_self) (hi i hmem) (d', tg) ht y (by simpa [Step.enter] using hy)
+    · cases hd
 
 /-- T5 for a clock line's timers from the timer lines, scoped to the slots: where every timer line reads proved, every
 order of the timers due at one deadline ends as `fire` does, the same state and the
-same effects in some order, wherever every timer set in a state the firing reaches in any order has a context that
-fits the slots. -/
+same effects in some order, wherever every instance of a state the firing reaches in any order has a timer context
+that fits the slots. -/
 theorem timers_lines {v : ServiceV}
     (hq : ∀ m ∈ v.machines, TimerLine L m)
     (fuel : Nat) (s : State v)

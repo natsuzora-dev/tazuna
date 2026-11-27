@@ -2,11 +2,10 @@ import Tazuna.Smt.ReactExact
 import Tazuna.Smt.Verdict
 import Tazuna.Semantics.Interleave
 
-/-! The question T5 asks of a timer machine (`Step.TimerForward`): can its `after` set a timer before the time it is
-set at? The instance's key and state, the records and the time are free, so one question per machine covers every
-timer it fires (`Step.firesForward_iff`). The encoding applies the `after` code to the context of those terms and reads
-the timer it asks for as an entry holds it (`timerT`); the timer falls back where it is set and its deadline is
-before the time (`timer_encode`). -/
+/-! The question T5 asks of a timer machine (`Step.TimerForward`): can the state its timer enters wait for a timer
+before the one that entered it? The instance's key and state and the records are free, so one question per machine
+covers every timer it fires (`Step.firesForward_iff`). The encoding applies the `timer` code at those terms, then
+again at the state the first timer enters (`timer_encode`). No time is free: `timer` sees none. -/
 
 namespace Tazuna.Smt
 
@@ -15,27 +14,31 @@ open Tazuna.Ir
 section
 variable (L : Layout) {r e : Ty}
 
-/-- Whether the timer `m`'s `after` sets at the context of these terms is before `now`, the condition that `after`
-fits there, and its code's own condition. -/
-def encodeTimer (m : MachineV r e) (key st records now : Term) : Except Refusal (Term × Term × Term) := do
-  let (af, c0) ← m.after.code L
-  let nctx ← Code.ofDataE _ (← instCtxT L m key st records now)
-  let (a, c) ← af (nctx, ())
-  let at_ ← Code.dataTermE _ a
-  let tm ← timerT L m now at_
-  let (dent, _) ← L.findE (Ty.option (.tuple [.int, m.state]))
-  let dp ← tupleD L [.int, m.state]
-  pure (.and (.is dent 0 tm) (.lt (.sel dp 0 0 (.sel dent 0 0 tm)) now), c, c0)
+/-- Whether the timer the state `st`'s timer enters waits for is before that timer, the condition that `timer` fits at
+both contexts (the second only where the first gives a timer), and its code's own condition. -/
+def encodeTimer (m : MachineV r e) (key st records : Term) : Except Refusal (Term × Term × Term) := do
+  let (tc, c0) ← m.timer.code L
+  let (dopt, _) ← L.findE (Ty.option (Ty.timer m.state))
+  let (dtm, _) ← L.findE (Ty.timer m.state)
+  let cx1 ← Code.ofDataE _ (← timerCtxT L m key st records)
+  let (a1, c1) ← tc (cx1, ())
+  let t1 ← Code.dataTermE _ a1
+  let t1 := Term.share t1
+  let cx2 ← Code.ofDataE _ (← timerCtxT L m key (targetT dopt dtm t1) records)
+  let (a2, c2) ← tc (cx2, ())
+  let t2 ← Code.dataTermE _ a2
+  let at1 := Term.sel dtm 0 0 (.sel dopt 0 0 t1)
+  let at2 := Term.sel dtm 0 0 (.sel dopt 0 0 t2)
+  pure (.and (.is dopt 0 t1) (.and (.is dopt 0 t2) (.lt at2 at1)), andT c1 (.ite (.is dopt 0 t1) c2 tt), c0)
 
-/-- The types of a timer machine's question variables, `v0` to `v3`: the instance's key and state, the records and the
-time. -/
-def timerTys (m : MachineV r e) : List Ty := [m.key, m.state, r, .int]
+/-- The types of a timer machine's question variables, `v0` to `v2`: the instance's key and state, and the records. -/
+def timerTys (m : MachineV r e) : List Ty := [m.key, m.state, r]
 
-/-- A timer machine's two questions, over well-formed variables: the bound question, whether `after` or its code's
-captured values leave the slots at some context; and the target question, whether `after` sets a timer before the time
-it is set at where everything fits. -/
+/-- A timer machine's two questions, over well-formed variables: the bound question, whether `timer` or its code's
+captured values leave the slots at some context; and the target question, whether the state a timer enters waits for
+an earlier timer where everything fits. -/
 def timerQuestions (m : MachineV r e) : Except Refusal (TypedScript × TypedScript) := do
-  let (back, c, c0) ← encodeTimer L m (.var 0) (.var 1) (.var 2) (.var 3)
+  let (back, c, c0) ← encodeTimer L m (.var 0) (.var 1) (.var 2)
   let wfs ← (timerTys m).zipIdx.mapM fun (t, i) => need (lacksData t) (wfT L t (.var i))
   let vars ← (timerTys m).mapM fun t => need (lacks t) (L.srt? t)
   let dts ← need (.layout (.type r)) L.datatypes?
@@ -47,94 +50,114 @@ end
 section
 variable {L : Layout} {M : Model} {r e : Ty}
 
-/-- An entry's timer term is set before `now` exactly when the timer it codes is. -/
-theorem timer_den (m : MachineV r e) {dent n dp np : Nat}
-    (hdent : L.find? (Ty.option (.tuple [.int, m.state])) = some (dent, n)) (hdp : L.find? (.tuple [.int, m.state]) = some (dp, np))
-    {tm now : Term} {tnow : Int} (hnow : now.denote M = .int tnow) (t : Option (Int × m.state.den0))
-    (ht : RelV L _ (Ty.up _ m.timer_data (timerVal t)) (tm.denote M)) :
-    Holds M (.and (.is dent 0 tm) (.lt (.sel dp 0 0 (.sel dent 0 0 tm)) now)) ↔ ∃ x ∈ t, x.1 < tnow := by
-  have hs := m.state_data
-  have hent1 : (Ty.tuple [.tuple [.int, m.state]]).isData = true := by simp [Ty.isData, Ty.isDatas, hs]
-  have hpair : (Ty.tuple [.int, m.state]).isData = true := by simp [Ty.isData, Ty.isDatas, hs]
-  have hnone' : (Ty.adt 3 [.tuple [.int, m.state]] [[]]).isData = true := by simp [Ty.isData, Ty.isDatass, Ty.isDatas]
-  obtain ⟨d', n', hf', hra⟩ := ht
-  obtain rfl := find_det hf' hdent
-  cases t with
-  | some p =>
-    obtain ⟨dl, tg⟩ := p
-    change RelAlts L d' 0 _ (Ty.up _ m.timer_data (.inl ((dl, tg, ()), ()))) _ at hra
-    erw [Ty.up_inl 3 _ [.tuple [.int, m.state]] [[]] m.timer_data hent1] at hra
-    obtain ⟨vals, hv, hvals⟩ := hra
-    erw [Ty.up_tuple _ _ _ hpair rfl] at hvals
-    obtain ⟨v0, _, rfl, ⟨dp', np', vals7, hf7, hv7, hvals7⟩, rfl⟩ := hvals
-    obtain rfl := find_det hf7 hdp
-    erw [Ty.up_tuple _ _ _ rfl (by simp [Ty.isData, Ty.isDatas, hs])] at hvals7
-    obtain ⟨vd, vs7, rfl, hvd, hvals7⟩ := hvals7
-    erw [Ty.up_tuple _ _ _ hs rfl] at hvals7
-    obtain ⟨vt, _, rfl, -, rfl⟩ := hvals7
-    change vd = .int dl at hvd
-    subst hvd
-    simp [Holds, Term.denote, hv, hv7, hnow, Val.toBool, Val.toInt]
-  | none =>
-    change RelAlts L d' 0 _ (Ty.up _ m.timer_data (.inr (.inl ()))) _ at hra
-    erw [Ty.up_inr 3 _ [.tuple [.int, m.state]] [[]] m.timer_data hnone', Ty.up_inl 3 _ [] [] hnone' rfl] at hra
-    obtain ⟨vals, hv, -⟩ := hra
-    simp [Holds, Term.denote, hv, Val.toBool]
+/-- Whether `timer` fits at the context of the instance of `k` in `st`, and at the state its timer enters. -/
+def TimerFits (S : Ty → Nat) (m : MachineV r e) (recs : r.den0) (k : m.key.den0) (st : m.state.den0) : Prop :=
+  m.timer.appFits S (.inl (k, st, recs, ()), ()) ∧
+    ∀ x ∈ m.timerAt recs k st, m.timer.appFits S (.inl (k, x.2, recs, ()), ())
 
-/-- A timer machine's question: where the terms code an instance's key and state, the records and the time, the
-code's own condition holds exactly when `after`'s captured values fit; where it holds, the condition holds exactly when
-`after` fits at that context; and where that holds, the question's term holds exactly when the timer `after` sets
-there is before the time. -/
-theorem timer_encode (m : MachineV r e) {key st records now : Term} {k : m.key.den0} {sv : m.state.den0}
-    {recs : r.den0} {tnow : Int} (hk : RelV L m.key (Ty.up _ m.key_data k) (key.denote M))
+/-- A timer machine's question: where the terms code an instance's key and state and the records, the code's own
+condition holds exactly when `timer`'s captured values fit; where it holds, the condition holds exactly when `timer`
+fits at both contexts; and where that holds, the question's term holds exactly when the state the timer enters waits
+for an earlier timer. -/
+theorem timer_encode (m : MachineV r e) {key st records : Term} {k : m.key.den0} {sv : m.state.den0}
+    {recs : r.den0} (hk : RelV L m.key (Ty.up _ m.key_data k) (key.denote M))
     (hs : RelV L m.state (Ty.up _ m.state_data sv) (st.denote M))
-    (hrec : RelV L r (Ty.up _ m.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow)
-    {back c c0 : Term} (henc : encodeTimer L m key st records now = .ok (back, c, c0)) :
-    (Holds M c0 ↔ (m.after.fits L.count).1) ∧
-    (Holds M c0 → (Holds M c ↔ m.after.appFits L.count (.inl (k, sv, recs, tnow, ()), ())) ∧
-      (Holds M c → (Holds M back ↔
-        ∃ x ∈ Step.timerAt tnow (m.after.fn (.inl (k, sv, recs, tnow, ()), ())), x.1 < tnow))) := by
-  obtain ⟨⟨af, c0'⟩, g0, henc⟩ := bind_ok.1 henc
-  obtain ⟨ctxT, g1, henc⟩ := bind_ok.1 henc
-  obtain ⟨nctx, g2, henc⟩ := bind_ok.1 henc
-  obtain ⟨⟨a, ca⟩, g3, henc⟩ := bind_ok.1 henc
-  obtain ⟨at_, g4, henc⟩ := bind_ok.1 henc
-  obtain ⟨tm, g5, henc⟩ := bind_ok.1 henc
-  obtain ⟨⟨dent, nent⟩, g6, henc⟩ := bind_ok.1 henc
-  obtain ⟨dp, g7, henc⟩ := bind_ok.1 henc
+    (hrec : RelV L r (Ty.up _ m.records_data recs) (records.denote M))
+    {back c c0 : Term} (henc : encodeTimer L m key st records = .ok (back, c, c0)) :
+    (Holds M c0 ↔ (m.timer.fits L.count).1) ∧
+    (Holds M c0 → (Holds M c ↔ TimerFits L.count m recs k sv) ∧
+      (Holds M c → (Holds M back ↔ ∃ x ∈ m.timerAt recs k sv, ∃ y ∈ m.timerAt recs k x.2, y.1 < x.1))) := by
+  obtain ⟨⟨tc, c0'⟩, g0, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨dopt, n1⟩, g1, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨dtm, n2⟩, g2, henc⟩ := bind_ok.1 henc
+  obtain ⟨ctx1, g3, henc⟩ := bind_ok.1 henc
+  obtain ⟨cx1, g4, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨a1, c1⟩, g5, henc⟩ := bind_ok.1 henc
+  obtain ⟨t1, g6, henc⟩ := bind_ok.1 henc
+  obtain ⟨ctx2, g7, henc⟩ := bind_ok.1 henc
+  obtain ⟨cx2, g8, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨a2, c2⟩, g9, henc⟩ := bind_ok.1 henc
+  obtain ⟨t2, g10, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
-  refine ⟨(m.after.code_exact g0).1, fun hc0 => ?_⟩
-  have hcx := ctx_rel m hk hs hrec hnow g1 (need_ok.1 g2)
-  have hctx : ∀ t ∈ [Ty.machineCtx m.key m.state r], t.isFn = false := by simp [Ty.machineCtx, Ty.isFn]
-  refine ⟨m.after.app_exact g0 hc0 hctx _ _ (ctx_rels m hcx m.after.args_data) g3, fun hca => ?_⟩
-  have ha := after_app m (m.after.code_fn m.after.ht g0 hc0) hcx g3 hca
-  have htm := timerT_rel m hnow _ ((rel_term (need_ok.1 g4) _).1 ha) g5
-  obtain ⟨np, hdp⟩ := tupleD_ok g7
-  exact timer_den m (need_ok.1 g6) hdp hnow _ htm
+  replace g1 := need_ok.1 g1
+  replace g2 := need_ok.1 g2
+  refine ⟨(m.timer.code_exact g0).1, fun hc0 => ?_⟩
+  have hctx : ∀ t ∈ [Ty.timerCtx m.key m.state r], t.isFn = false := by simp [Ty.timerCtx, Ty.isFn]
+  have htc := m.timer.code_fn m.timer.ht g0 hc0
+  have hcx1 := tctx_rel m hk hs hrec g3 (need_ok.1 g4)
+  have e1 := m.timer.app_exact g0 hc0 hctx _ _ (tctx_rels m hcx1 m.timer.args_data) g5
+  -- Where `timer` fits at the first context, its terms read the first timer.
+  have view1 : Holds M c1 → _ := fun hc1 =>
+    timer_view m g1 g2 _ (by rw [Term.denote_share]; exact (rel_term (need_ok.1 g6) _).1 (timer_app m htc hcx1 g5 hc1))
+  have hite : ∀ (b : Bool) (x : Term), (Term.is dopt 0 (Term.share t1)).denote M = .bool b →
+      (Holds M (.ite (.is dopt 0 (Term.share t1)) x tt) ↔ (b = true → Holds M x)) := by
+    intro b x hb; cases b <;> simp [holds_ite, hb, Val.toBool, holds_tt]
+  unfold MachineV.timerAt
+  refine ⟨?_, fun hc => ?_⟩
+  · rw [holds_andT, e1]
+    unfold TimerFits MachineV.timerAt
+    constructor
+    · rintro ⟨p1, p2⟩
+      refine ⟨p1, fun x hx => ?_⟩
+      obtain ⟨his, hsel⟩ := view1 (e1.2 p1)
+      rw [Option.mem_def] at hx
+      rw [hx] at his
+      have hp2 := (hite true _ his).1 p2 rfl
+      have hcx2 := tctx_rel m hk (hsel x.1 x.2 hx).2 hrec g7 (need_ok.1 g8)
+      exact (m.timer.app_exact g0 hc0 hctx _ _ (tctx_rels m hcx2 m.timer.args_data) g9).1 hp2
+    · rintro ⟨p1, p2⟩
+      refine ⟨p1, ?_⟩
+      obtain ⟨his, hsel⟩ := view1 (e1.2 p1)
+      cases hv : Step.timerVal (m.timer.fn (.inl (k, sv, recs, ()), ())) with
+      | none => rw [hv] at his; exact (hite false _ his).2 (fun h => nomatch h)
+      | some x =>
+        rw [hv] at his
+        refine (hite true _ his).2 fun _ => ?_
+        have hcx2 := tctx_rel m hk (hsel x.1 x.2 hv).2 hrec g7 (need_ok.1 g8)
+        exact (m.timer.app_exact g0 hc0 hctx _ _ (tctx_rels m hcx2 m.timer.args_data) g9).2 (p2 x hv)
+  · obtain ⟨hc1, hc2'⟩ := (holds_andT _ _).1 hc
+    obtain ⟨his, hsel⟩ := view1 hc1
+    have hand : ∀ a b : Term, (Term.and a b).denote M = .bool ((a.denote M).toBool && (b.denote M).toBool) :=
+      fun _ _ => rfl
+    simp only [Holds]
+    rw [hand, hand, his]
+    cases hv : Step.timerVal (m.timer.fn (.inl (k, sv, recs, ()), ())) with
+    | none => simp [Val.toBool]
+    | some x =>
+      have hc2 := (hite true _ (by rw [his, hv]; rfl)).1 hc2' rfl
+      obtain ⟨hat1, htg⟩ := hsel x.1 x.2 hv
+      have hcx2 := tctx_rel m hk htg hrec g7 (need_ok.1 g8)
+      obtain ⟨his2, hsel2⟩ := timer_view m g1 g2 _ ((rel_term (need_ok.1 g10) _).1 (timer_app m htc hcx2 g9 hc2))
+      rw [his2]
+      cases hv2 : Step.timerVal (m.timer.fn (.inl (k, x.2, recs, ()), ())) with
+      | none => simp [Val.toBool, hv2]
+      | some y =>
+        have hat2 := (hsel2 y.1 y.2 hv2).1
+        have hlt : (Term.lt (.sel dtm 0 0 (.sel dopt 0 0 t2)) (.sel dtm 0 0 (.sel dopt 0 0 (Term.share t1)))).denote M =
+            .bool (decide (y.1 < x.1)) := by
+          show Val.bool _ = _
+          rw [hat2, show (Term.sel dtm 0 0 (.sel dopt 0 0 (Term.share t1))).denote M = .int x.1 from hat1]
+          rfl
+        rw [hlt]
+        simp only [Val.toBool, hv2, Option.mem_def, Option.some.injEq, exists_eq_left']
+        simp
 
-/-- The values of an instance context, as the question's variables hold them. -/
+/-- The values of an instance's timer context, as the question's variables hold them. -/
 structure TimerVals (L : Layout) (m : MachineV r e) (M : Model) where
   key : m.key.den0
   state : m.state.den0
   records : r.den0
-  now : Int
   hkey : decodeV L m.key (M.vars 0) = some (Ty.up _ m.key_data key)
   hstate : decodeV L m.state (M.vars 1) = some (Ty.up _ m.state_data state)
   hrecords : decodeV L r (M.vars 2) = some (Ty.up _ m.records_data records)
-  hnow : M.vars 3 = .int now
 
 /-- The values a model gives a timer question's variables, where they decode. -/
 def TimerVals.decode (L : Layout) (m : MachineV r e) (M : Model) : Option (TimerVals L m M) :=
-  match hk : decodeV L m.key (M.vars 0), hs : decodeV L m.state (M.vars 1), hr : decodeV L r (M.vars 2),
-    hn : M.vars 3 with
-  | some k, some st, some rc, .int now =>
-    some ⟨Ty.down _ m.key_data k, Ty.down _ m.state_data st, Ty.down _ m.records_data rc, now,
-      by rw [hk, Ty.up_down], by rw [hs, Ty.up_down], by rw [hr, Ty.up_down], hn⟩
-  | _, _, _, _ => none
-
-/-- The context the values make for `after`. -/
-def TimerVals.ctx {m : MachineV r e} (x : TimerVals L m M) : (Ty.tuple [Ty.machineCtx m.key m.state r]).den0 :=
-  (.inl (x.key, x.state, x.records, x.now, ()), ())
+  match hk : decodeV L m.key (M.vars 0), hs : decodeV L m.state (M.vars 1), hr : decodeV L r (M.vars 2) with
+  | some k, some st, some rc =>
+    some ⟨Ty.down _ m.key_data k, Ty.down _ m.state_data st, Ty.down _ m.records_data rc,
+      by rw [hk, Ty.up_down], by rw [hs, Ty.up_down], by rw [hr, Ty.up_down]⟩
+  | _, _, _ => none
 
 theorem wfs_hold (m : MachineV r e) (x : TimerVals L m M) {wfs : List Term}
     (h : (timerTys m).zipIdx.mapM (fun (t, i) => need (lacksData t) (wfT L t (.var i))) = .ok wfs) :
@@ -149,18 +172,17 @@ theorem wfs_hold (m : MachineV r e) (x : TimerVals L m M) {wfs : List Term}
       Holds M w := by
     intro u j y hd hw'
     exact (wf_iff u _ w hw' (decode_sorted u _ _ hd)).2 (by simp [Term.denote, hd])
-  rcases hti with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+  rcases hti with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
   · exact hdec x.hkey hc
   · exact hdec x.hstate hc
   · exact hdec x.hrecords hc
-  · exact hdec (u := .int) (y := x.now) (by simp [x.hnow, decodeV]) hc
 
-/-- What a timer machine's questions say: a model of the target question's assertions holds a context where `after`
-sets a timer before the time it is set at, so the machine's timers do not fire forward (the counterexample is
-honest); and where the target question is unsat, no context whose values fit and at which `after` fits does so. -/
+/-- What a timer machine's questions say: a model of the target question's assertions holds a context whose timer
+enters a state that waits for an earlier timer, so the machine's timers do not fire forward (the counterexample is
+honest). -/
 theorem timer_exact (m : MachineV r e) {bq tq : TypedScript} (hq : timerQuestions L m = .ok (bq, tq)) (x : TimerVals L m M) :
     (∀ a ∈ tq.asserts, Holds M a) →
-      ∃ y ∈ Step.timerAt x.now (m.after.fn x.ctx), y.1 < x.now := by
+      ∃ y ∈ m.timerAt x.records x.key x.state, ∃ z ∈ m.timerAt x.records x.key y.2, z.1 < y.1 := by
   intro hall
   obtain ⟨⟨back, c, c0⟩, he, hq⟩ := bind_ok.1 hq
   obtain ⟨wfs, -, hq⟩ := bind_ok.1 hq
@@ -170,7 +192,7 @@ theorem timer_exact (m : MachineV r e) {bq tq : TypedScript} (hq : timerQuestion
   have hk := decode_rel _ _ _ x.hkey
   have hs := decode_rel _ _ _ x.hstate
   have hr := decode_rel _ _ _ x.hrecords
-  have henc := timer_encode m hk hs hr (tnow := x.now) (by simp [Term.denote, x.hnow]) he
+  have henc := timer_encode m hk hs hr he
   have hin : ∀ a ∈ [c0, c, back], Holds M a := hall
   have hc0 := hin c0 (by simp)
   exact (((henc.2 hc0).2 (hin c (by simp))).1 (hin back (by simp)))
@@ -179,18 +201,18 @@ theorem timer_exact (m : MachineV r e) {bq tq : TypedScript} (hq : timerQuestion
 theorem timer_violates {ms : List (MachineV r e)} {m : MachineV r e} (hm : m ∈ ms) {bq tq : TypedScript}
     (hq : timerQuestions L m = .ok (bq, tq)) (x : TimerVals L m M) (hall : ∀ a ∈ tq.asserts, Holds M a) :
     ¬ Step.FiresForward ms := fun h => by
-  obtain ⟨y, hy, hlt⟩ := timer_exact m hq x hall
-  exact Int.lt_irrefl _ (Int.lt_of_lt_of_le hlt ((Step.firesForward_iff ms).1 h m hm x.records x.now x.key x.state y hy))
+  obtain ⟨y, hy, z, hz, hlt⟩ := timer_exact m hq x hall
+  exact Int.lt_irrefl _ (Int.lt_of_lt_of_le hlt ((Step.firesForward_iff ms).1 h m hm x.records x.key x.state y hy z hz))
 
-/-- Where the target question is unsat, the timer `after` sets at every context whose values fit, where `after` and its
-captured values fit, is no earlier than the time it is set at; where the bound question is unsat too, at every context
-whose values fit. -/
+/-- Where the target question is unsat, the state a timer enters at every context whose values fit, where `timer`
+and its captured values fit, waits for no earlier timer; where the bound question is unsat too, at every context whose
+values fit. -/
 theorem timer_sound (m : MachineV r e) {bq tq : TypedScript} (hq : timerQuestions L m = .ok (bq, tq))
     (ht : Unsat L tq) (hM : ∀ n (h : n < (timerTys m).length), Sorted L (timerTys m)[n] (M.vars n))
     (hsel : LayoutSorted L (timerTys m) M) (x : TimerVals L m M) :
-    ((m.after.fits L.count).1 → m.after.appFits L.count x.ctx →
-      ∀ y ∈ Step.timerAt x.now (m.after.fn x.ctx), x.now ≤ y.1) ∧
-    (Unsat L bq → ∀ y ∈ Step.timerAt x.now (m.after.fn x.ctx), x.now ≤ y.1) := by
+    ((m.timer.fits L.count).1 → TimerFits L.count m x.records x.key x.state →
+      ∀ y ∈ m.timerAt x.records x.key x.state, ∀ z ∈ m.timerAt x.records x.key y.2, y.1 ≤ z.1) ∧
+    (Unsat L bq → ∀ y ∈ m.timerAt x.records x.key x.state, ∀ z ∈ m.timerAt x.records x.key y.2, y.1 ≤ z.1) := by
   obtain ⟨⟨back, c, c0⟩, he, hq'⟩ := bind_ok.1 hq
   obtain ⟨wfs, hwfs, hq'⟩ := bind_ok.1 hq'
   obtain ⟨vars, hvars, hq'⟩ := bind_ok.1 hq'
@@ -200,10 +222,11 @@ theorem timer_sound (m : MachineV r e) {bq tq : TypedScript} (hq : timerQuestion
   have hk := decode_rel _ _ _ x.hkey
   have hs := decode_rel _ _ _ x.hstate
   have hr := decode_rel _ _ _ x.hrecords
-  have henc := timer_encode m hk hs hr (tnow := x.now) (by simp [Term.denote, x.hnow]) he
+  have henc := timer_encode m hk hs hr he
   have hw := wfs_hold m x hwfs
-  have hfwd : Holds M c0 → Holds M c → ∀ y ∈ Step.timerAt x.now (m.after.fn x.ctx), x.now ≤ y.1 := by
-    intro hc0 hc y hy
+  have hfwd : Holds M c0 → Holds M c →
+      ∀ y ∈ m.timerAt x.records x.key x.state, ∀ z ∈ m.timerAt x.records x.key y.2, y.1 ≤ z.1 := by
+    intro hc0 hc y hy z hz
     refine Int.not_lt.1 fun hlt => ?_
     obtain ⟨a, ha, hna⟩ := ht.noModel M (fun n h => varSorted_of_sorted (hM n h)) hW
     simp only [TypedScript.script, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at ha
@@ -211,7 +234,7 @@ theorem timer_sound (m : MachineV r e) {bq tq : TypedScript} (hq : timerQuestion
     · exact hna (hw a ha)
     · exact hna hc0
     · exact hna hc
-    · exact hna (((henc.2 hc0).2 hc).2 ⟨y, hy, hlt⟩)
+    · exact hna (((henc.2 hc0).2 hc).2 ⟨y, hy, z, hz, hlt⟩)
   refine ⟨fun hf ha => ?_, fun hb => ?_⟩
   · have hc0 := henc.1.2 hf
     exact hfwd hc0 (((henc.2 hc0).1).2 ha)

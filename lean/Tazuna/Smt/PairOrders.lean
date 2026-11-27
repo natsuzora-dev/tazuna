@@ -47,9 +47,7 @@ def ownTerm {e : Ty} : OwnEffectV e → Erl
   | .query n _ i _ value f => .tuple [.atom "query", .bin n, Ty.canonBy σ i value, fn f]
 
 def instTerm {r e : Ty} {m : MachineV r e} (i : Instance m) : Erl :=
-  .tuple [Ty.canonBy σ m.key i.key, Ty.canonBy σ m.state i.state, match i.timer with
-    | some (d, st) => .tuple [.int d, Ty.canonBy σ m.state st]
-    | none => .atom "none"]
+  .tuple [Ty.canonBy σ m.key i.key, Ty.canonBy σ m.state i.state]
 
 def machinesTerm {r e : Ty} : {ms : List (MachineV r e)} → Machines ms → List Erl
   | [], .nil => []
@@ -182,13 +180,8 @@ def DataCovered (f n0 : Nat) (a b : Acc v) : Prop :=
 
 theorem instTerm_rel {R : PBij} {σ σ' : Nat → Nat} (hσ : ∀ {c c'}, R.rel c c' → σ' c = σ c') {r e : Ty}
     {m : MachineV r e} {i j : Instance m} (h : Instance.Rel R i j) : instTerm σ' i = instTerm σ j := by
-  obtain ⟨ik, is, it⟩ := i
-  obtain ⟨jk, js, jt⟩ := j
-  obtain ⟨hk, hs, ht⟩ := h
+  obtain ⟨hk, hs⟩ := h
   simp only [instTerm, Ty.canonBy_rel hσ _ _ _ hk, Ty.canonBy_rel hσ _ _ _ hs]
-  cases ht with
-  | none => rfl
-  | some h => obtain ⟨hd, hst⟩ := h; simp only [hd, Ty.canonBy_rel hσ _ _ _ hst]
 
 theorem machinesTerm_rel {R : PBij} {σ σ' : Nat → Nat} (hσ : ∀ {c c'}, R.rel c c' → σ' c = σ c') {r e : Ty} :
     {ms : List (MachineV r e)} → (x y : Machines ms) → Machines.Rel R x y → machinesTerm σ' x = machinesTerm σ y

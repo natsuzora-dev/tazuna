@@ -203,9 +203,9 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
   | .declareExternalQuery, args, _ => fun ((name, holds), ()) =>
     .externalQuery name ((Ty.param 0).inst args) ((Ty.param 1).inst args) holds
   | .machine, args, h => let d := Prim.dataOf h rfl
-    fun (name, instances, initial, on, after, effect, invariants, ()) =>
+    fun (name, instances, initial, on, timer, effect, invariants, ()) =>
     { name := name.1, key := (Ty.param 2).inst args, state := (Ty.param 3).inst args,
-      instances, initial := Prim.dn d (.param 3) rfl initial, on, after,
+      instances, initial := Prim.dn d (.param 3) rfl initial, on, timer,
       effect, invariants }
   | .reaction, _, _ => fun (name, react, ()) => { name := name.1, react }
   | .external, _, _ => fun (name, declares, ()) => ⟨name.1, declares⟩

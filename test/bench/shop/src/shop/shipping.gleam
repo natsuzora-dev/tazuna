@@ -7,7 +7,9 @@ import shop/shared.{
   type Caller, type Line, type OrderCancelled, type OrderPlaced,
   type PaymentOutcome, type Scan, Customer, Staff,
 }
-import tazuna.{type Ctx, type Id, type MachineCtx, type QueryCtx}
+import tazuna.{
+  type Ctx, type Id, type Instant, type MachineCtx, type QueryCtx, type TimerCtx,
+}
 import tazuna/bag
 import tazuna/table.{type Table}
 
@@ -29,6 +31,7 @@ pub type Shipment {
     items: Int,
     state: ShipState,
     tracking: Option(String),
+    late_at: Instant,
   )
 }
 
@@ -148,6 +151,7 @@ fn apply(ctx: tazuna.ApplyCtx(Records), event: Event) -> Records {
               items: bag.sum(placed.lines, of: quantity),
               state: Pending,
               tracking: None,
+              late_at: ctx.now,
             ),
           ))
       }
@@ -168,7 +172,12 @@ fn apply(ctx: tazuna.ApplyCtx(Records), event: Event) -> Records {
         order,
         fn(state) { state == Booking },
         fn(shipment: Shipment) {
-          Shipment(..shipment, state: Booked, tracking: Some(tracking))
+          Shipment(
+            ..shipment,
+            state: Booked,
+            tracking: Some(tracking),
+            late_at: ctx.now + 5 * shared.day,
+          )
         },
       )
     BookingFailed(order, _reason) ->
@@ -295,7 +304,7 @@ fn booking() -> tazuna.Machine(Records, Event) {
     on: fn(_ctx: MachineCtx(Id, Booking, Records), _event: Event) {
       tazuna.Stay
     },
-    after: fn(_ctx: MachineCtx(Id, Booking, Records)) { None },
+    timer: fn(_ctx: TimerCtx(Id, Booking, Records)) { None },
     effect: fn(ctx: MachineCtx(Id, Booking, Records)) {
       let order = ctx.key
       case table.get(ctx.records.shipments, order) {
@@ -328,7 +337,8 @@ fn booking() -> tazuna.Machine(Records, Event) {
   )
 }
 
-/// One instance per parcel on its way: five days after booking it is late.
+/// One instance per parcel on its way: at its late-at time, five days after
+/// booking, it is late.
 fn delivery_watch() -> tazuna.Machine(Records, Event) {
   tazuna.machine(
     name: "delivery watch",
@@ -343,10 +353,11 @@ fn delivery_watch() -> tazuna.Machine(Records, Event) {
     on: fn(_ctx: MachineCtx(Id, Transit, Records), _event: Event) {
       tazuna.Stay
     },
-    after: fn(ctx: MachineCtx(Id, Transit, Records)) {
-      case ctx.state {
-        InTransit -> Some(tazuna.Timer(after: 5 * shared.day, enter: Late))
-        Late -> None
+    timer: fn(ctx: TimerCtx(Id, Transit, Records)) {
+      case ctx.state, table.get(ctx.records.shipments, ctx.key) {
+        InTransit, Some(shipment) ->
+          Some(tazuna.Timer(at: shipment.late_at, enter: Late))
+        _, _ -> None
       }
     },
     effect: fn(ctx: MachineCtx(Id, Transit, Records)) {

@@ -168,7 +168,7 @@ inductive Target where
   /-- An own effect asking the service's command or query `name` for what it does not accept, or the service lacking
   it: `Fault.invalidEffect`. -/
   | effect (name : String)
-  /-- The machine's `after` setting a timer before the time it sets it at, which would let the timers due at one
+  /-- A timer of the machine entering a state that waits for an earlier timer, which would let the timers due at one
   deadline of a clock line fire out of the order their deadlines give (T5's `Step.FiresForward`). -/
   | timer (machine : String)
   /-- Two waiting own effects of these kinds, `first` running first, ending otherwise than the other order (T5's

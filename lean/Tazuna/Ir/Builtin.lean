@@ -37,6 +37,8 @@ def opaqueTy? (name : String) (args : List Ty) : Option Ty :=
 def preludeDocs : List (String × String) :=
   [ ("tazuna.Origin", "Who runs a command or query: `Outside(caller)` for a request line from outside, whose `caller` is the value the line names, or `Own` for the service itself, through a machine's or reaction's `send_command` or `send_query`. A `callers` list holds origins, and `ctx.caller` is the one that ran."),
     ("tazuna.ApplyCtx", "What `apply` sees: the records before the event, and the time of the step that applies it."),
+    ("tazuna.Timer", "A timer an instance waits for: a clock line at or after `at` enters the state `enter`."),
+    ("tazuna.TimerCtx", "What `timer` sees of one instance: its key and state and the records, but no time, so a timer it gives cannot move on with the clock."),
     ("tazuna.Never", "A type with no values. As a command's rejection type it says the command never rejects: `decide` can return no `Error`, and no rejected outcome exists to reach.") ]
 
 /-- Aliases `tazuna` declares, with their documentation. -/
@@ -52,7 +54,7 @@ def timeAliases : List (String × String × String) :=
   [ ("tazuna.Ctx", "now", "Instant"), ("tazuna.MachineCtx", "now", "Instant"), ("tazuna.ReactionCtx", "now", "Instant"),
     ("tazuna.ApplyCtx", "now", "Instant"),
     ("tazuna.QueryCtx", "now", "Instant"),
-    ("tazuna.Timer", "after", "Duration"), ("response", "within", "Duration"), ("step_wait", "for", "Duration") ]
+    ("tazuna.Timer", "at", "Instant"), ("response", "within", "Duration"), ("step_wait", "for", "Duration") ]
 
 /-- The built-in functions. -/
 inductive Prim where
@@ -192,11 +194,11 @@ def sig : Prim → PrimSig :=
       ret := .dsl .query [a, b, param 2, param 3] }
   | .machine =>
     { name := "machine",
-      doc := "A machine: one instance per key in `instances`, starting at `initial` when its key appears; `on` reacts to each event with `Stay` or `Enter`, and a due timer enters its state on a clock line. Each entry into a state, the start included, sets the timer `after` gives and runs `effect` once; `Stay` runs neither, and `Enter` of the current state enters it again. A machine's instances react, start and fire in Erlang term order of their keys, so the key type is Int, String, Date, Id, Bool, an enumeration, or a tuple or one-variant record of these.",
+      doc := "A machine: one instance per key in `instances`, starting at `initial` when its key appears; `on` reacts to each event with `Stay` or `Enter`. `timer` gives the timer an instance waits for, read off its state and the records: a clock line at or after the timer's `at` enters its state. `timer` sees no time, so a deadline is a time the records keep, which `apply` writes. Each entry into a state, the start included, runs `effect` once; `Stay` runs nothing, and `Enter` of the current state runs it again. A machine's instances react, start and fire in Erlang term order of their keys, so the key type is Int, String, Date, Id, Bool, an enumeration, or a tuple or one-variant record of these.",
       tvars := ["records", "event", "key", "state"], dataArgs := true, needsEq := [2],
       params := [l "name" .str, l "instances" (kept (.fn [a] (.bag (param 2)))), l "initial" (param 3),
         l "on" (kept (.fn [.machineCtx (param 2) (param 3) a, b] (.next (param 3)))),
-        l "after" (kept (.fn [.machineCtx (param 2) (param 3) a] (.option (.timer (param 3))))),
+        l "timer" (kept (.fn [.timerCtx (param 2) (param 3) a] (.option (.timer (param 3))))),
         l "effect" (keptEffects (.fn [.machineCtx (param 2) (param 3) a] (.option (.dsl .effect [b])))),
         l "invariants" (kept (.fn [.machineCtx (param 2) (param 3) a] Ty.rules))],
       ret := .dsl .machine [a, b] }

@@ -3,7 +3,7 @@ import tazuna.{type Ctx, type Id, type QueryCtx}
 import tazuna/bag
 
 pub type Records {
-  Records(total: Int, first: Option(Id))
+  Records(total: Int, first: Option(Id), moved_at: Int)
 }
 
 pub type Event {
@@ -34,7 +34,11 @@ fn send() -> tazuna.ExternalCommand(Int, Nil, Nil) {
 fn apply(ctx: tazuna.ApplyCtx(Records), e: Event) -> Records {
   let r = ctx.records
   case e, r.first {
-    Added(n), _ -> Records(..r, total: r.total + n)
+    Added(n), _ ->
+      Records(..r, total: r.total + n, moved_at: case r.total {
+        0 -> ctx.now
+        _ -> r.moved_at
+      })
     Made(id), None -> Records(..r, first: Some(id))
     Made(_), Some(_) | Tagged(_), _ | Pinged, _ -> r
   }
@@ -103,9 +107,10 @@ fn watch() -> tazuna.Machine(Records, Event) {
         _, _ -> tazuna.Stay
       }
     },
-    after: fn(c: tazuna.MachineCtx(Int, Phase, Records)) {
+    timer: fn(c: tazuna.TimerCtx(Int, Phase, Records)) {
       case c.state {
-        Waiting -> Some(tazuna.Timer(after: 10, enter: Pinging))
+        Waiting ->
+          Some(tazuna.Timer(at: c.records.moved_at + 10, enter: Pinging))
         _ -> None
       }
     },
@@ -134,7 +139,7 @@ fn watch() -> tazuna.Machine(Records, Event) {
 fn counter() -> tazuna.Service {
   tazuna.service(
     name: "counter",
-    init: Records(total: 0, first: None),
+    init: Records(total: 0, first: None, moved_at: 0),
     apply: apply,
     subscribes: [],
     declares: [

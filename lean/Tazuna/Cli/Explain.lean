@@ -48,8 +48,8 @@ def out : Field := ⟨"out", "the out lines of the step"⟩
 def violated : Field := ⟨"violated", "the rules broken"⟩
 def inst : Field := ⟨"instance", "a timer machine's instance: its key and state"⟩
 def records : Field := ⟨"records", "the records the instance sees"⟩
-def now : Field := ⟨"now", "the time the instance sees"⟩
-def timer : Field := ⟨"timer", "the timer the step set: its deadline and state"⟩
+def timer : Field := ⟨"timer", "the timer the instance waits for: its deadline and the state it enters"⟩
+def next : Field := ⟨"next", "the timer that state waits for: its deadline and the state it enters"⟩
 def first : Field := ⟨"first", "a pair's first step"⟩
 def second : Field := ⟨"second", "a pair's second step"⟩
 def firstThenSecond : Field := ⟨"firstThenSecond", "how the first step then the second ends"⟩
@@ -168,7 +168,7 @@ def ProveKind.explanation : ProveKind → Explanation
   | .violated => ⟨docOf% ProveKind.violated,
     [`Tazuna.Smt.cti_sound, `Tazuna.Ir.step_settled, `Tazuna.Smt.timer_violates, `Tazuna.Smt.pair_violates,
       `Tazuna.Smt.response_sound],
-    questionFields ++ [fromField, state, input, after, outcome, out, inst, records, now, timer, first, second,
+    questionFields ++ [fromField, state, input, after, outcome, out, inst, records, timer, next, first, second,
       firstThenSecond, secondThenFirst, steps, run, Field.violated, assumes, widened]⟩
   | .unreachable => ⟨docOf% ProveKind.unreachable, [`Tazuna.Smt.unshown_sound, `Tazuna.Smt.unshown_within],
     [service, target, assumes, bounds]⟩

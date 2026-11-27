@@ -246,7 +246,7 @@ def prelude : List TypeDecl :=
         ⟨some "now", .int⟩, ⟨some "fresh", .dsl .fresh []⟩]⟩] },
     { name := "tazuna.Next", params := ["state"], variants := [⟨"Stay", []⟩, ⟨"Enter", [⟨none, .param 0⟩]⟩] },
     { name := "tazuna.Timer", params := ["state"],
-      variants := [⟨"Timer", [⟨some "after", .int⟩, ⟨some "enter", .param 0⟩]⟩] },
+      variants := [⟨"Timer", [⟨some "at", .int⟩, ⟨some "enter", .param 0⟩]⟩] },
     { name := "tazuna.MachineCtx", params := ["key", "state", "records"],
       variants := [⟨"MachineCtx", [⟨some "key", .param 0⟩, ⟨some "state", .param 1⟩, ⟨some "records", .param 2⟩,
         ⟨some "now", .int⟩]⟩] },
@@ -260,7 +260,9 @@ def prelude : List TypeDecl :=
     { name := "tazuna.Origin", params := ["caller"],
       variants := [⟨"Outside", [⟨none, .param 0⟩]⟩, ⟨"Own", []⟩] },
     { name := "tazuna.ApplyCtx", params := ["records"],
-      variants := [⟨"ApplyCtx", [⟨some "records", .param 0⟩, ⟨some "now", .int⟩]⟩] } ]
+      variants := [⟨"ApplyCtx", [⟨some "records", .param 0⟩, ⟨some "now", .int⟩]⟩] },
+    { name := "tazuna.TimerCtx", params := ["key", "state", "records"],
+      variants := [⟨"TimerCtx", [⟨some "key", .param 0⟩, ⟨some "state", .param 1⟩, ⟨some "records", .param 2⟩]⟩] } ]
 
 def Ty.bool : Ty := .adt 0 [] [[], []]
 def Ty.nil : Ty := .adt 1 [] [[]]
@@ -281,6 +283,9 @@ def Ty.reactionCtx (r : Ty) : Ty := .adt 9 [r] [[r, .int]]
 def Ty.queryCtx (r i c : Ty) : Ty := .adt 10 [r, i, c] [[r, i, Ty.origin c, .int]]
 /-- What `apply` sees: the records before the event, and the time. -/
 def Ty.applyCtx (r : Ty) : Ty := .adt 13 [r] [[r, .int]]
+/-- What a machine's `timer` sees of one instance: its key and state and the records, but not the time, so a deadline
+it gives cannot move on with the clock. -/
+def Ty.timerCtx (k s r : Ty) : Ty := .adt 14 [k, s, r] [[k, s, r]]
 /-- The type with no values, `tazuna.Never`. -/
 def Ty.never : Ty := .adt 11 [] []
 /-- Named rules, as `invariants`, `accepts` and `ensures` return them. -/
@@ -321,6 +326,8 @@ example (a e : Ty) : prelude[2]?.map (fun d => Ty.adt 2 [a, e] (d.variantTys [a,
 example : prelude[11]?.map (fun d => Ty.adt 11 [] (d.variantTys [])) = some Ty.never := rfl
 example (c : Ty) : prelude[12]?.map (fun d => Ty.adt 12 [c] (d.variantTys [c])) = some (Ty.origin c) := rfl
 example (r : Ty) : prelude[13]?.map (fun d => Ty.adt 13 [r] (d.variantTys [r])) = some (Ty.applyCtx r) := rfl
+example (k s r : Ty) : prelude[14]?.map (fun d => Ty.adt 14 [k, s, r] (d.variantTys [k, s, r])) =
+  some (Ty.timerCtx k s r) := rfl
 example (a : Ty) : prelude[3]?.map (fun d => Ty.adt 3 [a] (d.variantTys [a])) = some (Ty.option a) := rfl
 
 end Tazuna.Ir

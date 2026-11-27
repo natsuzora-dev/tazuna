@@ -50,12 +50,13 @@ def kindHitsT (pred : Term → Except Refusal (Term × Term)) (out : StepOut v) 
 section
 variable (L : Layout)
 
-/-- A clock line at `time` from `S` passes no timer that waits: no timer is due at `time - 1`. Other kinds ask
-nothing. -/
+/-- A clock line at `time` from `S` passes no timer that waits: no timer is due at `time - 1`, where every `timer`
+fits. Other kinds ask nothing. -/
 def kindTimelyT (S : SymState v) : SymInput v (shapes v) n → Except Refusal Term
   | .clock time => do
-    let dues ← dueAll L v.machines S.machines (.sub time (.int 1))
-    pure (.not (minDueT dues).1)
+    let (tmss, ct) ← timersAll L v.machines S.machines S.records
+    let dues ← dueAll L v.machines S.machines tmss (.sub time (.int 1))
+    pure (andT ct (.not (minDueT dues).1))
   | _ => pure tt
 
 end
@@ -141,6 +142,14 @@ def _root_.Tazuna.Ir.ResponseV.FitsOn {e : Ty} (resp : ResponseV e) : List (Mome
 /-- The response's functions fit the slots on the run's moments. -/
 abbrev RespFits (resp : ResponseV v.event) (s : State v) (xs : List (Input v)) : Prop :=
   resp.FitsOn L ((run T v s xs).2.map Result.moment)
+
+/-- Every `timer` fits at the state a clock line comes to, which the timely-clock check reads. -/
+def ClockFits (s : State v) : Input v → Prop
+  | .clock _ => timersFit L.count s.records s.machines
+  | _ => True
+
+/-- Every clock line of the run comes to a state where every `timer` fits. -/
+abbrev ClockFitsRun : State v → List (Input v) → Prop := Step.EachStep T (ClockFits L)
 
 end
 
@@ -266,39 +275,49 @@ theorem kindHitsT_iff {pred : Term → Except Refusal (Term × Term)} {p : v.eve
     simp [tt, ff, Holds, Term.denote, Val.toBool]
 
 theorem timely_iff_dues (s : State v) (time : Int) :
-    Step.timely s time = true ↔ Step.dues s.machines.toSigma (time - 1) = [] := by
+    Step.timely s time = true ↔ Step.dues s.records s.machines.toSigma (time - 1) = [] := by
   simp only [Step.timely, Step.dues, List.all_eq_true, List.flatMap_eq_nil_iff, List.filterMap_eq_nil_iff]
   refine forall_congr' fun ⟨m, insts⟩ => imp_congr_right fun _ => forall_congr' fun i => imp_congr_right fun _ => ?_
-  cases i.timer with
+  cases Step.timerOf s.records i with
   | none => simp
   | some p => obtain ⟨d, _⟩ := p; simp; omega
 
 theorem kindTimelyT_iff {hc : v.caller.isData = true} {S : SymState v} {s : State v}
     (hR : StateRel M L T (shapes v) S s) {inp : SymInput v (shapes v) n} {x : Input v} (hx : inp.decode M L hc = some x)
     {t : Term} (henc : kindTimelyT L S inp = .ok t) :
-    Holds M t ↔ Step.timelyAt s x = true := by
+    Holds M t ↔ ClockFits L s x ∧ Step.timelyAt s x = true := by
   cases inp with
   | clock tm =>
     obtain ⟨time, rfl, htm⟩ := decode_clock hx
+    obtain ⟨⟨tmss, ct⟩, h0, henc⟩ := bind_ok.1 henc
     obtain ⟨dues, h1, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
+    have ET := timersAll_encode (T := T) s.records hR.records v.machines S.machines s.machines hR.machines h0
+    show Holds M (andT ct (Term.not _)) ↔ timersFit L.count s.records s.machines ∧ Step.timely s time = true
+    rw [holds_andT, ET.1]
+    refine and_congr_right fun htf => ?_
     have hnow : (Term.sub tm (.int 1)).denote M = .int (time - 1) := by simp [Term.denote, htm, Val.toInt]
-    obtain ⟨os, hF, hP⟩ := dueAll_rel (T := T) hnow v.machines S.machines s.machines hR.machines h1
+    obtain ⟨os, hF, hP⟩ := dueAll_rel (T := T) s.records hnow v.machines S.machines s.machines hR.machines
+      (ET.2 (ET.1.2 htf)) h1
     obtain ⟨hhas, -⟩ := minDue_den hF
     rw [min?_perm hP] at hhas
-    show Holds M (Term.not _) ↔ Step.timely s time = true
     rw [holds_not, timely_iff_dues]
     simp only [Holds, hhas, Val.toBool, Option.isSome_iff_ne_none, ne_eq, List.min?_eq_none_iff, Decidable.not_not]
   | command i a b =>
-    obtain ⟨_, _, rfl, -⟩ := decode_command hx; cases pure_ok.1 henc; exact iff_of_true holds_tt rfl
+    obtain ⟨_, _, rfl, -⟩ := decode_command hx; cases pure_ok.1 henc
+    exact iff_of_true holds_tt ⟨trivial, rfl⟩
   | query i a b =>
-    obtain ⟨_, _, rfl, -⟩ := decode_query hx; cases pure_ok.1 henc; exact iff_of_true holds_tt rfl
+    obtain ⟨_, _, rfl, -⟩ := decode_query hx; cases pure_ok.1 henc
+    exact iff_of_true holds_tt ⟨trivial, rfl⟩
   | event i a =>
-    obtain ⟨_, rfl, -⟩ := decode_event hx; cases pure_ok.1 henc; exact iff_of_true holds_tt rfl
+    obtain ⟨_, rfl, -⟩ := decode_event hx; cases pure_ok.1 henc
+    exact iff_of_true holds_tt ⟨trivial, rfl⟩
   | answer k j to w =>
-    obtain ⟨_, _, _, rfl, -⟩ := decode_answer hx; cases pure_ok.1 henc; exact iff_of_true holds_tt rfl
+    obtain ⟨_, _, _, rfl, -⟩ := decode_answer hx; cases pure_ok.1 henc
+    exact iff_of_true holds_tt ⟨trivial, rfl⟩
   | unmatched t' to w =>
-    obtain ⟨_, _, _, rfl, -⟩ := decode_answer hx; cases pure_ok.1 henc; exact iff_of_true holds_tt rfl
+    obtain ⟨_, _, _, rfl, -⟩ := decode_answer hx; cases pure_ok.1 henc
+    exact iff_of_true holds_tt ⟨trivial, rfl⟩
 
 /-- At a step a model takes, `pickHitsT` reads the kind it takes as `kindHitsT_iff` says. -/
 theorem pickHitsT_iff {pred : Term → Except Refusal (Term × Term)} {p : v.event.den0 → Bool}
@@ -316,7 +335,8 @@ theorem pickHitsT_iff {pred : Term → Except Refusal (Term × Term)} {p : v.eve
   exact kindHitsT_iff hp hdec hrel hno f1
 
 theorem timelyT_iff {hc : v.caller.isData = true} {st : UnrollStep v n} {s : State v} {x : Input v}
-    (hat : StepAt L T M hc st s x) {t : Term} (henc : timelyT L v st = .ok t) : Holds M t ↔ Step.timelyAt s x = true := by
+    (hat : StepAt L T M hc st s x) {t : Term} (henc : timelyT L v st = .ok t) :
+    Holds M t ↔ ClockFits L s x ∧ Step.timelyAt s x = true := by
   obtain ⟨⟨k, hk, hdec, -⟩, -, -, hbefore⟩ := hat
   obtain ⟨tms, e1, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
@@ -326,7 +346,7 @@ theorem timelyT_iff {hc : v.caller.isData = true} {st : UnrollStep v n} {s : Sta
 
 theorem timelysT_iff {hc : v.caller.isData = true} : (s : State v) → (sts : List (UnrollStep v n)) →
     (xs : List (Input v)) → UnrollRun L T M hc s sts xs → {ts : List Term} → sts.mapM (timelyT L v) = .ok ts →
-    (Holds M (allT ts) ↔ Step.TimelyRun T s xs)
+    (Holds M (allT ts) ↔ ClockFitsRun L T s xs ∧ Step.TimelyRun T s xs)
   | _, [], [], _, ts, h => by cases pure_ok.1 h; simp [holds_allT, Step.EachStep]
   | _, [], _ :: _, h, _, _ => h.elim
   | _, _ :: _, [], h, _, _ => h.elim
@@ -338,7 +358,8 @@ theorem timelysT_iff {hc : v.caller.isData = true} : (s : State v) → (sts : Li
     have ih := timelysT_iff _ sts xs hrun e2
     simp only [holds_allT, List.mem_cons, forall_eq_or_imp] at ih ⊢
     rw [timelyT_iff hat e1, ih]
-    rfl
+    simp only [Step.EachStep]
+    exact ⟨fun ⟨⟨a, b⟩, c, d⟩ => ⟨⟨a, c⟩, b, d⟩, fun ⟨⟨a, c⟩, b, d⟩ => ⟨⟨a, b⟩, c, d⟩⟩
 
 section
 variable {resp : ResponseV v.event} {fa : Code (Ty.fn [v.event] Ty.bool)}
@@ -433,7 +454,7 @@ theorem respGoal_iff {resp : ResponseV v.event} {hc : v.caller.isData = true} {s
     {sts : List (UnrollStep v n)} {xs : List (Input v)} (hrun : UnrollRun L T M hc s sts xs) {g : Term}
     (hg : respGoalE L v resp sts = .ok g) :
     Holds M g ↔ ((resp.after.fits L.count).1 ∧ (resp.then_.fits L.count).1) ∧ RespFits L T resp s xs ∧
-      Step.TimelyRun T s xs ∧ resp.Violated ((run T v s xs).2.map Result.moment) := by
+      (ClockFitsRun L T s xs ∧ Step.TimelyRun T s xs) ∧ resp.Violated ((run T v s xs).2.map Result.moment) := by
   obtain ⟨⟨fa, ca⟩, ha, hg⟩ := bind_ok.1 hg
   obtain ⟨⟨fq, cq⟩, hq, hg⟩ := bind_ok.1 hg
   obtain ⟨⟨h, c⟩, hv, hg⟩ := bind_ok.1 hg
@@ -454,15 +475,15 @@ variable {P : List AnySite} {E : List AnyEffectSite}
 
 /-- T7: where prove's script for the response at depth `d` has no input kind refused, its goal is encoded and it has
 no model, no run from the initial state of `d` inputs that fit the slots and are valid, whose steps stay within the
-slots and fault nowhere, whose clock lines are timely and at whose events the response's functions fit, violates the
-response. prove's "within the bounds" for a response is this at every depth up to the spec's steps, so no such run of
+slots and fault nowhere, whose clock lines are timely and come to states where every `timer` fits, and at whose events the response's
+functions fit, violates the response. prove's "within the bounds" for a response is this at every depth up to the spec's steps, so no such run of
 at most that many inputs violates it. -/
 theorem response_within (chk : Checked P E T v) (senv : StepEnv L (shapes v)) (hL : SortedLayout L)
     {resp : ResponseV v.event} {d : Nat} {B : UnrollBase v senv.nT} (hB : unrollBase L T P v senv d = .ok B)
     {g : Term} (hg : respGoalE L v resp B.steps = .ok g) (hnr : B.refused = []) (hun : Unsat L (B.withGoal g).ask)
     {xs : List (Input v)} (hlen : xs.length = d) (hin : RunIn L T P v chk.callerData (Step.State.init v) xs)
     (hsrc : (resp.after.fits L.count).1 ∧ (resp.then_.fits L.count).1)
-    (hrf : RespFits L T resp (Step.State.init v) xs)
+    (hrf : RespFits L T resp (Step.State.init v) xs) (hcf : ClockFitsRun L T (Step.State.init v) xs)
     (has : ∀ a ∈ Step.Assumption.ofResponses, a.Holds T (Step.State.init v) xs) :
     ¬ resp.Violated ((run T v (Step.State.init v) xs).2.map Result.moment) := by
   intro hviol
@@ -470,7 +491,7 @@ theorem response_within (chk : Checked P E T v) (senv : StepEnv L (shapes v)) (h
   obtain ⟨M, hM, hsel, hrun, hA⟩ := runs_covered chk senv hL hB hnr hlen
     (runFits_of _ _ _ _ _ _ _ hin fun a ha => has a (List.mem_append_left _ ha))
   obtain ⟨a, ha, hna⟩ := hun.noModel M hM (hsel _ _ (unrollBase_dts L T P v senv hB) (unrollBase_vars L T P v senv hB))
-  exact hna (((B.holds_withGoal g).2 ⟨hA, (respGoal_iff hrun hg).2 ⟨hsrc, hrf, htime, hviol⟩⟩) a ha)
+  exact hna (((B.holds_withGoal g).2 ⟨hA, (respGoal_iff hrun hg).2 ⟨hsrc, hrf, ⟨hcf, htime⟩, hviol⟩⟩) a ha)
 
 /-- Goal soundness: in every model of prove's script for the response whose variables hold values of their sorts, the
 steps decode to inputs that `validInputs` allows whose run from the initial state has timely clock lines and violates
@@ -485,7 +506,7 @@ theorem response_sound (chk : Checked P E T v) (senv : StepEnv L (shapes v)) (hL
       Step.TimelyRun T (Step.State.init v) xs ∧ resp.Violated ((run T v (Step.State.init v) xs).2.map Result.moment) := by
   obtain ⟨hA, hgoal⟩ := (B.holds_withGoal g).1 hA
   obtain ⟨xs, hrun, hshown⟩ := unroll_decode chk senv hL hB hM hA
-  obtain ⟨-, -, ht, hv⟩ := (respGoal_iff hrun hg).1 hgoal
+  obtain ⟨-, -, ⟨-, ht⟩, hv⟩ := (respGoal_iff hrun hg).1 hgoal
   exact ⟨xs, unrollRun_decode _ _ _ hrun, hshown, ht, hv⟩
 
 end
@@ -523,10 +544,12 @@ theorem kindHitsT_sound (out : StepOut v) : Sound (fun _ => True) (kindHitsT pre
 
 end
 
-theorem kindTimelyT_sound {L : Layout} {v : ServiceV} {n : Nat} (hL : SortedLayout L)
-    (hm : ∀ m ∈ v.machines, MachineGot L m) (S : SymState v) :
+theorem kindTimelyT_sound {L : Layout} {P : List AnySite} {ds : List (String × DeclaredV)} {H : List HandleSite}
+    {v : ServiceV} {n : Nat} (hL : SortedLayout L)
+    (hm : ∀ m ∈ v.machines, MachineGot L m ∧ MachineCodes L P ds H m) (S : SymState v) :
     (inp : SymInput v (shapes v) n) → Sound (fun _ => True) (kindTimelyT L S inp)
-  | .clock _ => sound_bind (dueAll_sound hL _ hm _ _) fun _ _ => trivial
+  | .clock _ => sound_bind (timersAll_sound hL _ hm _ _) fun _ _ =>
+      sound_bind (dueAll_sound hL _ (fun m h => (hm m h).1) _ _ _) fun _ _ => trivial
   | .command .. | .query .. | .answer .. | .unmatched .. | .event .. => trivial
 
 /-- `kindTerms` refuses only where `h` does. -/
@@ -570,7 +593,7 @@ theorem respGoalE_ofService (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.
   have h := serviceGot_ofService hv
   have chk := c.checked v hv
   have hev := avail_of_got h.event
-  have hm : ∀ m ∈ v.machines, MachineGot _ m := fun m hm => (h.machines m hm).1.1
+  have hm : ∀ m ∈ v.machines, MachineGot _ m ∧ MachineCodes _ _ _ _ m := fun m hm => (h.machines m hm).1
   refine sound_bind (Fun.code_ofService c hv _ (chk.reach.responses resp hr).1 (root_response hr).1)
     fun ⟨fa, _⟩ ha => sound_bind (Fun.code_ofService c hv _ (chk.reach.responses resp hr).2 (root_response hr).2)
     fun ⟨fq, _⟩ hq => sound_bind (violT_sound (predT_sound ha hev) (pred2T_sound hq hev) sts) fun _ _ =>

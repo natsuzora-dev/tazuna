@@ -335,7 +335,7 @@ theorem machines_of_eq : (ms : List (MachineV v.records v.event)) →
     have hm := hc m (List.mem_cons_self ..)
     have htc : m.table.comparable = true := by
       simp only [MachineV.table, Ty.comparable, Bool.and_eq_true]
-      exact ⟨hm.1, instEntry_comparable hm.2⟩
+      exact ⟨hm.1, hm.2⟩
     exact ⟨insts_of_table (rel0_of_eqFn m.table_data htc hta htb hf hh.1),
       machines_of_eq ms (fun m' hm' => hc m' (List.mem_cons_of_mem _ hm')) ha hb hc' hh.2⟩
 

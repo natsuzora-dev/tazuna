@@ -67,6 +67,11 @@ theorem forall2_zip {R : α → β → Prop} : {as : List α} → {bs : List β}
     · exact h
     · exact forall2_zip hs p hp
 
+theorem forall2_and_left {R : α → β → Prop} {P : α → Prop} : {as : List α} → {bs : List β} → Forall2 R as bs →
+    (∀ a ∈ as, P a) → Forall2 (fun a b => P a ∧ R a b) as bs
+  | [], [], _, _ => trivial
+  | _ :: _, _ :: _, ⟨h, hs⟩, hP => ⟨⟨hP _ (by simp), h⟩, forall2_and_left hs fun a ha => hP a (by simp [ha])⟩
+
 theorem forall2_zip_left {R : α × β → γ × δ → Prop} : {as : List α} → {bs : List β} →
     {cs : List (γ × δ)} → as.length ≤ bs.length → Forall2 R (as.zip bs) cs →
     Forall2 (fun a d => ∃ b q, R (a, b) q ∧ d = q.2) as (cs.map (·.2))

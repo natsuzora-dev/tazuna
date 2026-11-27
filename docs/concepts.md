@@ -87,7 +87,9 @@ A command or query of the service's own waits in a queue and runs as one interna
 
 A machine has one instance per key that its `instances` function returns from the records.
 On each event an instance stays or enters a state.
-`after` may set a timer, which enters its state when a clock line reaches its deadline, and entering a state may start an effect.
+`timer` gives the timer an instance waits for, read off its state and the records: a clock line at or after the timer's `at` enters the timer's state.
+`timer` sees no time, so a deadline is a time the records keep, and a timer whose time has passed fires at the next clock line.
+Entering a state may start an effect.
 
 A command makes new ids with `tazuna.fresh` from its context.
 An `Id` compares with `==` only, and an id from outside the service comes by its name.

@@ -894,7 +894,7 @@ theorem slotTerms_aligned {ps : List Ty} {r : Ty} {f : (Ty.fn ps r).den} {sf : C
     (hg : Holds M (guardsT S (R.map (·.2)))) :
     AlignedV M E (fun y v => RelV L r (f (toD y)) v) S (R.map (·.1)) sv ys := by
   refine aligned_of _ ?_ hS hy (mapM_ok _ S R hR) hg
-  intro sl r' y hr he hc
+  intro sl r' y hr _ he hc
   obtain ⟨⟨v, c⟩, h1, hr⟩ := bind_ok.1 hr
   obtain ⟨t, h2, hr⟩ := bind_ok.1 hr
   cases pure_ok.1 hr

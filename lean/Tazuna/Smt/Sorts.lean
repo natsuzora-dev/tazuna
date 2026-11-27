@@ -228,7 +228,7 @@ theorem pair_sorts (hL : SortedLayout L) {T : List TypeDecl} {P : List AnySite} 
   · exact .inr ⟨_, rfl⟩
   · exact .inr ⟨_, rfl⟩
 
-/-- The sorts of a timer machine's questions hold values: its key's, its state's, the records' and Int's. -/
+/-- The sorts of a timer machine's questions hold values: its key's, its state's and the records'. -/
 theorem timer_sorts (hL : SortedLayout L) {r e : Ty} {m : MachineV r e} {x} (hq : timerQuestions L m = .ok x) :
     SortsInhabited L (timerTys m) := by
   simp only [timerQuestions] at hq
@@ -238,11 +238,10 @@ theorem timer_sorts (hL : SortedLayout L) {r e : Ty} {m : MachineV r e} {x} (hq 
   obtain ⟨dts, hdts, -⟩ := bind_ok.1 hq
   refine sorts_inhabited hL (need_ok.1 hdts) (mapM_need hvars) fun t ht => .inl ?_
   simp only [timerTys, List.mem_cons, List.not_mem_nil, or_false] at ht
-  rcases ht with rfl | rfl | rfl | rfl
+  rcases ht with rfl | rfl | rfl
   · exact m.key_data
   · exact m.state_data
   · exact m.records_data
-  · rfl
 
 end
 

@@ -53,10 +53,7 @@ def stateWire (T : List TypeDecl) {v : ServiceV} (s : State v) : Show Wire := do
   let records ← wireOf T v.records s.records
   let machines ← s.machines.toSigma.mapM fun ⟨m, insts⟩ => do
     let is ← insts.mapM fun i => do
-      let timer ← match i.timer with
-        | some (d, st) => do pure (Wire.arr [.num d, ← wireOf T m.state st])
-        | none => pure .null
-      pure (Wire.obj [("key", ← wireOf T m.key i.key), ("state", ← wireOf T m.state i.state), ("timer", timer)])
+      pure (Wire.obj [("key", ← wireOf T m.key i.key), ("state", ← wireOf T m.state i.state)])
     pure (m.name, Wire.arr is)
   let pending ← s.pending.mapM fun p => do
     pure (Wire.obj [("id", .num p.id), ("external", .str p.external), ("name", .str p.request.name),
@@ -193,8 +190,8 @@ def boundReport (service step : String) : Smt.Answer → Except String Report
   | .unknown why => .ok (.undecided (.undecided .unknown) service step none [("why", Json.str why)])
   | .timeout ms => .ok (.undecided (.undecided .timeout) service step none [("why", Json.str (timeoutWhy ms))])
 
-/-- The report of a timer machine's target question (`timerQuestions`): a model is a context where `after` sets a timer
-before the time it sets it at, recomputed in Lean from the model's values. -/
+/-- The report of a timer machine's target question (`timerQuestions`): a model is an instance whose timer enters a
+state that waits for an earlier timer, recomputed in Lean from the model's values. -/
 def timerReport (L : Layout) (m : MachineV v.records v.event) (step : String) (a : Smt.Answer) :
     Except String Report :=
   let g := Target.timer m.name
@@ -205,22 +202,27 @@ def timerReport (L : Layout) (m : MachineV v.records v.event) (step : String) (a
   | .sat vs =>
     let M := modelOf vs
     match TimerVals.decode L m M with
-    | some ⟨key, st, records, now, _, _, _, _⟩ =>
-      match Step.timerAt now (m.after.fn (.inl (key, st, records, now, ()), ())) with
+    | some ⟨key, st, records, _, _, _⟩ =>
+      match m.timerAt records key st with
       | some (d, target) =>
-        if d < now then
-          let shown : Show (List (String × Json)) := do
-            let k ← wireOf c.T m.key key
-            let s ← wireOf c.T m.state st
-            let r ← wireOf c.T v.records records
-            let t ← wireOf c.T m.state target
-            pure [("from", Json.str "validState"), ("instance", Json.mkObj [("key", k.toJson), ("state", s.toJson)]),
-              ("records", r.toJson), ("now", Lean.toJson now),
-              ("timer", Json.mkObj [("deadline", Lean.toJson d), ("state", t.toJson)]),
-              ("violated", Json.arr #[Json.str "timer set before its time"])]
-          .ok (.violated v.name step g (shown.run' {}))
-        else .error s!"a model of {step} sets a timer at {d}, not before {now}"
-      | none => .error s!"a model of {step} sets no timer"
+        match m.timerAt records key target with
+        | some (d', target') =>
+          if d' < d then
+            let shown : Show (List (String × Json)) := do
+              let k ← wireOf c.T m.key key
+              let s ← wireOf c.T m.state st
+              let r ← wireOf c.T v.records records
+              let t ← wireOf c.T m.state target
+              let t' ← wireOf c.T m.state target'
+              pure [("from", Json.str "validState"), ("instance", Json.mkObj [("key", k.toJson), ("state", s.toJson)]),
+                ("records", r.toJson),
+                ("timer", Json.mkObj [("deadline", Lean.toJson d), ("state", t.toJson)]),
+                ("next", Json.mkObj [("deadline", Lean.toJson d'), ("state", t'.toJson)]),
+                ("violated", Json.arr #[Json.str "timer enters a state with an earlier timer"])]
+            .ok (.violated v.name step g (shown.run' {}))
+          else .error s!"a model of {step} enters a state with a timer at {d'}, not before {d}"
+        | none => .error s!"a model of {step} enters a state with no timer"
+      | none => .error s!"a model of {step} gives no timer"
     -- Unreachable while the solver answers as SMT-LIB says (`timer_decode`).
     | none => .error s!"a model of {step} does not decode"
 
@@ -339,7 +341,7 @@ def serviceItems (sv : CheckedService c) (only : String → Bool) : ServiceItems
       items := items ++ asked.map (fun q => .ask ⟨q.script, L.ids, answerReport c v L senv sv.callerData q⟩) ++
         (qs.filterMap fun q => q.target.bind fun g => if kept.any (·.target == some g) then none else some g).map
           (.skipped v.name)
-  -- A machine whose `after` never sets a timer fires forward by itself (`timerForward_of_noTimer`), so it gets no line.
+  -- A machine whose `timer` never gives a timer fires forward by itself (`timerForward_of_noTimer`), so it gets no line.
   for ⟨m, hm⟩ in v.machines.attach.filter (!·.1.noTimer) do
     let step := "timer " ++ m.name
     match familyItems c v L.ids only (.timer m.name) step

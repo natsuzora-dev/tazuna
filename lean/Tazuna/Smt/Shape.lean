@@ -37,7 +37,7 @@ def shapeT (m : MachineV r e) (tbl records : Term) : Except Refusal Term := do
   let bagT ← Code.dataTermE _ bag
   let (db, nb, dtb) ← collD L (.bag m.key) [m.key]
   let SB := slotsOf db dtb nb 1 bagT
-  let (d, n, dt) ← collD L m.table [m.key, instEntry m.state]
+  let (d, n, dt) ← collD L m.table [m.key, m.state]
   let So := instSlotsOf d dt n tbl
   let inBag ← So.mapM (inBagAt L m SB)
   let inTable ← SB.mapM (inTableAt L m So)
@@ -83,8 +83,8 @@ theorem holds_or_of {a b : Term} (h : (b.denote M).toBool = true) : Holds M (.or
 /-- Every table slot's term holds where every entry's key is in the bag. -/
 theorem inBag_holds (m : MachineV r e) {SB : List (Slot 1)} {svB : List (Bool × List Val)} {ysB : List m.key.den}
     (hSB : SlotsDen M SB svB) (hyB : Holds2 (EBag L m.key) ysB svB) :
-    (So : List InstSlot) → (sv : List (Bool × List Val)) → (ys : List (m.key.den × (instEntry m.state).den)) →
-    SlotsDen M (So.map InstSlot.slot) sv → Holds2 (ETab L m.key (instEntry m.state)) ys sv →
+    (So : List InstSlot) → (sv : List (Bool × List Val)) → (ys : List (m.key.den × m.state.den)) →
+    SlotsDen M (So.map InstSlot.slot) sv → Holds2 (ETab L m.key m.state) ys sv →
     (∀ y ∈ ys, ysB.any (fun b => Ty.deq m.key b y.1) = true) → {ts : List Term} →
     So.mapM (inBagAt L m SB) = .ok ts → ∀ t ∈ ts, Holds M t
   | [], [], ys, _, _, _, ts, h => by
@@ -124,8 +124,8 @@ theorem inBag_holds (m : MachineV r e) {SB : List (Slot 1)} {svB : List (Bool ×
 
 /-- Every bag slot's term holds where every item is a key of the table. -/
 theorem inTable_holds (m : MachineV r e) {So : List InstSlot} {sv : List (Bool × List Val)}
-    {ys : List (m.key.den × (instEntry m.state).den)} (hS : SlotsDen M (So.map InstSlot.slot) sv)
-    (hh : Holds2 (ETab L m.key (instEntry m.state)) ys sv) :
+    {ys : List (m.key.den × m.state.den)} (hS : SlotsDen M (So.map InstSlot.slot) sv)
+    (hh : Holds2 (ETab L m.key m.state) ys sv) :
     (SB : List (Slot 1)) → (svB : List (Bool × List Val)) → (ysB : List m.key.den) → SlotsDen M SB svB →
     Holds2 (EBag L m.key) ysB svB → (∀ b ∈ ysB, ys.any (fun y => Ty.deq m.key y.1 b) = true) → {ts : List Term} →
     SB.mapM (inTableAt L m So) = .ok ts → ∀ t ∈ ts, Holds M t
@@ -196,7 +196,7 @@ theorem shape_holds (m : MachineV r e) (hor : m.key.orderable = true) (recs : r.
   have hbag' : Smt.Rel M L (.bag m.key) (Ty.up _ hbagT (m.instances.fn (recs, ()))) bagT :=
     (rel_term (need_ok.1 h7) _).1 hbag
   obtain ⟨svB, ysB, hSB, -, -, hpB, hyB⟩ := bag_view hbag' h8
-  have htbl' : Smt.Rel M L (.table m.key (instEntry m.state)) (Ty.up _ m.table_data tbl) x := htbl
+  have htbl' : Smt.Rel M L (.table m.key m.state) (Ty.up _ m.table_data tbl) x := htbl
   obtain ⟨sv, ys, hS, -, -, hp, hh⟩ := table_view htbl' h1
   rw [← instSlotsOf_slot] at hS
   have hb : (ysB.map (Ty.down _ hkd)).Perm (m.instances.fn (recs, ())) := by

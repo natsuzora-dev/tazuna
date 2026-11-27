@@ -28,7 +28,7 @@ fn remind() -> tazuna.Machine(Records, Event) {
     on: fn(_c: tazuna.MachineCtx(Int, Phase, Records), _e: Event) {
       tazuna.Stay
     },
-    after: fn(_c: tazuna.MachineCtx(Int, Phase, Records)) { None },
+    timer: fn(_c: tazuna.TimerCtx(Int, Phase, Records)) { None },
     effect: fn(_c: tazuna.MachineCtx(Int, Phase, Records)) { None },
     invariants: fn(_c: tazuna.MachineCtx(Int, Phase, Records)) { [] },
   )

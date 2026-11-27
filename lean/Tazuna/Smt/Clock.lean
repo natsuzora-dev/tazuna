@@ -2,76 +2,35 @@ import Tazuna.Smt.Fire
 import Tazuna.Smt.Finish
 
 /-! A clock line's step. Time moves to the line's time, then rounds fire, at most `cascade + 1`:
-each round finds the earliest deadline among the due timers of every machine (`minDueT`, a fold over all slots, so
-the order of slots does not matter), then the machines in order fire their first instance at that deadline, each
-unless an earlier machine fired (`encodeFires`, the done flag threading `Step.fireMachines`). A round with no due
+each round reads every slot's timer off its state and the records (`timersAll`), finds the earliest deadline among
+the due ones of every machine (`minDueT`, a fold over all slots, so the order of slots does not matter), then the
+machines in order fire their first instance at that deadline, each unless an earlier machine fired (`encodeFires`, the
+done flag threading `Step.fireMachines`). A round with no due
 timer, and every round after it, changes nothing. When every round fires the step exceeds the cascade bound. A round
 fires one instance, so it starts at most one effect, which takes the round's next id (`roundStarts`); the requests are
 written into the pending table in round order.
 
 The condition is exact: it fails only where a function the step really applies outgrows a slot
-count. Every round asks for each machine's `after` and `effect` sources, and for both applied where an instance fires;
-the step's end asks what `finishFits` says. Rounds past the first that fired nothing, and everything after a step that
-exceeds the cascade bound, ask nothing. -/
+count. Every round asks for each machine's `timer` and `effect` sources, for `timer` at every instance, and for
+`effect` where an instance fires; the step's end asks what `finishFits` says. A round past the first that fired
+nothing asks `timer` of the same instances at the same records as that round, so it asks nothing new; everything after
+a step that exceeds the cascade bound asks nothing. -/
 
 namespace Tazuna.Smt
 
 open Tazuna.Ir
 
-section
-variable {L : Layout} {M : Model} {r e : Ty}
-
-/-- An entry's timer terms: whether it has a timer, and its deadline. -/
-theorem timer_view (m : MachineV r e) {dent n dp np : Nat}
-    (hdent : L.find? (Ty.option (.tuple [.int, m.state])) = some (dent, n)) (hdp : L.find? (.tuple [.int, m.state]) = some (dp, np))
-    (i : Step.Instance m) {tm : Term}
-    (ht : RelV L _ (Ty.up _ m.timer_data (timerVal i.timer)) (tm.denote M)) :
-    (Term.is dent 0 tm).denote M = .bool i.timer.isSome ∧
-      ∀ dl tg, i.timer = some (dl, tg) → (Term.sel dp 0 0 (Term.sel dent 0 0 tm)).denote M = .int dl := by
-  have hs := m.state_data
-  have hent1 : (Ty.tuple [.tuple [.int, m.state]]).isData = true := by simp [Ty.isData, Ty.isDatas, hs]
-  have hpair : (Ty.tuple [.int, m.state]).isData = true := by simp [Ty.isData, Ty.isDatas, hs]
-  have hnone' : (Ty.adt 3 [.tuple [.int, m.state]] [[]]).isData = true := by simp [Ty.isData, Ty.isDatass, Ty.isDatas]
-  obtain ⟨d', n', hf', hra⟩ := ht
-  obtain rfl := find_det hf' hdent
-  obtain ⟨k, st, t⟩ := i
-  cases t with
-  | some p =>
-    obtain ⟨dl, tg⟩ := p
-    change RelAlts L d' 0 _ (Ty.up _ m.timer_data (.inl ((dl, tg, ()), ()))) _ at hra
-    erw [Ty.up_inl 3 _ [.tuple [.int, m.state]] [[]] m.timer_data hent1] at hra
-    obtain ⟨vals, hv, hvals⟩ := hra
-    erw [Ty.up_tuple _ _ _ hpair rfl] at hvals
-    obtain ⟨v0, _, rfl, ⟨dp', np', vals7, hf7, hv7, hvals7⟩, rfl⟩ := hvals
-    obtain rfl := find_det hf7 hdp
-    erw [Ty.up_tuple _ _ _ rfl (by simp [Ty.isData, Ty.isDatas, hs])] at hvals7
-    obtain ⟨vd, vs7, rfl, hvd, -⟩ := hvals7
-    change vd = .int dl at hvd
-    subst hvd
-    refine ⟨by simp [Term.denote, hv], fun dl' tg' h => ?_⟩
-    simp only [Option.some.injEq, Prod.mk.injEq] at h
-    obtain ⟨rfl, rfl⟩ := h
-    simp [Term.denote, hv, hv7]
-  | none =>
-    change RelAlts L d' 0 _ (Ty.up _ m.timer_data (.inr (.inl ()))) _ at hra
-    erw [Ty.up_inr 3 _ [.tuple [.int, m.state]] [[]] m.timer_data hnone', Ty.up_inl 3 _ [] [] hnone' rfl] at hra
-    obtain ⟨vals, hv, -⟩ := hra
-    exact ⟨by simp [Term.denote, hv], fun _ _ h => nomatch h⟩
-
-end
-
 /-! The earliest due deadline. -/
 
-/-- The deadline of an instance's timer where it is due at `now`. -/
-def dueOf {r e : Ty} {m : MachineV r e} (now : Int) (i : Step.Instance m) : Option Int :=
-  i.timer.bind fun (d, _) => if d ≤ now then some d else none
+/-- The deadline of an instance's timer at the records where it is due at `now`. -/
+def dueOf {r e : Ty} {m : MachineV r e} (recs : r.den0) (now : Int) (i : Step.Instance m) : Option Int :=
+  (Step.timerOf recs i).bind fun (d, _) => if d ≤ now then some d else none
 
-/-- Per slot of a table, whether it holds a timer due at `now`, and its deadline. -/
-def dueSlots (de dent dp : Nat) (So : List InstSlot) (now : Term) : List (Term × Term) :=
-  So.map fun ⟨f, _, entry⟩ =>
-    let tm := Term.sel de 0 1 entry
-    let dl := Term.sel dp 0 0 (Term.sel dent 0 0 tm)
-    (.and f (.and (.is dent 0 tm) (.le dl now)), dl)
+/-- Per slot of a table with its timer term, whether it holds a timer due at `now`, and its deadline. -/
+def dueSlots (dopt dtm : Nat) (St : List (InstSlot × Term)) (now : Term) : List (Term × Term) :=
+  St.map fun (⟨f, _, _⟩, tm) =>
+    let dl := Term.sel dtm 0 0 (Term.sel dopt 0 0 tm)
+    (.and f (.and (.is dopt 0 tm) (.le dl now)), dl)
 
 /-- Whether some slot is due, and the least deadline among the due ones. -/
 def minDueT : List (Term × Term) → Term × Term
@@ -171,105 +130,98 @@ end
 section
 variable {L : Layout} {M : Model} {r e : Ty}
 
-/-- The timer term of a table slot denotes the timer of the instance it holds. -/
-theorem item_timer (m : MachineV r e) {de nde : Nat} (hde : L.find? (instEntry m.state) = some (de, nde))
-    (y : m.key.den × (instEntry m.state).den) (sl : InstSlot)
-    (h : ETab L m.key (instEntry m.state) y (Term.denotes M sl.slot.2.1)) :
-    RelV L _ (Ty.up _ m.timer_data (timerVal (instOfD m y).timer)) ((Term.sel de 0 1 sl.entry).denote M) := by
-  obtain ⟨zk, zv, hvs, hk, hv⟩ := h
-  obtain ⟨f, xk, xe⟩ := sl
-  simp only [InstSlot.slot, Term.denotes, List.cons.injEq, and_true] at hvs
-  obtain ⟨hxk, hxe⟩ := hvs
-  have hy2 : Ty.up _ m.entry_data (Ty.down _ m.entry_data y.2) = y.2 := Ty.up_down _ _ _
-  generalize hz : Ty.down _ m.entry_data y.2 = z at hy2
-  obtain ⟨st, t, u⟩ := z
-  cases u
-  have hinst : instOfD m y = ⟨Ty.down _ m.key_data y.1, st, timerOf t⟩ := by simp [instOfD, instOf, hz]
-  rw [← hy2] at hv
-  obtain ⟨v0, v1, hzv, -, hv1⟩ := (entry_rel_iff m hde st t zv).1 hv
-  have hsel : (Term.sel de 0 1 xe).denote M = v1 := by rw [sel_ctor 1 (hxe.trans hzv)]; rfl
-  rw [hsel, hinst]; simpa [val_timerOf] using hv1
-
 /-- The due terms of a table's slots denote, slot by slot, the due deadlines of the instances they hold. -/
-theorem dueSlots_rel (m : MachineV r e) {de nde dent nent dp np : Nat} (hde : L.find? (instEntry m.state) = some (de, nde))
-    (hdent : L.find? (Ty.option (.tuple [.int, m.state])) = some (dent, nent))
-    (hdp : L.find? (.tuple [.int, m.state]) = some (dp, np)) {now : Term} {tnow : Int} (hnow : now.denote M = .int tnow) :
-    {So : List InstSlot} → {sv : List (Bool × List Val)} → {ys : List (m.key.den × (instEntry m.state).den)} →
-    SlotsDen M (So.map InstSlot.slot) sv → Holds2 (ETab L m.key (instEntry m.state)) ys sv →
-    ∃ os, Forall2 (DueRel M) (dueSlots de dent dp So now) os ∧
-      os.filterMap id = (ys.map (instOfD m)).filterMap (dueOf tnow)
-  | [], [], ys, _, hy => by
+theorem dueSlots_rel (m : MachineV r e) {dopt n1 dtm n2 : Nat}
+    (h1 : L.find? (Ty.option (Ty.timer m.state)) = some (dopt, n1)) (h2 : L.find? (Ty.timer m.state) = some (dtm, n2))
+    (recs : r.den0) {now : Term} {tnow : Int} (hnow : now.denote M = .int tnow) :
+    {St : List (InstSlot × Term)} → {sv : List (Bool × List Val)} → {ys : List (m.key.den × m.state.den)} →
+    SlotsDen M (St.map (·.1.slot)) sv → (∀ p ∈ St, TimerOk M L m recs p.1 p.2) →
+    Holds2 (ETab L m.key m.state) ys sv →
+    ∃ os, Forall2 (DueRel M) (dueSlots dopt dtm St now) os ∧
+      os.filterMap id = (ys.map (instOfD m)).filterMap (dueOf recs tnow)
+  | [], [], ys, _, _, hy => by
     cases ys with
     | nil => exact ⟨[], trivial, rfl⟩
     | cons _ _ => exact hy.elim
-  | ⟨f, tk, te⟩ :: So, (b, vs) :: sv, ys, ⟨hf, hx, hS⟩, hy => by
+  | (⟨f, tk, te⟩, tm) :: St, (b, vs) :: sv, ys, ⟨hf, hx, hS⟩, hT, hy => by
     have hand : ∀ a c : Term, (Term.and a c).denote M = .bool ((a.denote M).toBool && (c.denote M).toBool) :=
       fun _ _ => rfl
+    have hT' : ∀ p ∈ St, TimerOk M L m recs p.1 p.2 := fun p hp => hT p (by simp [hp])
     cases b with
     | false =>
-      obtain ⟨os, h1, h2⟩ := dueSlots_rel m hde hdent hdp hnow hS (by simpa [Holds2, occupied] using hy)
-      refine ⟨none :: os, ⟨⟨?_, fun _ h => nomatch h⟩, h1⟩, by simpa using h2⟩
+      obtain ⟨os, h1', h2'⟩ := dueSlots_rel m h1 h2 recs hnow hS hT' (by simpa [Holds2, occupied] using hy)
+      refine ⟨none :: os, ⟨⟨?_, fun _ h => nomatch h⟩, h1'⟩, by simpa using h2'⟩
       show (Term.and f _).denote M = _
       rw [hand, hf]; rfl
     | true =>
       match ys, hy with
       | y :: ys, ⟨hey, hy⟩ =>
-        obtain ⟨os, h1, h2⟩ := dueSlots_rel m hde hdent hdp hnow hS hy
-        have ht := item_timer m hde y ⟨f, tk, te⟩ (hx ▸ hey)
-        obtain ⟨his, hdl⟩ := timer_view m hdent hdp (instOfD m y) ht
-        refine ⟨dueOf tnow (instOfD m y) :: os, ⟨⟨?_, fun d hd => ?_⟩, h1⟩, ?_⟩
-        · show (Term.and f (.and (.is dent 0 _) (.le _ now))).denote M = _
+        obtain ⟨os, h1', h2'⟩ := dueSlots_rel m h1 h2 recs hnow hS hT' hy
+        have ht := hT (⟨f, tk, te⟩, tm) (by simp) hf y (hx ▸ hey)
+        obtain ⟨his, hdl⟩ := timer_view m h1 h2 _ ht
+        refine ⟨dueOf recs tnow (instOfD m y) :: os, ⟨⟨?_, fun d hd => ?_⟩, h1'⟩, ?_⟩
+        · show (Term.and f (.and (.is dopt 0 tm) (.le _ now))).denote M = _
           rw [hand, hand, hf, his]
-          unfold dueOf
-          cases htm : (instOfD m y).timer with
+          unfold dueOf Step.timerOf MachineV.timerAt
+          cases htm : Step.timerVal (m.timer.fn (.inl ((instOfD m y).key, (instOfD m y).state, recs, ()), ())) with
           | none => simp [Val.toBool]
           | some p =>
             obtain ⟨dl, tg⟩ := p
-            have hX := hdl dl tg htm
-            generalize Term.sel dp 0 0 (Term.sel dent 0 0 (Term.sel de 0 1 te)) = X at hX ⊢
+            have hX := (hdl dl tg htm).1
+            generalize Term.sel dtm 0 0 (Term.sel dopt 0 0 tm) = X at hX ⊢
             simp only [Term.denote, hX, hnow, Val.toBool, Val.toInt, Option.isSome_some, Bool.true_and,
               Option.bind_some]
             by_cases hle : dl ≤ tnow <;> simp [hle]
-        · unfold dueOf at hd
-          cases htm : (instOfD m y).timer with
+        · unfold dueOf Step.timerOf MachineV.timerAt at hd
+          cases htm : Step.timerVal (m.timer.fn (.inl ((instOfD m y).key, (instOfD m y).state, recs, ()), ())) with
           | none => rw [htm] at hd; cases hd
           | some p =>
             obtain ⟨dl, tg⟩ := p
             rw [htm] at hd
             simp only [Option.bind_some] at hd
             split at hd
-            · cases hd; exact hdl _ _ htm
+            · cases hd; exact (hdl _ _ htm).1
             · cases hd
-        · simp only [List.filterMap_cons, id, List.map_cons, h2]
-  | [], _ :: _, _, h, _ | _ :: _, [], _, h, _ => h.elim
+        · simp only [List.filterMap_cons, id, List.map_cons, h2']
+  | [], _ :: _, _, h, _, _ | _ :: _, [], _, h, _, _ => h.elim
 
 end
 
 section
 variable (L : Layout) (T : List TypeDecl) {r e : Ty}
 
+/-- Every machine's slots' timers at the records, machines in order, and the condition that each machine's `timer`
+fits (its source, and at every instance). -/
+def timersAll : (ms : List (MachineV r e)) → PerMachine (fun _ => Term) ms → (records : Term) →
+    Except Refusal (PerMachine (fun _ => List Term) ms × Term)
+  | [], .nil, _ => pure (.nil, tt)
+  | m :: ms, .cons x xs, records => do
+    let (tc, c0) ← m.timer.code L
+    let (tms, c) ← encodeTimers L m tc x records
+    let (rest, cs) ← timersAll ms xs records
+    pure (.cons tms rest, andT c0 (andT c cs))
+
 /-- Every machine's part of a firing round, machines in order: each fires unless `done`, and passes on whether some
 machine so far has an instance with the deadline. -/
-def encodeFires : (ms : List (MachineV r e)) → PerMachine (fun _ => Term) ms → (done d records now : Term) →
-    Except Refusal (PerMachine (fun _ => FireOut) ms × Term)
-  | [], .nil, _, _, _, _ => pure (.nil, tt)
-  | m :: ms, .cons x xs, done, d, records, now => do
-    let (af, c0) ← m.after.code L
+def encodeFires : (ms : List (MachineV r e)) → PerMachine (fun _ => Term) ms → PerMachine (fun _ => List Term) ms →
+    (done d records now : Term) → Except Refusal (PerMachine (fun _ => FireOut) ms × Term)
+  | [], .nil, .nil, _, _, _, _ => pure (.nil, tt)
+  | m :: ms, .cons x xs, .cons tms tmss, done, d, records, now => do
     let (fx, c1) ← m.effect.code L
-    let (o, c) ← encodeFire L T m af fx x done d records now
-    let (os, cs) ← encodeFires ms xs (.share (.or done o.hit)) d records now
-    pure (.cons o os, andT c0 (andT c1 (andT c cs)))
+    let (o, c) ← encodeFire L T m fx tms x done d records now
+    let (os, cs) ← encodeFires ms xs tmss (.share (.or done o.hit)) d records now
+    pure (.cons o os, andT c1 (andT c cs))
 
 /-- The due slots of every machine's table, machines in order. -/
-def dueAll : (ms : List (MachineV r e)) → PerMachine (fun _ => Term) ms → Term → Except Refusal (List (Term × Term))
-  | [], .nil, _ => pure []
-  | m :: ms, .cons x xs, now => do
-    let (dd, n, dt) ← collD L m.table [m.key, instEntry m.state]
-    let de ← tupleD L [m.state, Ty.option (.tuple [.int, m.state])]
-    let (dent, _) ← L.findE (Ty.option (.tuple [.int, m.state]))
-    let dp ← tupleD L [.int, m.state]
-    let rest ← dueAll ms xs now
-    pure (dueSlots de dent dp (instSlotsOf dd dt n x) now ++ rest)
+def dueAll : (ms : List (MachineV r e)) → PerMachine (fun _ => Term) ms → PerMachine (fun _ => List Term) ms → Term →
+    Except Refusal (List (Term × Term))
+  | [], .nil, .nil, _ => pure []
+  | m :: ms, .cons x xs, .cons tms tmss, now => do
+    let (dd, n, dt) ← collD L m.table [m.key, m.state]
+    let (dopt, _) ← L.findE (Ty.option (Ty.timer m.state))
+    let (dtm, _) ← L.findE (Ty.timer m.state)
+    let rest ← dueAll ms xs tmss now
+    pure (dueSlots dopt dtm ((instSlotsOf dd dt n x).zip tms) now ++ rest)
 
 /-- What a firing round encodes: every machine's part, and whether the round fires (it is active and some timer is
 due). -/
@@ -281,10 +233,11 @@ structure RoundOut (ms : List (MachineV r e)) where
 not active, or has no due timer, fires nothing. -/
 def encodeRound (ms : List (MachineV r e)) (xs : PerMachine (fun _ => Term) ms) (active records now : Term) :
     Except Refusal (RoundOut ms × Term) := do
-  let dues ← dueAll L ms xs now
+  let (tms, ct) ← timersAll L ms xs records
+  let dues ← dueAll L ms xs tms now
   let go := Term.share (.and active (minDueT dues).1)
-  let (os, c) ← encodeFires L T ms xs (.not go) (Term.share (minDueT dues).2) records now
-  pure (⟨os, go⟩, c)
+  let (os, c) ← encodeFires L T ms xs tms (.not go) (Term.share (minDueT dues).2) records now
+  pure (⟨os, go⟩, andT ct c)
 
 end
 
@@ -292,7 +245,7 @@ end
 def _root_.Tazuna.Ir.Step.roundOf {r e : Ty} (recs : r.den0) (now : Int) (active : Bool) {ms : List (MachineV r e)}
     (sms : Step.Machines ms) : Step.Machines ms × List (Sender × EffectV e) :=
   if active then
-    match (Step.dues sms.toSigma now).min? with
+    match (Step.dues recs sms.toSigma now).min? with
     | none => (sms, [])
     | some d => let x := Step.fireMachines recs now d false sms; (x.1, x.2.1)
   else (sms, [])
@@ -310,31 +263,77 @@ theorem roundOf_effs {r e : Ty} (recs : r.den0) (now : Int) (active : Bool) {ms 
 section
 variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
 
-/-- The due terms of every machine's table denote the due deadlines of the machines' instances, in some order. -/
-theorem dueAll_rel {now : Term} {tnow : Int} (hnow : now.denote M = .int tnow) :
+/-- Every machine's timer terms denote, slot by slot, the timers its occupied slots' instances wait for. -/
+def TimersRel (M : Model) (L : Layout) {r e : Ty} (recs : r.den0) : (ms : List (MachineV r e)) →
+    PerMachine (fun _ => Term) ms → PerMachine (fun _ => List Term) ms → Prop
+  | [], .nil, .nil => True
+  | m :: ms, .cons x xs, .cons tms tmss => (∀ dd n dt, collD L m.table [m.key, m.state] = .ok (dd, n, dt) →
+      Forall2 (TimerOk M L m recs) (instSlotsOf dd dt n x) tms) ∧ TimersRel M L recs ms xs tmss
+
+/-- Whether every machine's `timer` fits: its source, and at every instance at the records. -/
+def timersFit (S : Ty → Nat) {r e : Ty} (recs : r.den0) : {ms : List (MachineV r e)} → Step.Machines ms → Prop
+  | _, .nil => True
+  | m :: _, .cons insts rest => (m.timer.fits S).1 ∧
+      (∀ i ∈ insts, m.timer.appFits S (.inl (i.key, i.state, recs, ()), ())) ∧ timersFit S recs rest
+
+/-- Every machine's timers: the condition holds exactly when every `timer` fits (`timersFit`), and wherever it holds
+the timer terms denote the instances' timers. -/
+theorem timersAll_encode (recs : v.records.den0) {records : Term}
+    (hrec : RelV L v.records (Ty.up _ v.records_data recs) (records.denote M)) :
     (ms : List (MachineV v.records v.event)) → (xs : PerMachine (fun _ => Term) ms) → (sms : Step.Machines ms) →
-    MachinesRel M L T ms xs sms → {dues : List (Term × Term)} → dueAll L ms xs now = .ok dues →
-    ∃ os, Forall2 (DueRel M) dues os ∧ (os.filterMap id).Perm (Step.dues sms.toSigma tnow)
-  | [], .nil, .nil, _, dues, henc => by
+    MachinesRel M L T ms xs sms → {tmss : PerMachine (fun _ => List Term) ms} → {c : Term} →
+    timersAll L ms xs records = .ok (tmss, c) →
+    (Holds M c ↔ timersFit L.count recs sms) ∧ (Holds M c → TimersRel M L recs ms xs tmss)
+  | [], .nil, .nil, _, tmss, c, henc => by
+    simp only [timersAll, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
+    obtain ⟨rfl, rfl⟩ := henc
+    exact ⟨by simp [timersFit, holds_tt], fun _ => trivial⟩
+  | m :: ms, .cons x xs, .cons insts sms, ⟨⟨tbl, htbl, hsm⟩, hrest⟩, tmss, c, henc => by
+    obtain ⟨⟨tc, c0⟩, h1, henc⟩ := bind_ok.1 henc
+    obtain ⟨⟨tms, c1⟩, h2, henc⟩ := bind_ok.1 henc
+    obtain ⟨⟨rest, c2⟩, h3, henc⟩ := bind_ok.1 henc
+    cases pure_ok.1 henc
+    subst hsm
+    have hrec' : RelV L v.records (Ty.up _ m.records_data recs) (records.denote M) := hrec
+    have e0 := (m.timer.code_exact (M := M) h1).1
+    have ih := timersAll_encode recs hrec ms xs sms hrest h3
+    refine ⟨?_, fun hc => ?_⟩
+    · simp only [timersFit]
+      rw [holds_andT, holds_andT, e0, ih.1]
+      constructor
+      · rintro ⟨p0, p1, p2⟩
+        exact ⟨p0, (timers_encode (T := T) m h1 (e0.2 p0) recs hrec' tbl htbl h2).1.1 p1, p2⟩
+      · rintro ⟨p0, p1, p2⟩
+        exact ⟨p0, (timers_encode (T := T) m h1 (e0.2 p0) recs hrec' tbl htbl h2).1.2 p1, p2⟩
+    · obtain ⟨hc0, hc1, hc2⟩ : Holds M c0 ∧ Holds M c1 ∧ Holds M c2 := by
+        rw [holds_andT, holds_andT] at hc; exact hc
+      exact ⟨(timers_encode (T := T) m h1 hc0 recs hrec' tbl htbl h2).2 hc1, ih.2 hc2⟩
+
+/-- The due terms of every machine's table denote the due deadlines of the machines' instances, in some order. -/
+theorem dueAll_rel (recs : v.records.den0) {now : Term} {tnow : Int} (hnow : now.denote M = .int tnow) :
+    (ms : List (MachineV v.records v.event)) → (xs : PerMachine (fun _ => Term) ms) → (sms : Step.Machines ms) →
+    MachinesRel M L T ms xs sms → {tmss : PerMachine (fun _ => List Term) ms} → TimersRel M L recs ms xs tmss →
+    {dues : List (Term × Term)} → dueAll L ms xs tmss now = .ok dues →
+    ∃ os, Forall2 (DueRel M) dues os ∧ (os.filterMap id).Perm (Step.dues recs sms.toSigma tnow)
+  | [], .nil, .nil, _, .nil, _, dues, henc => by
     simp only [dueAll, pure, Except.pure, Except.ok.injEq] at henc
     subst henc
     exact ⟨[], trivial, by simp [Step.dues]⟩
-  | m :: ms, .cons x xs, .cons insts sms, ⟨⟨tbl, htbl, hsm⟩, hrest⟩, dues, henc => by
+  | m :: ms, .cons x xs, .cons insts sms, ⟨⟨tbl, htbl, hsm⟩, hrest⟩, .cons tms tmss, ⟨ht, htr⟩, dues, henc => by
     obtain ⟨⟨dd, n, dt⟩, h1, henc⟩ := bind_ok.1 henc
-    obtain ⟨de, h2, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨dent, nent⟩, h3, henc⟩ := bind_ok.1 henc
-    obtain ⟨dp, h4, henc⟩ := bind_ok.1 henc
+    obtain ⟨⟨dopt, n1⟩, h3, henc⟩ := bind_ok.1 henc
+    obtain ⟨⟨dtm, n2⟩, h4, henc⟩ := bind_ok.1 henc
     obtain ⟨rest, h5, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
     subst hsm
-    obtain ⟨nde, hde⟩ := tupleD_ok h2
-    obtain ⟨ndp, hdp⟩ := tupleD_ok h4
-    have htbl' : Smt.Rel M L (.table m.key (instEntry m.state)) (Ty.up _ m.table_data tbl) x := htbl
+    have htbl' : Smt.Rel M L (.table m.key m.state) (Ty.up _ m.table_data tbl) x := htbl
     obtain ⟨sv, ys, hS, -, -, hp, hh⟩ := table_view htbl' h1
     rw [← instSlotsOf_slot] at hS
+    have hT2 := ht dd n dt h1
+    rw [← zip_slots hT2] at hS
     have hperm : (ys.map (instOfD m)).Perm (instancesOf T m tbl) := instancesOf_perm m tbl hp
-    obtain ⟨os1, hf1, he1⟩ := dueSlots_rel m hde (need_ok.1 h3) hdp hnow hS hh
-    obtain ⟨os2, hf2, he2⟩ := dueAll_rel hnow ms xs sms hrest h5
+    obtain ⟨os1, hf1, he1⟩ := dueSlots_rel m (need_ok.1 h3) (need_ok.1 h4) recs hnow hS (forall2_zip hT2) hh
+    obtain ⟨os2, hf2, he2⟩ := dueAll_rel recs hnow ms xs sms hrest htr h5
     refine ⟨os1 ++ os2, forall2_append hf1 hf2, ?_⟩
     rw [List.filterMap_append, he1]
     exact (hperm.filterMap _).append he2
@@ -596,19 +595,20 @@ end
 section
 variable (S : Ty → Nat) (T : List TypeDecl) {r e : Ty}
 
-/-- Whether a firing round's functions fit, machines in order: each machine's `after` and `effect` sources, and both
-applied at the state the firing instance enters (none where an earlier machine fired). -/
+/-- Whether a firing round's `effect`s fit, machines in order: each machine's source, and applied at the state the
+firing instance enters (none where an earlier machine fired). -/
 def firesFit (recs : r.den0) (now d : Int) : Bool → {ms : List (MachineV r e)} → Step.Machines ms → Prop
   | _, _, .nil => True
-  | b, m :: _, .cons insts rest => (m.after.fits S).1 ∧ (m.effect.fits S).1 ∧
-      (∀ i ∈ insts, (!b && Step.firesIn T m d insts i) = true → ∀ dl tg, i.timer = some (dl, tg) →
-        m.after.appFits S (.inl (i.key, tg, recs, now, ()), ()) ∧ m.effect.appFits S (.inl (i.key, tg, recs, now, ()), ())) ∧
-      firesFit recs now d (b || insts.any (Step.hitsAt d)) rest
+  | b, m :: _, .cons insts rest => (m.effect.fits S).1 ∧
+      (∀ i ∈ insts, (!b && Step.firesIn T m recs d insts i) = true → ∀ dl tg, Step.timerOf recs i = some (dl, tg) →
+        m.effect.appFits S (.inl (i.key, tg, recs, now, ()), ())) ∧
+      firesFit recs now d (b || insts.any (Step.hitsAt recs d)) rest
 
-/-- Whether a round's functions fit: at the earliest due deadline where it is active and a timer is due, else only the
-sources. -/
+/-- Whether a round's functions fit: every `timer` at every instance, and the `effect`s at the earliest due deadline
+where it is active and a timer is due, else only their sources. -/
 def roundFit (recs : r.den0) (now : Int) (ab : Bool) {ms : List (MachineV r e)} (sms : Step.Machines ms) : Prop :=
-  match (if ab then (Step.dues sms.toSigma now).min? else none) with
+  timersFit S recs sms ∧
+  match (if ab then (Step.dues recs sms.toSigma now).min? else none) with
   | some d => firesFit S T recs now d false sms
   | none => firesFit S T recs now 0 true sms
 
@@ -617,7 +617,7 @@ def roundsFit {v : ServiceV} (s : State v) : Bool → Nat → Prop
   | _, 0 => True
   | ab, k + 1 => roundFit S T s.records s.now ab s.machines ∧
       roundsFit { s with machines := (Step.roundOf s.records s.now ab s.machines).1 }
-        (ab && (Step.dues s.machines.toSigma s.now).min?.isSome) k
+        (ab && (Step.dues s.records s.machines.toSigma s.now).min?.isSome) k
 
 theorem firesFit_true (recs : r.den0) (now d d' : Int) : {ms : List (MachineV r e)} → (sms : Step.Machines ms) →
     (firesFit S T recs now d true sms ↔ firesFit S T recs now d' true sms)
@@ -640,58 +640,59 @@ theorem fires_encode (recs : v.records.den0) (tnow : Int) {records now : Term}
     {d : Term} {dv : Int} (hd : d.denote M = .int dv) :
     (ms : List (MachineV v.records v.event)) → (xs : PerMachine (fun _ => Term) ms) → (sms : Step.Machines ms) →
     MachinesRel M L T ms xs sms → (∀ m ∈ ms, m.key.ordered T = true) →
+    {tmss : PerMachine (fun _ => List Term) ms} → TimersRel M L recs ms xs tmss →
     {done : Term} → {b : Bool} → done.denote M = .bool b →
-    {os : PerMachine (fun _ => FireOut) ms} → {c : Term} → encodeFires L T ms xs done d records now = .ok (os, c) →
+    {os : PerMachine (fun _ => FireOut) ms} → {c : Term} → encodeFires L T ms xs tmss done d records now = .ok (os, c) →
     (Holds M c ↔ firesFit L.count T recs tnow dv b sms) ∧
     (Holds M c → MachinesRel M L T ms (os.map (·.table)) (Step.fireMachines recs tnow dv b sms).1 ∧
       ∃ effss, StartsRel M L T ms (os.map (·.starts)) effss ∧
         effss.toList.flatten = (Step.fireMachines recs tnow dv b sms).2.1)
-  | [], .nil, .nil, _, _, done, b, hdone, os, c, henc => by
+  | [], .nil, .nil, _, _, .nil, _, done, b, hdone, os, c, henc => by
     simp only [encodeFires, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
     obtain ⟨rfl, rfl⟩ := henc
     exact ⟨by simp [firesFit, holds_tt], fun _ => ⟨trivial, .nil, trivial, by simp [Step.fireMachines]⟩⟩
-  | m :: ms, .cons x xs, .cons insts sms, ⟨⟨tbl, htbl, hsm⟩, hrest⟩, hord, done, b, hdone, os, c, henc => by
-    obtain ⟨⟨af, c0⟩, h1, henc⟩ := bind_ok.1 henc
+  | m :: ms, .cons x xs, .cons insts sms, ⟨⟨tbl, htbl, hsm⟩, hrest⟩, hord, .cons tms tmss, ⟨ht, htr⟩,
+      done, b, hdone, os, c, henc => by
     obtain ⟨⟨fx, c1⟩, h2, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨o, c2⟩, h3, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨os', c3⟩, h4, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
     subst hsm
+    have hrec' : RelV L v.records (Ty.up _ m.records_data recs) (records.denote M) := hrec
+    have hord' : ∀ m' ∈ ms, m'.key.ordered T = true := fun m' hm => hord m' (by simp [hm])
     refine ⟨?_, fun hc => ?_⟩
-    · have hrec' : RelV L v.records (Ty.up _ m.records_data recs) (records.denote M) := hrec
-      have e0 := (m.after.code_exact (M := M) h1).1
-      have e1 := (m.effect.code_exact (M := M) h2).1
+    · have e1 := (m.effect.code_exact (M := M) h2).1
       simp only [firesFit]
-      rw [holds_andT, holds_andT, holds_andT, e0, e1]
+      rw [holds_andT, holds_andT, e1]
       constructor
-      · rintro ⟨p0, p1, p2, p3⟩
-        have F := fire_encode (T := T) m h1 (e0.2 p0) h2 (e1.2 p1) recs tnow hrec' hnow tbl htbl hdone hd h3
+      · rintro ⟨p1, p2, p3⟩
+        have F := fire_encode (T := T) m h2 (e1.2 p1) recs tnow hrec' hnow tbl htbl ht hdone hd h3
         obtain ⟨-, hhit, -⟩ := F.2 p2
-        have hdone' : (Term.share (.or done o.hit)).denote M = .bool (b || (instancesOf T m tbl).any (Step.hitsAt dv)) := by
+        have hdone' : (Term.share (.or done o.hit)).denote M =
+            .bool (b || (instancesOf T m tbl).any (Step.hitsAt recs dv)) := by
           rw [Term.denote_share]; show Val.bool _ = _; rw [hdone, hhit]; rfl
-        exact ⟨p0, p1, F.1.1 p2,
-          (fires_encode recs tnow hrec hnow hd ms xs sms hrest (fun m' hm => hord m' (by simp [hm])) hdone' h4).1.1 p3⟩
-      · rintro ⟨p0, p1, p2, p3⟩
-        have F := fire_encode (T := T) m h1 (e0.2 p0) h2 (e1.2 p1) recs tnow hrec' hnow tbl htbl hdone hd h3
+        exact ⟨p1, F.1.1 p2, (fires_encode recs tnow hrec hnow hd ms xs sms hrest hord' htr hdone' h4).1.1 p3⟩
+      · rintro ⟨p1, p2, p3⟩
+        have F := fire_encode (T := T) m h2 (e1.2 p1) recs tnow hrec' hnow tbl htbl ht hdone hd h3
         have hc2 := F.1.2 p2
         obtain ⟨-, hhit, -⟩ := F.2 hc2
-        have hdone' : (Term.share (.or done o.hit)).denote M = .bool (b || (instancesOf T m tbl).any (Step.hitsAt dv)) := by
+        have hdone' : (Term.share (.or done o.hit)).denote M =
+            .bool (b || (instancesOf T m tbl).any (Step.hitsAt recs dv)) := by
           rw [Term.denote_share]; show Val.bool _ = _; rw [hdone, hhit]; rfl
-        exact ⟨p0, p1, hc2, (fires_encode recs tnow hrec hnow hd ms xs sms hrest (fun m' hm => hord m' (by simp [hm])) hdone' h4).1.2 p3⟩
-    · obtain ⟨hc0, hc123⟩ := (holds_andT _ _).1 hc
-      obtain ⟨hc1, hc23⟩ := (holds_andT _ _).1 hc123
+        exact ⟨p1, hc2, (fires_encode recs tnow hrec hnow hd ms xs sms hrest hord' htr hdone' h4).1.2 p3⟩
+    · obtain ⟨hc1, hc23⟩ := (holds_andT _ _).1 hc
       obtain ⟨hc2, hc3⟩ := (holds_andT _ _).1 hc23
       have ho := hord m (by simp)
-      have hrec' : RelV L v.records (Ty.up _ m.records_data recs) (records.denote M) := hrec
       obtain ⟨⟨tbl', ht', hi'⟩, hhit, svX, E, hX, hhX, hEp⟩ :=
-        (fire_encode (T := T) m h1 hc0 h2 hc1 recs tnow hrec' hnow tbl htbl hdone hd h3).2 hc2
-      have hdone' : (Term.share (.or done o.hit)).denote M = .bool (b || (instancesOf T m tbl).any (Step.hitsAt dv)) := by
+        (fire_encode (T := T) m h2 hc1 recs tnow hrec' hnow tbl htbl ht hdone hd h3).2 hc2
+      have hdone' : (Term.share (.or done o.hit)).denote M =
+          .bool (b || (instancesOf T m tbl).any (Step.hitsAt recs dv)) := by
         rw [Term.denote_share]; show Val.bool _ = _; rw [hdone, hhit]; rfl
-      obtain ⟨hrel, effss, hst, hfl⟩ := (fires_encode recs tnow hrec hnow hd ms xs sms hrest
-        (fun m' hm => hord m' (by simp [hm])) hdone' h4).2 hc3
+      obtain ⟨hrel, effss, hst, hfl⟩ := (fires_encode recs tnow hrec hnow hd ms xs sms hrest hord' htr hdone' h4).2 hc3
       rw [fireMachines_cons (T := T) m ho recs tnow dv b (instancesOf_ok (T := T) m tbl) sms]
       refine ⟨⟨⟨tbl', ht', ?_⟩, hrel⟩, .cons ((instancesOf T m tbl).flatMap fun a => (sentBy m Step.Instance.key
-        (fun i => firedOpt m recs tnow (!b && Step.firesIn T m dv (instancesOf T m tbl) i) i) a).toList) effss, ⟨⟨_, Step.Instance.key, _, E, _, svX, hX, hhX, hEp,
+        (fun i => firedOpt m recs tnow (!b && Step.firesIn T m recs dv (instancesOf T m tbl) i) i) a).toList) effss,
+        ⟨⟨_, Step.Instance.key, _, E, _, svX, hX, hhX, hEp,
         instancesOk_lt (T := T) m ho (instancesOf_ok (T := T) m tbl), rfl⟩, hst⟩, ?_⟩
       · rw [hi']
       · rw [PerMachine.toList_cons, List.flatten_cons, hfl]
@@ -705,37 +706,55 @@ theorem round_encode (recs : v.records.den0) (tnow : Int) {records now : Term}
     {active : Term} {ab : Bool} (hact : active.denote M = .bool ab)
     {ro : RoundOut ms} {c : Term} (henc : encodeRound L T ms xs active records now = .ok (ro, c)) :
     (Holds M c ↔ roundFit L.count T recs tnow ab sms) ∧
-    (Holds M c → ro.go.denote M = .bool (ab && (Step.dues sms.toSigma tnow).min?.isSome) ∧
+    (Holds M c → ro.go.denote M = .bool (ab && (Step.dues recs sms.toSigma tnow).min?.isSome) ∧
       MachinesRel M L T ms (ro.fires.map (·.table)) (Step.roundOf recs tnow ab sms).1 ∧
       ∃ effss, StartsRel M L T ms (ro.fires.map (·.starts)) effss ∧
         effss.toList.flatten = (Step.roundOf recs tnow ab sms).2) := by
+  obtain ⟨⟨tmss, ct⟩, h0, henc⟩ := bind_ok.1 henc
   obtain ⟨dues, h1, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨os, c'⟩, h2, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
-  obtain ⟨odues, hF, hP⟩ := dueAll_rel (T := T) hnow ms xs sms hms h1
-  obtain ⟨hhas, hmin⟩ := minDue_den hF
-  obtain ⟨dv, hdv⟩ := minDue_int hF
-  rw [min?_perm hP] at hhas hmin
-  have hgo : (Term.share (.and active (minDueT dues).1)).denote M = .bool (ab && (Step.dues sms.toSigma tnow).min?.isSome) := by
-    rw [Term.denote_share]; show Val.bool _ = _; rw [hact, hhas]; rfl
-  have hngo : (Term.not (Term.share (.and active (minDueT dues).1))).denote M =
-      .bool !(ab && (Step.dues sms.toSigma tnow).min?.isSome) := by
-    show Val.bool _ = _; rw [hgo]; rfl
-  have hd : (Term.share (minDueT dues).2).denote M = .int dv := by rw [Term.denote_share, hdv]
+  have ET := timersAll_encode (T := T) recs hrec ms xs sms hms h0
   refine ⟨?_, fun hc => ?_⟩
-  · rw [(fires_encode recs tnow hrec hnow hd ms xs sms hms hord hngo h2).1]
+  · rw [holds_andT, ET.1]
     unfold roundFit
+    refine and_congr_right fun htf => ?_
+    have htr := ET.2 (ET.1.2 htf)
+    obtain ⟨odues, hF, hP⟩ := dueAll_rel (T := T) recs hnow ms xs sms hms htr h1
+    obtain ⟨hhas, hmin⟩ := minDue_den hF
+    obtain ⟨dv, hdv⟩ := minDue_int hF
+    rw [min?_perm hP] at hhas hmin
+    have hgo : (Term.share (.and active (minDueT dues).1)).denote M =
+        .bool (ab && (Step.dues recs sms.toSigma tnow).min?.isSome) := by
+      rw [Term.denote_share]; show Val.bool _ = _; rw [hact, hhas]; rfl
+    have hngo : (Term.not (Term.share (.and active (minDueT dues).1))).denote M =
+        .bool !(ab && (Step.dues recs sms.toSigma tnow).min?.isSome) := by
+      show Val.bool _ = _; rw [hgo]; rfl
+    have hd : (Term.share (minDueT dues).2).denote M = .int dv := by rw [Term.denote_share, hdv]
+    rw [(fires_encode recs tnow hrec hnow hd ms xs sms hms hord htr hngo h2).1]
     cases ab with
     | false => simp only [Bool.false_and, Bool.not_false, Bool.false_eq_true, ite_false]; exact firesFit_true _ T recs tnow dv 0 sms
     | true =>
       simp only [Bool.true_and, ite_true]
-      cases hm : (Step.dues sms.toSigma tnow).min? with
+      cases hm : (Step.dues recs sms.toSigma tnow).min? with
       | none => simp only [Option.isSome_none, Bool.not_false]; exact firesFit_true _ T recs tnow dv 0 sms
       | some dmin =>
         have hdm : dv = dmin := by have := hmin dmin hm; rw [hdv] at this; cases this; rfl
         subst hdm
         simp only [Option.isSome_some, Bool.not_true]
-  · obtain ⟨hrel, effss, hst, hfl⟩ := (fires_encode recs tnow hrec hnow hd ms xs sms hms hord hngo h2).2 hc
+  obtain ⟨hct, hc⟩ := (holds_andT _ _).1 hc
+  have htr := ET.2 hct
+  obtain ⟨odues, hF, hP⟩ := dueAll_rel (T := T) recs hnow ms xs sms hms htr h1
+  obtain ⟨hhas, hmin⟩ := minDue_den hF
+  obtain ⟨dv, hdv⟩ := minDue_int hF
+  rw [min?_perm hP] at hhas hmin
+  have hgo : (Term.share (.and active (minDueT dues).1)).denote M = .bool (ab && (Step.dues recs sms.toSigma tnow).min?.isSome) := by
+    rw [Term.denote_share]; show Val.bool _ = _; rw [hact, hhas]; rfl
+  have hngo : (Term.not (Term.share (.and active (minDueT dues).1))).denote M =
+      .bool !(ab && (Step.dues recs sms.toSigma tnow).min?.isSome) := by
+    show Val.bool _ = _; rw [hgo]; rfl
+  have hd : (Term.share (minDueT dues).2).denote M = .int dv := by rw [Term.denote_share, hdv]
+  · obtain ⟨hrel, effss, hst, hfl⟩ := (fires_encode recs tnow hrec hnow hd ms xs sms hms hord htr hngo h2).2 hc
     refine ⟨hgo, ?_⟩
     unfold Step.roundOf
     cases ab with
@@ -744,7 +763,7 @@ theorem round_encode (recs : v.records.den0) (tnow : Int) {records now : Term}
       exact ⟨hrel, effss, hst, hfl⟩
     | true =>
       simp only [ite_true]
-      cases hm : (Step.dues sms.toSigma tnow).min? with
+      cases hm : (Step.dues recs sms.toSigma tnow).min? with
       | none =>
         simp only [hm, Option.isSome_none, Bool.and_false, Bool.not_false, Step.fireMachines_true] at hrel hfl
         exact ⟨hrel, effss, hst, hfl⟩
@@ -799,7 +818,7 @@ theorem rounds_encode {P : List AnySite} {E : List AnyEffectSite} (hP : SitesUni
       rw [holds_andT, e1]
       have ih : roundFit L.count T s.records s.now ab s.machines → (Holds M c2 ↔
           roundsFit L.count T { s with machines := (Step.roundOf s.records s.now ab s.machines).1 }
-            (ab && (Step.dues s.machines.toSigma s.now).min?.isSome) k) := fun hf => by
+            (ab && (Step.dues s.records s.machines.toSigma s.now).min?.isSome) k) := fun hf => by
         obtain ⟨hgo, hrel, -⟩ := E1.2 (e1.2 hf)
         exact (rounds_encode hP hshs hshp senv hord k ({ s with machines := (Step.roundOf s.records s.now ab s.machines).1 } :
           State v) hrec hnow hreach hrel hgo h3).1
@@ -822,7 +841,7 @@ theorem rounds_encode {P : List AnySite} {E : List AnyEffectSite} (hP : SitesUni
       have ih := (rounds_encode hP hshs hshp senv hord k s1 hrec hnow hreach hrel hgo h3).2 hnid' hq' hc2
       -- Rounds that fire nothing: the rest fires nothing either.
       have hidle : (Step.roundOf s.records s.now ab s.machines) = (s.machines, []) →
-          (ab && (Step.dues s.machines.toSigma s.now).min?.isSome) = false →
+          (ab && (Step.dues s.records s.machines.toSigma s.now).min?.isSome) = false →
           Step.fireFrom s ab (k + 1) = some (s, []) →
           match Step.fireFrom s ab (k + 1) with
           | none => rest.over.denote M = .bool true
@@ -847,7 +866,7 @@ theorem rounds_encode {P : List AnySite} {E : List AnyEffectSite} (hP : SitesUni
       | false =>
         exact hidle (by simp [Step.roundOf]) (by simp) (by simp [Step.fireFrom])
       | true =>
-        cases hm : (Step.dues s.machines.toSigma s.now).min? with
+        cases hm : (Step.dues s.records s.machines.toSigma s.now).min? with
         | none =>
           exact hidle (by simp [Step.roundOf, hm]) (by simp [hm]) (by simp [Step.fireFrom, Step.fire, hm])
         | some d =>

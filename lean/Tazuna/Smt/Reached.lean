@@ -84,16 +84,10 @@ theorem embed_table_perm {k w : Ty} {x y : (Ty.table k w).den} (hp : x.1.Perm y.
     exact fun ⟨a, b⟩ => ⟨fun e he => a e (hp.mem_iff.2 he), hp.length_eq ▸ b⟩
   · simp
 
-theorem timerVal_timerOf {st : Ty} : (y : (Ty.option (.tuple [.int, st])).den0) → timerVal (timerOf y) = y
-  | .inl ((_, _, ()), ()) => rfl
-  | .inr (.inl ()) => rfl
-
-theorem instEntries_instOf {r e : Ty} (m : MachineV r e) (l : List (m.key.den0 × (instEntry m.state).den0)) :
+theorem instEntries_instOf {r e : Ty} (m : MachineV r e) (l : List (m.key.den0 × m.state.den0)) :
     instEntries m (l.map fun (k, x) => instOf m k x) = l := by
   simp only [instEntries, List.map_map]
-  refine (List.map_congr_left fun p _ => ?_).trans (List.map_id l)
-  obtain ⟨k, x, t, ⟨⟩⟩ := p
-  simp [instOf, timerVal_timerOf]
+  exact (List.map_congr_left fun _ _ => rfl).trans (List.map_id l)
 
 theorem embedMachines_of_rel {M : Model} {T : List TypeDecl} {v : ServiceV} :
     {ms : List (MachineV v.records v.event)} → (xs : PerMachine (fun _ => Term) ms) → (sms : Step.Machines ms) →
@@ -106,18 +100,18 @@ theorem embedMachines_of_rel {M : Model} {T : List TypeDecl} {v : ServiceV} :
     simp only [embedMachines]
     rw [dite_eq_left_of_eq_true (eq_true hok.2)]
     have e1 : (Ty.up _ m.table_data tbl).1 =
-        tbl.1.map fun p => (Ty.up _ m.key_data p.1, Ty.up _ m.entry_data p.2) :=
-      Ty.up_table m.key (instEntry m.state) m.table_data m.key_data m.entry_data tbl
+        tbl.1.map fun p => (Ty.up _ m.key_data p.1, Ty.up _ m.state_data p.2) :=
+      Ty.up_table m.key m.state m.table_data m.key_data m.state_data tbl
     have e2 : (Ty.up _ m.table_data (m.tableOf (instancesOf T m tbl) hok.2)).1 =
-        (m.tableOf (instancesOf T m tbl) hok.2).1.map fun p => (Ty.up _ m.key_data p.1, Ty.up _ m.entry_data p.2) :=
-      Ty.up_table m.key (instEntry m.state) m.table_data m.key_data m.entry_data _
+        (m.tableOf (instancesOf T m tbl) hok.2).1.map fun p => (Ty.up _ m.key_data p.1, Ty.up _ m.state_data p.2) :=
+      Ty.up_table m.key m.state m.table_data m.key_data m.state_data _
     have h1 : (embedV L m.table (Ty.up _ m.table_data (m.tableOf (instancesOf T m tbl) hok.2))).isSome := by
-      refine embed_table_perm (k := m.key) (w := instEntry m.state) ?_ (embed_of_relV _ (he m (by simp)) _ _ hr)
+      refine embed_table_perm (k := m.key) (w := m.state) ?_ (embed_of_relV _ (he m (by simp)) _ _ hr)
       rw [e1, e2]
       refine List.Perm.map _ ?_
       simp only [MachineV.tableOf, instancesOf]
       have := ((List.mergeSort_perm (tbl.1.map fun (k, x) => instOf m k x) (keyLE T m)).map
-        fun i => (i.key, (i.state, timerVal i.timer, ()))).symm
+        fun i => (i.key, i.state)).symm
       have hi := instEntries_instOf m tbl.1
       simp only [instEntries] at hi this ⊢
       exact (List.Perm.of_eq hi.symm).trans this

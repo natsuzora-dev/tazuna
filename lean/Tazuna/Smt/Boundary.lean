@@ -602,7 +602,7 @@ theorem tablesOf_isSome {v : ServiceV} : (ms : List (MachineV v.records v.event)
   | m :: ms, h => by
     obtain ⟨⟨hk, hw, ht, hf⟩, hs⟩ := h m (by simp)
     obtain ⟨⟨d, n⟩, hd⟩ := Option.isSome_iff_exists.1 hf
-    have hst : m.key.sorted = true ∧ (instEntry m.state).sorted = true := by
+    have hst : m.key.sorted = true ∧ m.state.sorted = true := by
       simpa [MachineV.table, Ty.sorted] using hs
     obtain ⟨t, htt⟩ := Option.isSome_iff_exists.1 (collT_isSome hL (xs := []) hd ht
       (by simp [hk, hw, hst]) (by simp))
@@ -917,26 +917,25 @@ variable {L : Layout} {P : List AnySite} {ds : List (String × DeclaredV)} {H : 
 theorem timerQuestions_sound (hL : SortedLayout L) {m : MachineV r e} (hm : MachineGot L m)
     (hc : MachineCodes L P ds H m) (hdts : ∃ dts, L.datatypes? = some dts) :
     Sound (fun _ => True) (timerQuestions L m) := by
-  obtain ⟨⟨hkey, ⟨⟨hst, ⟨hopt, -⟩⟩, -⟩, -, -⟩, -⟩ := hm.table
-  have hopt' : L.Has (Ty.option (.tuple [.int, m.state])) := hopt
-  obtain ⟨⟨⟨htup, -⟩, -⟩, -⟩ := hopt'
   unfold timerQuestions encodeTimer
-  refine sound_bind (p := fun _ => True) (sound_bind hc.after fun ⟨af, c0⟩ haf => ?_) fun _ _ => ?_
-  · refine sound_bind (instCtxT_sound hm _ _ _ _) fun ictx _ => ?_
-    refine sound_bind (ofDataE_sound (P := P) (ds := ds) (H := H) _ hm.ctx) fun nctx hn => ?_
-    refine sound_bind (apply_sound haf ⟨hn, trivial⟩ (avail_of_got hm.timer)) fun ⟨a, c⟩ _ => ?_
-    refine sound_bind (dataTermE_sound _) fun at_ _ => ?_
-    refine sound_bind (timerT_sound hL hm _ _) fun tm _ => ?_
-    refine sound_bind (findE_sound hL (fun _ => hopt) fun hh => has_find hh) fun _ _ => ?_
-    exact sound_bind (tupleD_sound hL fun _ => htup) fun _ _ => trivial
+  refine sound_bind (p := fun _ => True) (sound_bind hc.timer fun ⟨tc, c0⟩ htc => ?_) fun _ _ => ?_
+  · refine sound_bind (findE_sound hL (avail_of_got hm.timer) has_find) fun _ _ => ?_
+    refine sound_bind (findE_sound hL (avail_of_got hm.timerOne) has_find) fun _ _ => ?_
+    refine sound_bind (adtCtor_sound hm.tctx _ _) fun _ _ => ?_
+    refine sound_bind (ofDataE_sound (P := P) (ds := ds) (H := H) _ hm.tctx) fun c1 h1 => ?_
+    refine sound_bind (apply_sound htc ⟨h1, trivial⟩ (avail_of_got hm.timer)) fun _ _ => ?_
+    refine sound_bind (dataTermE_sound _) fun _ _ => ?_
+    refine sound_bind (adtCtor_sound hm.tctx _ _) fun _ _ => ?_
+    refine sound_bind (ofDataE_sound (P := P) (ds := ds) (H := H) _ hm.tctx) fun c2 h2 => ?_
+    refine sound_bind (apply_sound htc ⟨h2, trivial⟩ (avail_of_got hm.timer)) fun _ _ => ?_
+    exact sound_bind (dataTermE_sound _) fun _ _ => trivial
   · have ha : ∀ t ∈ timerTys m, Avail L t := by
       intro t ht
       simp only [timerTys, List.mem_cons, List.not_mem_nil, or_false] at ht
-      rcases ht with rfl | rfl | rfl | rfl
-      · exact fun _ => hkey
-      · exact fun _ => hst
+      rcases ht with rfl | rfl | rfl
+      · exact avail_of_got hm.key
+      · exact avail_of_got hm.entry
       · exact hm.records
-      · exact avail_int
     refine sound_bind (sound_mapM _ fun x hx => sound_mono (sound_lacksData (ha x.1 (List.fst_mem_of_mem_zipIdx hx))
       fun hh he hk => wfT_isSome x.1 hh he hk _) fun _ _ => trivial) fun _ _ => ?_
     refine sound_bind (sound_mapM _ fun t ht => sound_mono (sound_srt (ha t ht)) fun _ _ => trivial) fun _ _ => ?_

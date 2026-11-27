@@ -87,7 +87,7 @@ theorem reactKey_same {m : MachineV r e} (hm : m.Equi) {insts insts' : List (Ins
   | @some i i' hi =>
     dsimp only
     have hon := (hm.self PBij.refl).on (.inl (i.key, i.state, records, now, ()), ev, ())
-      (.inl (i'.key, i'.state, records', now, ()), ev', ()) ⟨⟨hi.1, hi.2.1, hrec, rfl, trivial⟩, hev, trivial⟩
+      (.inl (i'.key, i'.state, records', now, ()), ev', ()) ⟨⟨hi.1, hi.2, hrec, rfl, trivial⟩, hev, trivial⟩
     revert hon
     generalize m.on.fn (.inl (i.key, i.state, records, now, ()), ev, ()) = x
     generalize m.on.fn (.inl (i'.key, i'.state, records', now, ()), ev', ()) = y
@@ -399,7 +399,7 @@ theorem machineInvariants_same {records records' : v.records.den0} (hrec : Ty.Sa
     rw [machineInvariants_same hrec now (fun m' h => hms m' (List.mem_cons_of_mem _ h)) hr]
     refine congrArg (· ++ _) (forall2_flatMap (fun i i' h => ?_) hi)
     exact broken_rel (((hms m List.mem_cons_self).self PBij.refl).invariants _ _
-      ⟨⟨h.1, h.2.1, hrec, rfl, trivial⟩, trivial⟩)
+      ⟨⟨h.1, h.2, hrec, rfl, trivial⟩, trivial⟩)
 
 theorem invariants_same (ho : Ordered T v) {s s' : State v} (hs : StateSame s s') :
     invariants s = invariants s' := by
@@ -452,12 +452,12 @@ theorem fireFirst_same {m : MachineV r e} (hm : m.Equi) {records records' : r.de
   | [], [], _ => ⟨trivial, trivial, rfl⟩
   | i :: is, i' :: is', ⟨hi, h⟩ => by
     have ih := fireFirst_same hm hrec now d h
-    have hhit : hitsAt d i = hitsAt d i' := by
-      have ht := hi.2.2
-      unfold hitsAt
+    have hhit : hitsAt records d i = hitsAt records' d i' := by
+      have ht := timerAt_rel hm hrec hi.1 hi.2
+      unfold hitsAt timerOf
       revert ht
-      generalize i.timer = a
-      generalize i'.timer = b
+      generalize m.timerAt records i.key i.state = a
+      generalize m.timerAt records' i'.key i'.state = b
       intro ht
       cases ht with
       | none => rfl
@@ -467,11 +467,11 @@ theorem fireFirst_same {m : MachineV r e} (hm : m.Equi) {records records' : r.de
         obtain ⟨rfl, -⟩ := hab
         rfl
     have hfired : Reacted.Rel PBij.refl (fired m records now i) (fired m records' now i') := by
-      have ht := hi.2.2
-      unfold fired
+      have ht := timerAt_rel hm hrec hi.1 hi.2
+      unfold fired timerOf
       revert ht
-      generalize i.timer = a
-      generalize i'.timer = b
+      generalize m.timerAt records i.key i.state = a
+      generalize m.timerAt records' i'.key i'.state = b
       intro ht
       cases ht with
       | none => exact ⟨hi, trivial⟩
@@ -502,22 +502,24 @@ theorem fireMachines_same {records records' : r.den0} (hrec : Ty.Same r records 
       (fun m h => hms m (List.mem_cons_of_mem _ h)) hr
     exact ⟨⟨hy.1, ih.1⟩, forall2_append hy.2.1 ih.2.1, ih.2.2⟩
 
-theorem dues_same {now : Int} : {ms : List (MachineV r e)} → {l l' : Machines ms} → Machines.Same l l' →
-    dues l.toSigma now = dues l'.toSigma now
-  | [], .nil, .nil, _ => rfl
-  | _ :: _, .cons _ _, .cons _ _, h => by
+theorem dues_same {records records' : r.den0} (hrec : Ty.Same r records records') {now : Int} :
+    {ms : List (MachineV r e)} → (∀ m ∈ ms, m.Equi) → {l l' : Machines ms} → Machines.Same l l' →
+    dues records l.toSigma now = dues records' l'.toSigma now
+  | [], _, .nil, .nil, _ => rfl
+  | m :: _, hms, .cons _ _, .cons _ _, h => by
     obtain ⟨hi, hr⟩ := h
     unfold dues
     simp only [PerMachine.toSigma_cons, List.flatMap_cons]
-    have ih := dues_same (now := now) hr
+    have ih := dues_same hrec (now := now) (fun m h => hms m (List.mem_cons_of_mem _ h)) hr
     unfold dues at ih
     rw [ih]
     refine congrArg (· ++ _) ?_
     refine forall2_eq (forall2_filterMap (r' := (· = ·)) (fun i i' h => ?_) hi)
-    have ht := h.2.2
+    have ht := timerAt_rel (hms m List.mem_cons_self) hrec h.1 h.2
+    unfold timerOf
     revert ht
-    generalize i.timer = a
-    generalize i'.timer = b
+    generalize m.timerAt records i.key i.state = a
+    generalize m.timerAt records' i'.key i'.state = b
     intro ht
     cases ht with
     | none => exact .none
@@ -537,8 +539,8 @@ theorem fire_same (ho : Ordered T v) : (fuel : Nat) → {s s' : State v} → Sta
   | 0, _, _, _ => .none
   | fuel + 1, s, s', hs => by
     unfold fire
-    rw [dues_same hs.2.1, ← hs.2.2.2.1]
-    cases (dues s'.machines.toSigma s.now).min? with
+    rw [dues_same hs.1 ho.equi.machines hs.2.1, ← hs.2.2.2.1]
+    cases (dues s'.records s'.machines.toSigma s.now).min? with
     | none => exact .some ⟨hs, trivial⟩
     | some d =>
       dsimp only

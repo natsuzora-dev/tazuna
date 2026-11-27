@@ -105,7 +105,7 @@ def useTys (v : ServiceV) (K : Layout) : List Ty :=
   [Ty.rules, .list v.event, Ty.applyCtx v.records] ++
     v.reactions.flatMap (fun _ => [Ty.reactionCtx v.records, .list (.dsl .effect [v.event])]) ++
     v.machines.flatMap (fun m => [Ty.machineCtx m.key m.state v.records, Ty.next m.state, Ty.option (Ty.timer m.state),
-      .bag m.key]) ++
+      .bag m.key, Ty.timerCtx m.key m.state v.records]) ++
     v.commands.flatMap (fun x => [Ty.ctx v.records x.input v.caller, Ty.result (.list v.event) x.rejection, x.input]) ++
     v.queries.flatMap (fun q => [Ty.queryCtx v.records q.input v.caller, q.output, q.input]) ++
     v.subscribes.map (·.event) ++

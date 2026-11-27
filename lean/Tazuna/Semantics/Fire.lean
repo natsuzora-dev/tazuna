@@ -75,8 +75,8 @@ variable (T : List TypeDecl)
 
 /-- Whether `i` fires among `insts` at the deadline `d`: its deadline is `d` and no instance with that deadline has a
 smaller key. -/
-def firesIn (m : MachineV r e) (d : Int) (insts : List (Instance m)) (i : Instance m) : Bool :=
-  hitsAt d i && insts.all fun j => !hitsAt d j || (Ty.cmp T m.key i.key j.key).isLE
+def firesIn (m : MachineV r e) (records : r.den0) (d : Int) (insts : List (Instance m)) (i : Instance m) : Bool :=
+  hitsAt records d i && insts.all fun j => !hitsAt records d j || (Ty.cmp T m.key i.key j.key).isLE
 
 theorem cmp_isLE_refl (t : Ty) (x : t.den0) : (Ty.cmp T t x x).isLE = true := by
   have := Std.OrientedCmp.eq_swap (cmp := Ty.cmp T t) (a := x) (b := x)
@@ -93,19 +93,19 @@ theorem fireFirst_eq (m : MachineV r e) (ho : m.key.ordered T = true) (records :
     (insts : List (Instance m)) → insts.Pairwise (fun a b => (Ty.cmp T m.key a.key b.key).isLE) →
     insts.Pairwise (fun a b => (Ty.semWith Dsl.base m.key).2 a.key b.key = false) →
     fireFirst m records now d insts =
-      (insts.map fun i => if firesIn T m d insts i then (fired m records now i).1 else i,
-        (insts.filter (firesIn T m d insts)).flatMap fun i => (fired m records now i).2,
-        insts.any (hitsAt d))
+      (insts.map fun i => if firesIn T m records d insts i then (fired m records now i).1 else i,
+        (insts.filter (firesIn T m records d insts)).flatMap fun i => (fired m records now i).2,
+        insts.any (hitsAt records d))
   | [], _, _ => rfl
   | i :: is, hs, hu => by
     rw [List.pairwise_cons] at hs hu
     unfold fireFirst
     split
     · rename_i hi
-      have hfi : firesIn T m d (i :: is) i = true := by
+      have hfi : firesIn T m records d (i :: is) i = true := by
         simp only [firesIn, hi, Bool.true_and, List.all_cons, cmp_isLE_refl, Bool.or_true, List.all_eq_true]
         exact fun j hj => by simp [hs.1 j hj]
-      have hfj : ∀ j ∈ is, firesIn T m d (i :: is) j = false := by
+      have hfj : ∀ j ∈ is, firesIn T m records d (i :: is) j = false := by
         intro j hj
         simp only [firesIn, List.all_cons, hi, Bool.not_true, Bool.false_or, Bool.and_eq_false_iff]
         refine Or.inr (Or.inl ?_)
@@ -113,19 +113,19 @@ theorem fireFirst_eq (m : MachineV r e) (ho : m.key.ordered T = true) (records :
         · rfl
         · have := cmp_antisymm T ho (hs.1 j hj) h
           rw [hu.1 j hj] at this; cases this
-      have hmap : is.map (fun j => if firesIn T m d (i :: is) j then (fired m records now j).1 else j) = is := by
+      have hmap : is.map (fun j => if firesIn T m records d (i :: is) j then (fired m records now j).1 else j) = is := by
         conv => rhs; rw [← List.map_id is]
         exact List.map_congr_left fun j hj => by simp [hfj j hj]
-      have hfil : is.filter (firesIn T m d (i :: is)) = [] := List.filter_eq_nil_iff.2 fun j hj => by simp [hfj j hj]
+      have hfil : is.filter (firesIn T m records d (i :: is)) = [] := List.filter_eq_nil_iff.2 fun j hj => by simp [hfj j hj]
       simp [hfi, hmap, hfil, hi]
     · rename_i hi
-      have hi' : hitsAt d i = false := by simpa using hi
-      have hfi : firesIn T m d (i :: is) i = false := by simp [firesIn, hi']
-      have hsame : ∀ j, firesIn T m d (i :: is) j = firesIn T m d is j := by
+      have hi' : hitsAt records d i = false := by simpa using hi
+      have hfi : firesIn T m records d (i :: is) i = false := by simp [firesIn, hi']
+      have hsame : ∀ j, firesIn T m records d (i :: is) j = firesIn T m records d is j := by
         intro j; simp [firesIn, hi']
       rw [fireFirst_eq m ho records now d is hs.2 hu.2]
       simp only [List.map_cons, hfi, List.filter_cons, List.any_cons, hi', Bool.false_or, hsame]
-      have hfi' : firesIn T m d is i = false := (hsame i) ▸ hfi
+      have hfi' : firesIn T m records d is i = false := (hsame i) ▸ hfi
       simp only [hfi', Bool.false_eq_true, ite_false, Prod.mk.injEq, true_and]
       rw [List.filter_congr fun j _ => hsame j]
       simp

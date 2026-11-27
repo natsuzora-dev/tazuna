@@ -3,16 +3,23 @@
 
 import gleam/option.{type Option, None, Some}
 import shop/shared.{type Caller, Customer, Staff}
-import tazuna.{type Ctx, type MachineCtx, type QueryCtx}
+import tazuna.{
+  type Ctx, type Instant, type MachineCtx, type QueryCtx, type TimerCtx,
+}
 import tazuna/table.{type Table}
 
 pub type Product {
   Product(name: String, price: Int, active: Bool)
 }
 
-/// Products by SKU, and the percentage off for the SKUs on sale.
+/// A sale: the percentage off, and when it ends.
+pub type Sale {
+  Sale(percent: Int, ends: Instant)
+}
+
+/// Products by SKU, and the sales by SKU.
 pub type Records {
-  Records(products: Table(String, Product), sales: Table(String, Int))
+  Records(products: Table(String, Product), sales: Table(String, Sale))
 }
 
 pub type Event {
@@ -88,7 +95,14 @@ fn apply(ctx: tazuna.ApplyCtx(Records), event: Event) -> Records {
         None -> records
       }
     SaleStarted(sku, percent) ->
-      Records(..records, sales: table.insert(records.sales, sku, percent))
+      Records(
+        ..records,
+        sales: table.insert(
+          records.sales,
+          sku,
+          Sale(percent: percent, ends: ctx.now + shared.day),
+        ),
+      )
     SaleEnded(sku) ->
       Records(..records, sales: table.remove(records.sales, sku))
   }
@@ -242,10 +256,10 @@ pub fn start_sale() -> tazuna.Command(
     },
     ensures: fn(ctx: Ctx(Records, SaleStart, Caller), after: Records) {
       [
-        #(
-          "the sale runs",
-          table.get(after.sales, ctx.input.sku) == Some(ctx.input.percent),
-        ),
+        #("the sale runs", case table.get(after.sales, ctx.input.sku) {
+          Some(sale) -> sale.percent == ctx.input.percent
+          None -> False
+        }),
       ]
     },
   )
@@ -257,7 +271,7 @@ pub fn end_sale() -> tazuna.Command(Records, Event, Caller, String, Rejection) {
     callers: [tazuna.Own],
     accepts: fn(_sku: String) { [] },
     decide: fn(ctx: Ctx(Records, String, Caller)) {
-      use _percent <- table.lookup(ctx.records.sales, ctx.input, or: NotOnSale)
+      use _sale <- table.lookup(ctx.records.sales, ctx.input, or: NotOnSale)
       Ok([SaleEnded(ctx.input)])
     },
     ensures: fn(ctx: Ctx(Records, String, Caller), after: Records) {
@@ -276,7 +290,7 @@ pub fn price_of() -> tazuna.Query(Records, Caller, String, Option(Int)) {
       case table.get(ctx.records.products, ctx.input) {
         Some(product) if product.active ->
           case table.get(ctx.records.sales, ctx.input) {
-            Some(percent) -> Some(product.price * { 100 - percent } / 100)
+            Some(sale) -> Some(product.price * { 100 - sale.percent } / 100)
             None -> Some(product.price)
           }
         _ -> None
@@ -285,7 +299,7 @@ pub fn price_of() -> tazuna.Query(Records, Caller, String, Option(Int)) {
   )
 }
 
-/// Each sale runs for a day, then ends itself.
+/// Each sale runs until it ends, a day after it starts, then ends itself.
 fn sale_clock() -> tazuna.Machine(Records, Event) {
   tazuna.machine(
     name: "sale clock",
@@ -294,10 +308,10 @@ fn sale_clock() -> tazuna.Machine(Records, Event) {
     on: fn(_ctx: MachineCtx(String, SalePhase, Records), _event: Event) {
       tazuna.Stay
     },
-    after: fn(ctx: MachineCtx(String, SalePhase, Records)) {
-      case ctx.state {
-        Running -> Some(tazuna.Timer(after: shared.day, enter: Over))
-        Over -> None
+    timer: fn(ctx: TimerCtx(String, SalePhase, Records)) {
+      case ctx.state, table.get(ctx.records.sales, ctx.key) {
+        Running, Some(sale) -> Some(tazuna.Timer(at: sale.ends, enter: Over))
+        _, _ -> None
       }
     },
     effect: fn(ctx: MachineCtx(String, SalePhase, Records)) {
@@ -360,13 +374,13 @@ pub fn service() -> tazuna.Service {
         ),
         #(
           "every sale is 1 to 90 percent off",
-          table.all(records.sales, satisfying: fn(_sku, percent: Int) {
-            percent >= 1 && percent <= 90
+          table.all(records.sales, satisfying: fn(_sku, sale: Sale) {
+            sale.percent >= 1 && sale.percent <= 90
           }),
         ),
         #(
           "every sale is of a product sold",
-          table.all(records.sales, satisfying: fn(sku: String, _percent) {
+          table.all(records.sales, satisfying: fn(sku: String, _sale) {
             case table.get(records.products, sku) {
               Some(product) -> product.active
               None -> False

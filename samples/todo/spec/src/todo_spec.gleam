@@ -2,12 +2,19 @@
 //// task is added, if it is still open, the service mails a reminder.
 
 import gleam/option.{None, Some}
-import tazuna.{type Ctx, type Id, type MachineCtx, type QueryCtx}
+import tazuna.{
+  type Ctx, type Id, type Instant, type MachineCtx, type QueryCtx, type TimerCtx,
+}
 import tazuna/table.{type Table}
 
-/// The open tasks' titles. Completing a task removes it.
+/// An open task: its title, and when it is due for a reminder.
+pub type Task {
+  Task(title: String, remind_at: Instant)
+}
+
+/// The open tasks. Completing a task removes it.
 pub type Records {
-  Records(tasks: Table(Id, String))
+  Records(tasks: Table(Id, Task))
 }
 
 pub type Event {
@@ -45,7 +52,12 @@ const hour: Int = 3_600_000
 fn apply(ctx: tazuna.ApplyCtx(Records), event: Event) -> Records {
   let records = ctx.records
   case event {
-    Added(id, title) -> Records(tasks: table.insert(records.tasks, id, title))
+    Added(id, title) ->
+      Records(tasks: table.insert(
+        records.tasks,
+        id,
+        Task(title: title, remind_at: ctx.now + hour),
+      ))
     Completed(id) -> Records(tasks: table.remove(records.tasks, id))
     ReminderDue(..) -> records
   }
@@ -63,7 +75,8 @@ fn add() -> tazuna.Command(Records, Event, Caller, String, tazuna.Never) {
       [
         #(
           "the new task is open",
-          table.get(after.tasks, tazuna.fresh(ctx.fresh, 0)) == Some(ctx.input),
+          table.get(after.tasks, tazuna.fresh(ctx.fresh, 0))
+            == Some(Task(title: ctx.input, remind_at: ctx.now + hour)),
         ),
       ]
     },
@@ -76,7 +89,7 @@ fn complete() -> tazuna.Command(Records, Event, Caller, Id, Rejection) {
     callers: [tazuna.Outside(User)],
     accepts: fn(_id) { [] },
     decide: fn(ctx: Ctx(Records, Id, Caller)) {
-      use _title <- table.lookup(ctx.records.tasks, ctx.input, or: NoSuchTask)
+      use _task <- table.lookup(ctx.records.tasks, ctx.input, or: NoSuchTask)
       Ok([Completed(ctx.input)])
     },
     ensures: fn(ctx: Ctx(Records, Id, Caller), after: Records) {
@@ -93,8 +106,8 @@ fn remind() -> tazuna.Command(Records, Event, Caller, Id, Rejection) {
     callers: [tazuna.Own],
     accepts: fn(_id) { [] },
     decide: fn(ctx: Ctx(Records, Id, Caller)) {
-      use title <- table.lookup(ctx.records.tasks, ctx.input, or: NoSuchTask)
-      Ok([ReminderDue(ctx.input, title)])
+      use task <- table.lookup(ctx.records.tasks, ctx.input, or: NoSuchTask)
+      Ok([ReminderDue(ctx.input, task.title)])
     },
     ensures: fn(_ctx, _after) { [] },
   )
@@ -115,18 +128,19 @@ fn send() -> tazuna.ExternalCommand(Mail, Nil, Bounced) {
   tazuna.external_command(name: "send")
 }
 
-/// One instance per open task. An hour after the task appears, the reminder
-/// runs `remind`, so the log shows the reminder as a `ReminderDue` event.
+/// One instance per open task. At the task's `remind_at`, the reminder runs
+/// `remind`, so the log shows the reminder as a `ReminderDue` event.
 fn reminder() -> tazuna.Machine(Records, Event) {
   tazuna.machine(
     name: "reminder",
     instances: fn(records: Records) { table.keys(records.tasks) },
     initial: Waiting,
     on: fn(_ctx, _event) { tazuna.Stay },
-    after: fn(ctx: MachineCtx(Id, Phase, Records)) {
-      case ctx.state {
-        Waiting -> Some(tazuna.Timer(after: hour, enter: Due))
-        Due -> None
+    timer: fn(ctx: TimerCtx(Id, Phase, Records)) {
+      case ctx.state, table.get(ctx.records.tasks, ctx.key) {
+        Waiting, Some(task) ->
+          Some(tazuna.Timer(at: task.remind_at, enter: Due))
+        _, _ -> None
       }
     },
     effect: fn(ctx: MachineCtx(Id, Phase, Records)) {
@@ -180,7 +194,9 @@ fn todo_service() -> tazuna.Service {
       [
         #(
           "every title is not empty",
-          table.all(records.tasks, satisfying: fn(_id, title) { title != "" }),
+          table.all(records.tasks, satisfying: fn(_id, task: Task) {
+            task.title != ""
+          }),
         ),
       ]
     },

@@ -24,11 +24,11 @@ def toB : Ty.bool.den0 → Bool
 /-- The names of the rules that do not hold. -/
 def broken (xs : Ty.rules.den0) : List String := xs.filterMap fun (n, b, ()) => if toB b then none else some (n : Str).1
 
-/-- One live machine instance: its key, its state and the timer it waits for (the deadline and the state it enters). -/
+/-- One live machine instance: its key and its state. The timer it waits for is not held: `timer` gives it from the
+state and the records (`timerOf`). -/
 structure Instance {r e : Ty} (m : MachineV r e) where
   key : m.key.den0
   state : m.state.den0
-  timer : Option (Int × m.state.den0)
 
 /-- A machine with its live instances, in the canonical order of their keys. -/
 abbrev MachineState (r e : Ty) := (m : MachineV r e) × List (Instance m)
@@ -130,16 +130,25 @@ variable {v : ServiceV}
 def State.init (v : ServiceV) : State v :=
   { records := v.init, machines := PerMachine.ofFn (fun _ => []) v.machines, pending := [], now := 0, fresh := 0, nextId := 0 }
 
-/-- The timer `after` asks for at `now`: due after its delay, entering its state. -/
-def timerAt {st : Ty} (now : Int) : (Ty.option (Ty.timer st)).den0 → Option (Int × st.den0)
-  | .inl (.inl (d, target, ()), ()) => some (now + (show Int from d), target)
+/-- A timer as `timer` gives it: its deadline and the state it enters. -/
+def timerVal {st : Ty} : (Ty.option (Ty.timer st)).den0 → Option (Int × st.den0)
+  | .inl (.inl (d, target, ()), ()) => some ((show Int from d), target)
   | _ => none
 
-/-- An instance entering `st`: its timer and its effect. -/
+/-- The timer the instance of `key` in `st` waits for at the records: `timer`'s, read off the state and the records, so
+nothing but them sets it. -/
+def _root_.Tazuna.Ir.MachineV.timerAt {r e : Ty} (m : MachineV r e) (records : r.den0) (key : m.key.den0)
+    (st : m.state.den0) : Option (Int × m.state.den0) :=
+  timerVal (m.timer.fn (.inl (key, st, records, ()), ()))
+
+/-- The timer an instance waits for at the records. -/
+abbrev timerOf {r e : Ty} {m : MachineV r e} (records : r.den0) (i : Instance m) : Option (Int × m.state.den0) :=
+  m.timerAt records i.key i.state
+
+/-- An instance entering `st`, and its effect. -/
 def enter {r e : Ty} (m : MachineV r e) (records : r.den0) (now : Int) (key : m.key.den0) (st : m.state.den0) :
     Instance m × List (Sender × EffectV e) :=
-  (⟨key, st, timerAt now (m.after.fn (.inl (key, st, records, now, ()), ()))⟩,
-    (m.effectAt key st records now).toList.map (.machine m.name ⟨m.key, key⟩, ·))
+  (⟨key, st⟩, (m.effectAt key st records now).toList.map (.machine m.name ⟨m.key, key⟩, ·))
 
 variable (T : List TypeDecl)
 
@@ -339,16 +348,16 @@ def finish (s0 : State v) (a : Except Fault (Acc v)) (outcome : Outcome) : Resul
     | n :: _ => ⟨s0, .fault (.invariant n), [], []⟩
     | [] => ⟨a.state, outcome, a.events, a.out⟩
 
-/-- Whether an instance's timer has the deadline `d`. -/
-def hitsAt {r e : Ty} {m : MachineV r e} (d : Int) (i : Instance m) : Bool :=
-  match i.timer with
+/-- Whether an instance's timer at the records has the deadline `d`. -/
+def hitsAt {r e : Ty} {m : MachineV r e} (records : r.den0) (d : Int) (i : Instance m) : Bool :=
+  match timerOf records i with
   | some (d', _) => decide (d' = d)
   | none => false
 
 /-- An instance whose timer fires: it enters the state its timer names. -/
 def fired {r e : Ty} (m : MachineV r e) (records : r.den0) (now : Int) (i : Instance m) :
     Instance m × List (Sender × EffectV e) :=
-  match i.timer with
+  match timerOf records i with
   | some (_, target) => enter m records now i.key target
   | none => (i, [])
 
@@ -357,7 +366,7 @@ def fireFirst {r e : Ty} (m : MachineV r e) (records : r.den0) (now : Int) (d : 
     List (Instance m) → List (Instance m) × List (Sender × EffectV e) × Bool
   | [] => ([], [], false)
   | i :: is =>
-    if hitsAt d i then ((fired m records now i).1 :: is, (fired m records now i).2, true)
+    if hitsAt records d i then ((fired m records now i).1 :: is, (fired m records now i).2, true)
     else let x := fireFirst m records now d is; (i :: x.1, x.2.1, x.2.2)
 
 /-- One round over the machines in order: unless an earlier one fired (`done`), a machine's first instance with the
@@ -371,17 +380,19 @@ def fireMachines {r e : Ty} (records : r.den0) (now : Int) (d : Int) :
     let x := fireMachines records now d y.2.2 rest
     (.cons y.1 x.1, y.2.1 ++ x.2.1, x.2.2)
 
-/-- The deadlines of the timers due at `now`. -/
-def dues {r e : Ty} (machines : List (MachineState r e)) (now : Int) : List Int :=
-  machines.flatMap fun ⟨_, insts⟩ => insts.filterMap fun i => i.timer.bind fun (d, _) => if d ≤ now then some d else none
+/-- The deadlines of the timers due at `now`, at the records. -/
+def dues {r e : Ty} (records : r.den0) (machines : List (MachineState r e)) (now : Int) : List Int :=
+  machines.flatMap fun ⟨_, insts⟩ => insts.filterMap fun i =>
+    (timerOf records i).bind fun (d, _) => if d ≤ now then some d else none
 
 /-- Fires the timers due at `now`, earliest deadline first, then machines in order and instances in key order (one
 `fireMachines` round per timer). Entering a state may start another due timer; the cascade bound limits how many
-fire. -/
+fire. A timer is read off the records and the instance's state, so one whose deadline a step left in the past fires
+at the next clock line, and one that a firing leaves due fires again in the same line. -/
 def fire (s : State v) : (fuel : Nat) → Option (State v × List (Sender × EffectV v.event))
   | 0 => none
   | fuel + 1 =>
-    match (dues s.machines.toSigma s.now).min? with
+    match (dues s.records s.machines.toSigma s.now).min? with
     | none => some (s, [])
     | some d =>
       let x := fireMachines s.records s.now d false s.machines

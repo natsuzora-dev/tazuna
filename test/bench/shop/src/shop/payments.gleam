@@ -7,7 +7,9 @@ import gleam/option.{type Option, None, Some}
 import shop/shared.{
   type Caller, type OrderCancelled, type OrderPlaced, type Reservation, Staff,
 }
-import tazuna.{type Ctx, type Id, type MachineCtx, type QueryCtx}
+import tazuna.{
+  type Ctx, type Id, type Instant, type MachineCtx, type QueryCtx, type TimerCtx,
+}
 import tazuna/bag
 import tazuna/table.{type Table}
 
@@ -28,6 +30,7 @@ pub type Payment {
     amount: Int,
     state: PayState,
     transaction: Option(String),
+    call_by: Instant,
   )
 }
 
@@ -97,8 +100,15 @@ fn moved(to: PayState) -> fn(Payment) -> Payment {
   fn(payment: Payment) { Payment(..payment, state: to) }
 }
 
+/// Moves the payment to a state that calls the gateway, which gives up at
+/// `until`.
+fn calls(to: PayState, until: Instant) -> fn(Payment) -> Payment {
+  fn(payment: Payment) { Payment(..payment, state: to, call_by: until) }
+}
+
 fn apply(ctx: tazuna.ApplyCtx(Records), event: Event) -> Records {
   let records = ctx.records
+  let gives_up = ctx.now + 2 * shared.minute
   case event {
     Ordered(placed) ->
       case table.get(records.payments, placed.order) {
@@ -112,15 +122,16 @@ fn apply(ctx: tazuna.ApplyCtx(Records), event: Event) -> Records {
               amount: placed.total,
               state: Awaiting,
               transaction: None,
+              call_by: ctx.now,
             ),
           ))
       }
     StockHeld(_) | Withdrawn(_) -> records
     ScreeningStarted(order) ->
-      update(records, order, [Awaiting, Failed], moved(Screening))
+      update(records, order, [Awaiting, Failed], calls(Screening, gives_up))
     RiskScored(order, score) ->
       case score <= riskiest {
-        True -> update(records, order, [Screening], moved(Charging))
+        True -> update(records, order, [Screening], calls(Charging, gives_up))
         False -> update(records, order, [Screening], moved(Failed))
       }
     ChargeSucceeded(order, transaction) ->
@@ -136,7 +147,8 @@ fn apply(ctx: tazuna.ApplyCtx(Records), event: Event) -> Records {
         [Awaiting, Screening, Charging, Failed],
         moved(Voided),
       )
-    RefundStarted(order) -> update(records, order, [Captured], moved(Refunding))
+    RefundStarted(order) ->
+      update(records, order, [Captured], calls(Refunding, gives_up))
     RefundSucceeded(order) ->
       update(records, order, [Refunding], moved(Refunded))
     RefundFailed(order) -> update(records, order, [Refunding], moved(Captured))
@@ -337,10 +349,11 @@ fn gateway_call() -> tazuna.Machine(Records, Event) {
         _ -> tazuna.Stay
       }
     },
-    after: fn(ctx: MachineCtx(Id, Call, Records)) {
-      case ctx.state {
-        Calling -> Some(tazuna.Timer(after: 2 * shared.minute, enter: TimedOut))
-        TimedOut -> None
+    timer: fn(ctx: TimerCtx(Id, Call, Records)) {
+      case ctx.state, table.get(ctx.records.payments, ctx.key) {
+        Calling, Some(payment) ->
+          Some(tazuna.Timer(at: payment.call_by, enter: TimedOut))
+        _, _ -> None
       }
     },
     effect: fn(ctx: MachineCtx(Id, Call, Records)) {

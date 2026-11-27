@@ -203,11 +203,10 @@ theorem timer_decode {r e : Ty} {m : MachineV r e} {bq tq : TypedScript} (hq : t
   have hF := mapM_ok _ _ _ hwfs
   have hdata : ∀ t ∈ timerTys m, t.isData = true := by
     simp only [timerTys, List.mem_cons, List.not_mem_nil, or_false]
-    rintro t (rfl | rfl | rfl | rfl)
+    rintro t (rfl | rfl | rfl)
     · exact m.key_data
     · exact m.state_data
     · exact m.records_data
-    · rfl
   have hs := sorted_append_left (B := []) (by simpa using hM) hdata
   have hat : ∀ i (h : i < (timerTys m).length), ∃ y, decodeV L (timerTys m)[i] (M.vars i) = some y := by
     intro i h
@@ -219,13 +218,12 @@ theorem timer_decode {r e : Ty} {m : MachineV r e} {bq tq : TypedScript} (hq : t
   obtain ⟨k, hk⟩ := hat 0 (by simp [timerTys])
   obtain ⟨st, hst⟩ := hat 1 (by simp [timerTys])
   obtain ⟨rc, hrc⟩ := hat 2 (by simp [timerTys])
-  obtain ⟨now, hnow⟩ := hs 3 (by simp [timerTys])
-  simp only [timerTys] at hk hst hrc hnow
+  simp only [timerTys] at hk hst hrc
   unfold TimerVals.decode
   split
   · exact ⟨_, rfl⟩
   · rename_i hne
-    exact (hne _ _ _ _ hk hst hrc hnow).elim
+    exact (hne _ _ _ hk hst hrc).elim
 
 end
 

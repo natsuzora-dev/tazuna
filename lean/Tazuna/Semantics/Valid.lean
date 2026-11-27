@@ -158,15 +158,8 @@ theorem insts_self {m : MachineV r e} (hk : m.key.comparable = true) (hst : m.st
     {l : List (Instance m)} (hl : ∀ P : PBij, P.Fixes n → Insts.Rel P l l) :
     ∀ i ∈ l, ∀ P : PBij, P.Fixes n → Instance.Rel P i i := by
   intro i hi P hP
-  obtain ⟨j, -, hk', hs', ht'⟩ := (hl _ (PBij.below_fixes n)).1.mem_left hi
-  refine ⟨Ty.self_of_below hP _ hk hk', Ty.self_of_below hP _ hst hs', ?_⟩
-  revert ht'
-  cases i.timer <;> cases j.timer <;> intro ht'
-  · exact .none
-  · cases ht'
-  · cases ht'
-  · obtain ⟨-, h⟩ := Option.rel_some_some.1 ht'  
-    exact .some ⟨rfl, Ty.self_of_below hP _ hst h⟩
+  obtain ⟨j, -, hk', hs'⟩ := (hl _ (PBij.below_fixes n)).1.mem_left hi
+  exact ⟨Ty.self_of_below hP _ hk hk', Ty.self_of_below hP _ hst hs'⟩
 
 theorem insts_rel {m : MachineV r e} {l : List (Instance m)} (h : ∀ i ∈ l, ∀ P : PBij, P.Fixes n → Instance.Rel P i i)
     (hd : KeysDistinct l) : ∀ P : PBij, P.Fixes n → Insts.Rel P l l :=
@@ -181,7 +174,8 @@ theorem fired_self {m : MachineV r e} (hm : m.Equi) {records : r.den0}
   split
   · next d target ht =>
     have htg : ∀ P : PBij, P.Fixes n → Ty.rel0 P m.state target target := fun P hP => by
-      have h := (hi P hP).2.2
+      have h := timerAt_rel hm (hrec P hP) (hi P hP).1 (hi P hP).2
+      simp only [timerOf] at ht
       rw [ht] at h
       exact (Option.rel_some_some.1 h).2
     exact ⟨fun P hP => (enter_rel hm (hrec P hP) now (hi P hP).1 (htg P hP)).1,
@@ -358,7 +352,7 @@ abbrev ValidRun : State v → List (Input v) → Prop := EachStep T fun s x => x
 
 /-- Whether a clock line at `time` passes no timer that waits: every instance's timer is due at `time` or later. -/
 def timely (s : State v) (time : Int) : Bool :=
-  s.machines.toSigma.all fun ⟨_, insts⟩ => insts.all fun i => match i.timer with
+  s.machines.toSigma.all fun ⟨_, insts⟩ => insts.all fun i => match timerOf s.records i with
     | some (d, _) => decide (time ≤ d)
     | none => true
 

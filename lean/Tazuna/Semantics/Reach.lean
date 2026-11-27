@@ -75,7 +75,7 @@ structure MachineV.Reach {r e : Ty} (m : MachineV r e) : Prop where
   effect : m.effect.Reach P E
   instances : m.instances.asSite ∈ P
   on : m.on.asSite ∈ P
-  after : m.after.asSite ∈ P
+  timer : m.timer.asSite ∈ P
   invariants : m.invariants.asSite ∈ P
 
 def ReactionV.Reach {r e : Ty} (x : ReactionV r e) : Prop := x.react.Reach P E
@@ -358,7 +358,7 @@ theorem Prim.reach (p : Prim) (args : List Ty) (h : p.ok args = true) : Reach P 
       exact hn (e.2, ()) ⟨(ht e he).2, trivial⟩
     | none => exact ⟨hr, trivial⟩
   case machine =>
-    rintro ⟨name, inst, init, on, after, eff, inv, ⟨⟩⟩ ⟨-, hi, -, ho, ha, he, hv, -⟩
+    rintro ⟨name, inst, init, on, timer, eff, inv, ⟨⟩⟩ ⟨-, hi, -, ho, ha, he, hv, -⟩
     exact ⟨he, hi, ho, ha, hv⟩
   case reaction =>
     rintro ⟨name, react, ⟨⟩⟩ ⟨-, hr, -⟩

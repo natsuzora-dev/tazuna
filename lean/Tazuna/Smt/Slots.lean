@@ -332,7 +332,8 @@ def pickT (none : Term) : List (Term × Term × Term) → Term
   | (f, h, r) :: rest => .ite (.and f h) r (pickT none rest)
 
 theorem aligned_of {α : Type} {E : α → List Val → Prop} {V : α → Val → Prop} (G : Slot w → Term × Term → Prop)
-    (hG : ∀ sl r y, G sl r → E y (Term.denotes M sl.2) → (r.2.denote M).toBool = true → V y (r.1.denote M)) :
+    (hG : ∀ sl r y, G sl r → sl.1.denote M = .bool true → E y (Term.denotes M sl.2) → (r.2.denote M).toBool = true →
+      V y (r.1.denote M)) :
     {S : List (Slot w)} → {sv : List (Bool × List Val)} → {ys : List α} → {R : List (Term × Term)} →
     SlotsDen M S sv → Holds2 E ys sv → Forall2 G S R → ((guardsT S (R.map (·.2))).denote M).toBool = true →
     AlignedV M E V S (R.map (·.1)) sv ys
@@ -346,7 +347,7 @@ theorem aligned_of {α : Type} {E : α → List Val → Prop} {V : α → Val �
     simp only [guardsT, allT, List.map_cons, List.zipWith_cons_cons, Term.denote, hf, Val.toBool,
       Bool.and_eq_true, Bool.not_true, Bool.false_or] at hg
     simp only [Holds2, occupied, ite_true, List.filterMap_cons, Forall2] at he
-    exact ⟨hf, hx, he.1, hG _ r y hr (by rw [hx]; exact he.1) hg.1,
+    exact ⟨hf, hx, he.1, hG _ r y hr hf (by rw [hx]; exact he.1) hg.1,
       aligned_of G hG h he.2 hR hg.2⟩
   | (_, _) :: _, (true, _) :: _, [], _, _, he, _, _ => by
     simp [Holds2, occupied, Forall2] at he
@@ -374,28 +375,32 @@ theorem aligned_map {α : Type} {E : α → List Val → Prop} {V : α → Val �
     exact ⟨hf, hx, he.1, hQ y xs (by rw [hx]; exact he.1), aligned_map Q hQ h he.2⟩
   | (_, _) :: _, (true, _) :: _, [], _, he => by simp [Holds2, occupied, Forall2] at he
 
-/-- `aligned_map` for records seen as slots, `Q` reading each record. -/
-theorem aligned_mapView {α γ : Type} {E : α → List Val → Prop} {V : α → Val → Prop} (view : γ → Slot w) (Q : γ → Term)
-    (hQ : ∀ y c, E y (Term.denotes M (view c).2.1) → V y ((Q c).denote M)) :
-    {S : List γ} → {sv : List (Bool × List Val)} → {ys : List α} → SlotsDen M (S.map view) sv → Holds2 E ys sv →
+/-- `aligned_map` for records seen as slots, `Q` reading, as `V` says, the occupied records the list holds. -/
+theorem aligned_mapView_mem {α γ : Type} {E : α → List Val → Prop} {V : α → Val → Prop} (view : γ → Slot w)
+    (Q : γ → Term) : {S : List γ} →
+    (∀ c ∈ S, ∀ y, (view c).1.denote M = .bool true → E y (Term.denotes M (view c).2.1) → V y ((Q c).denote M)) →
+    {sv : List (Bool × List Val)} → {ys : List α} → SlotsDen M (S.map view) sv → Holds2 E ys sv →
     AlignedV M E V (S.map view) (S.map Q) sv ys
-  | [], [], [], _, _ => trivial
-  | [], [], _ :: _, _, h => nomatch h
-  | c :: S, (b, vs) :: sv, ys, h0, he => by
-    have hQc : ∀ y, E y (Term.denotes M (view c).2.1) → V y ((Q c).denote M) := fun y => hQ y c
+  | [], _, [], [], _, _ => trivial
+  | [], _, [], _ :: _, _, h => nomatch h
+  | c :: S, hQ, (b, vs) :: sv, ys, h0, he => by
+    have hQc : ∀ y, (view c).1.denote M = .bool true → E y (Term.denotes M (view c).2.1) → V y ((Q c).denote M) :=
+      hQ c (by simp)
+    have hQS : ∀ c ∈ S, ∀ y, (view c).1.denote M = .bool true → E y (Term.denotes M (view c).2.1) →
+        V y ((Q c).denote M) := fun c hc => hQ c (by simp [hc])
     simp only [List.map_cons] at h0 ⊢
     rcases hv : view c with ⟨fl, xs⟩
     rw [hv] at h0 hQc
     obtain ⟨hf, hx, hS⟩ := h0
     cases b with
-    | false => exact ⟨hf, hx, aligned_mapView view Q hQ hS (by simpa [Holds2, occupied] using he)⟩
+    | false => exact ⟨hf, hx, aligned_mapView_mem view Q hQS hS (by simpa [Holds2, occupied] using he)⟩
     | true =>
       match ys, he with
       | y :: ys, he =>
         simp only [Holds2, occupied, ite_true, List.filterMap_cons, Forall2] at he
-        exact ⟨hf, hx, he.1, hQc y (by rw [hx]; exact he.1), aligned_mapView view Q hQ hS he.2⟩
+        exact ⟨hf, hx, he.1, hQc y hf (by rw [hx]; exact he.1), aligned_mapView_mem view Q hQS hS he.2⟩
       | [], he => simp [Holds2, occupied, Forall2] at he
-  | [], _ :: _, _, h, _ | _ :: _, [], _, h, _ => h.elim
+  | [], _, _ :: _, _, h, _ | _ :: _, _, [], _, h, _ => h.elim
 
 theorem alignedV_mono {α : Type} {E : α → List Val → Prop} {V V' : α → Val → Prop} (h : ∀ y v, V y v → V' y v) :
     {S : List (Slot w)} → {qs : List Term} → {sv : List (Bool × List Val)} → {ys : List α} →

@@ -8,7 +8,9 @@ import shop/shared.{
   type Caller, type Delivery, type Line, type PaymentOutcome, type PriceChanged,
   type Reservation, Customer, Staff,
 }
-import tazuna.{type Ctx, type Id, type MachineCtx, type QueryCtx}
+import tazuna.{
+  type Ctx, type Id, type Instant, type MachineCtx, type QueryCtx, type TimerCtx,
+}
 import tazuna/bag.{type Bag}
 import tazuna/table.{type Table}
 
@@ -29,6 +31,7 @@ pub type Order {
     lines: Bag(Line),
     total: Int,
     status: Status,
+    pay_by: Instant,
   )
 }
 
@@ -116,6 +119,7 @@ fn apply(ctx: tazuna.ApplyCtx(Records), event: Event) -> Records {
             lines: lines,
             total: total,
             status: AwaitingStock,
+            pay_by: ctx.now + 30 * shared.minute,
           ),
         ),
       )
@@ -287,8 +291,8 @@ pub fn open_orders() -> tazuna.Query(Records, Caller, String, Int) {
   )
 }
 
-/// One instance per order waiting for stock or payment: 30 minutes after it
-/// was placed, the order is cancelled.
+/// One instance per order waiting for stock or payment: at its pay-by time,
+/// the order is cancelled.
 fn payment_deadline() -> tazuna.Machine(Records, Event) {
   tazuna.machine(
     name: "payment deadline",
@@ -303,10 +307,11 @@ fn payment_deadline() -> tazuna.Machine(Records, Event) {
     on: fn(_ctx: MachineCtx(Id, Deadline, Records), _event: Event) {
       tazuna.Stay
     },
-    after: fn(ctx: MachineCtx(Id, Deadline, Records)) {
-      case ctx.state {
-        Open -> Some(tazuna.Timer(after: 30 * shared.minute, enter: Expired))
-        Expired -> None
+    timer: fn(ctx: TimerCtx(Id, Deadline, Records)) {
+      case ctx.state, table.get(ctx.records.orders, ctx.key) {
+        Open, Some(order) ->
+          Some(tazuna.Timer(at: order.pay_by, enter: Expired))
+        _, _ -> None
       }
     },
     effect: fn(ctx: MachineCtx(Id, Deadline, Records)) {
