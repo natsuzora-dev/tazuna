@@ -130,28 +130,30 @@ def Answer.uncode (ids : Option Nat) (a : Answer) : Answer :=
 variables are `dts` and `vars` and whose literals are `lits`; an unsat answer is the answer, as `Unsat` reads it. A sat
 answer is confirmed by the exact script with the variant's model fixed (`confirmations`, keyed by `fixed`), whose sat
 answer is the answer; where no fixing confirms it, or the variant has no verdict, the exact script answers (none: it
-has no text). Every script asked is cached by its own text. -/
+has no text). Every script asked is cached by its own text, and the answer comes with the key of the script that gave
+it, whose kept answer it is with names read back (`Answer.uncode`). -/
 def Solver.overApprox (s : Solver) (dir : System.FilePath) (ids : Option Nat) (dts : List Datatype) (vars : List Srt)
-    (lits : List String) (abs : Keyed) (fixed : List Term → Option Keyed) (exact : IO (Option Answer)) :
-    IO (Option Answer) := do
+    (lits : List String) (abs : Keyed) (fixed : List Term → Option Keyed) (exact : IO (Option (Answer × String))) :
+    IO (Option (Answer × String)) := do
   match ← s.runKeyed dir abs with
-  | .unsat => return some .unsat
+  | .unsat => return some (.unsat, abs.key)
   | .sat vs =>
     for fixes in confirmations dts vars lits vs do
       if let some q := fixed fixes then
-        if let .sat ws ← s.runKeyed dir q then return some ((Answer.sat ws).uncode ids)
+        if let .sat ws ← s.runKeyed dir q then return some ((Answer.sat ws).uncode ids, q.key)
     exact
   | _ => exact
 
 /-- Asks what the solver reads for a script (`Script.sent`, `ids` being the id datatype if the script has one): its
 abstract variant first where it holds strings (`Solver.overApprox`), else the script; each answer read from the cache
-directory `dir` where kept. An engine bug where a script has no text (`noText`). -/
+directory `dir` where kept, with the key of the script that gave it (`Solver.overApprox`). An engine bug where a
+script has no text (`noText`). -/
 def Solver.runCached (s : Solver) (dir : System.FilePath) (ids : Option Nat) (script : Script) :
-    IO (Except String Answer) := do
+    IO (Except String (Answer × String)) := do
   let e := script.sent ids
-  let exact : IO (Option Answer) := do
+  let exact : IO (Option (Answer × String)) := do
     let some q := e.keyed s.header | return none
-    return some ((← s.runKeyed dir q).uncode ids)
+    return some ((← s.runKeyed dir q).uncode ids, q.key)
   let fixed (fixes : List Term) : Option Keyed := { e with asserts := e.asserts ++ fixes }.keyed s.header
   let r ← match e.abs.bind (·.keyed s.header) with
     | none => exact
@@ -159,6 +161,34 @@ def Solver.runCached (s : Solver) (dir : System.FilePath) (ids : Option Nat) (sc
   return match r with
     | some a => .ok a
     | none => .error noText
+
+/-- A question's direct key, as ccache's direct mode keys a result by a digest of the compiler, its options and the
+source files instead of the preprocessed text, and Bazel keys an action by the digests of its command and inputs: the
+SHA-256 of `inputs`, everything the engine reads to build the question's script, and of `name`, which of their
+questions it is. -/
+def directKey (inputs name : List String) : String := Sha256.hex (frame [frame inputs, frame name]).toUTF8
+
+/-- Asks a script as `Solver.runCached` does, first reading the answer its direct key `direct` (`directKey`) names in
+the cache directory `dir`, without building the script: the key's entry holds the text key of the script whose answer
+decided. That trusts the engine to build the same script from the same inputs, as it is deterministic. Where the entry
+or its answer is missing (another spec, another engine), the script's text keys still find each answer kept, and the
+entry is written for a decided answer (`Answer.decided`), as `Solver.runKeyed` keeps one. -/
+def Solver.ask (s : Solver) (dir : System.FilePath) (direct : String) (ids : Option Nat) (script : Script) :
+    IO (Except String Answer) := do
+  let entry := dir / "direct" / direct
+  if ← entry.pathExists then
+    let answerFile := dir / ((← IO.FS.readFile entry) ++ ".answer")
+    if ← answerFile.pathExists then
+      return .ok ((Answer.parse (← IO.FS.readFile answerFile)).uncode ids)
+  match ← s.runCached dir ids script with
+  | .error m => return .error m
+  | .ok (a, key) =>
+    if a.decided then
+      IO.FS.createDirAll (dir / "direct")
+      let partFile := entry.withExtension "part"
+      IO.FS.writeFile partFile key
+      IO.FS.rename partFile entry
+    return .ok a
 
 /-- A script's text parts with their shared definitions found, the definitions' sorts and the SHA-256 of the framed
 parts: what scripts that add one goal assertion share (the goals of generate's targets and of a service's responses at
@@ -258,21 +288,24 @@ read from the cache directory `dir` where kept. None where a script has no text.
 def Solver.askGoal (s : Solver) (dir : System.FilePath) (ids : Option Nat) (p : SentPrefix) (goal : Term) :
     IO (Option Answer) := do
   let some (q, g, coded) := p.sent goal | return none
-  let exact : IO (Option Answer) := do
+  let exact : IO (Option (Answer × String)) := do
     let some eq := q.ask g | return none
-    return some ((← s.runKeyed dir eq).uncode ids)
+    return some ((← s.runKeyed dir eq).uncode ids, eq.key)
   let abs : Option (AbsPrefix × Keyed) := do
     guard coded
     let a ← p.abs.get
     let (g', srt) ← (g.scodeC q.script.datatypes q.script.vars (litVar a.lits q.script.vars.length) a.cache).1
     guard (srt == .bool)
     pure (a, ← a.pre.askAll (g' :: a.order))
-  let some (a, k) := abs | exact
-  s.overApprox dir ids q.script.datatypes q.script.vars a.lits k (fun fixes => q.askAll (g :: fixes)) exact
+  let some (a, k) := abs | return (← exact).map (·.1)
+  let r ← s.overApprox dir ids q.script.datatypes q.script.vars a.lits k (fun fixes => q.askAll (g :: fixes)) exact
+  return r.map (·.1)
 
 /-- A question to the solver that owns its call: the script, the id datatype if it has one, and how its answer reads
 as a result. Nothing pairs answers with questions by position. -/
 structure Obligation (α : Type) where
+  /-- Which question of its spec it is, unique among them: its direct key's part (`directKey`). -/
+  name : List String
   script : Script
   ids : Option Nat
   read : Answer → α

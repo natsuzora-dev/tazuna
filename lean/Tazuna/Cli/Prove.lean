@@ -100,10 +100,11 @@ inductive Item where
   | skipped (service : String) (target : Target)
 
 /-- A dead-target question family: one of generate's targets and, per input kind whose terms do not rule it out, the
-question whether the kind's step shows a class the target aims at (`showsAsk`). -/
+question whether the kind's step shows a class the target aims at (`showsAsk`), with the kind's place
+(`SymInput.place`). -/
 structure ShowsItem where
   target : GenTarget
-  asks : List TypedScript
+  asks : List (String × TypedScript)
 
 structure ServiceItems where
   items : List Item := []
@@ -360,14 +361,16 @@ def refusedItems (step : String) (g : Option Target) (r : Refused) : Except Stri
   | .error m => .error s!"service {v.name}, {step}: {m}"
 
 /-- The lines of a question family with one target and two questions (a timer machine, a pair of own kinds): its
-bound question and its target question where `--only` keeps the target, else the target skipped. -/
-def familyItems (ids : Option Nat) (only : String → Bool) (g : Target) (step : String)
+bound question and its target question where `--only` keeps the target, else the target skipped; `place` tells the
+family apart where `step` may not, for the questions' names. -/
+def familyItems (ids : Option Nat) (only : String → Bool) (g : Target) (step place : String)
     (built : Except Refused (TypedScript × TypedScript)) (report : Smt.Answer → Except String Report) :
     Except String (List Item) :=
   match built with
   | .error r => refusedItems c v step (some g) r
   | .ok (bq, tq) => .ok (if only (v.name ++ "/" ++ g.text ++ "/" ++ step) then
-      [.ask ⟨bq.script, ids, boundReport v.name step⟩, .ask ⟨tq.script, ids, report⟩]
+      [.ask ⟨["bound", v.name, g.text, place], bq.script, ids, boundReport v.name step⟩,
+        .ask ⟨["target", v.name, g.text, place], tq.script, ids, report⟩]
     else [.skipped v.name g])
 
 -- The bound question has no target, and its name says so.
@@ -382,13 +385,14 @@ def serviceItems (sv : CheckedService c) (only : String → Bool) : ServiceItems
   let mut targets : List Target := []
   let rules := ruleNamesOf v
   let goals := (Tazuna.Ir.targets c.T v rules).filter fun g => !g.byQuery v && only (v.name ++ "/" ++ g.text)
-  let mut shows : Option (List (GenTarget × List TypedScript)) :=
+  let mut shows : Option (List (GenTarget × List (String × TypedScript))) :=
     if (Step.invariants (Step.State.init v)).isEmpty then some (goals.map (·, [])) else none
   for ⟨inp, hinp⟩ in (stepInputs v (shapes v) senv.nT b).attach do
     let step := inp.text
     let asked := Sound.get (stepAsk L c.T c.P v senv inp) (stepAsk_ofService sv.mem c.T senv inp hinp)
     shows := match shows, asked with
-      | some acc, .ok ⟨a, _⟩ => some (acc.map fun (g, qs) => (g, qs ++ (showsAsk L c.T rules g a inp).toList))
+      | some acc, .ok ⟨a, _⟩ =>
+        some (acc.map fun (g, qs) => (g, qs ++ (showsAsk L c.T rules g a inp).toList.map (inp.place, ·)))
       | _, _ => none
     -- Each response's question about the kind (`respStep`); where the kind's questions are refused, its line is.
     if let .ok ⟨a, _⟩ := asked then
@@ -397,7 +401,9 @@ def serviceItems (sv : CheckedService c) (only : String → Bool) : ServiceItems
         unless targets.contains g do targets := targets ++ [g]
         if only (v.name ++ "/" ++ g.text ++ "/" ++ step) then
           match Sound.get (respStep L resp inp a) (respStep_ofService c sv.mem hr inp a) with
-          | .ok ⟨q, _⟩ => items := items ++ [.ask ⟨q.script, L.ids, respReport c v L senv sv.callerData resp inp⟩]
+          | .ok ⟨q, _⟩ =>
+            items := items ++ [.ask ⟨["response", v.name, g.text, inp.place], q.script, L.ids,
+              respReport c v L senv sv.callerData resp inp⟩]
           | .error r =>
             match refusedItems c v step (some g) r with
             | .ok more => items := items ++ more
@@ -417,13 +423,15 @@ def serviceItems (sv : CheckedService c) (only : String → Bool) : ServiceItems
       -- The bound questions of every input kind decide together whether the service's lines say proved or within
       -- the bounds (`proved_sound`), so each is asked whatever `--only` keeps.
       let asked := if kept.any (·.target.isSome) then kept else kept.filter (·.target.isNone)
-      items := items ++ asked.map (fun q => .ask ⟨q.script, L.ids, answerReport c v L senv sv.callerData q⟩) ++
+      items := items ++ asked.map (fun q => .ask ⟨match q.target with
+          | some g => ["target", v.name, g.text, inp.place]
+          | none => ["bound", v.name, "", inp.place], q.script, L.ids, answerReport c v L senv sv.callerData q⟩) ++
         (qs.filterMap fun q => q.target.bind fun g => if kept.any (·.target == some g) then none else some g).map
           (.skipped v.name)
   -- A machine whose `timer` never gives a timer fires forward by itself (`timerForward_of_noTimer`), so it gets no line.
   for ⟨m, hm⟩ in v.machines.attach.filter (!·.1.noTimer) do
     let step := "timer " ++ m.name
-    match familyItems c v L.ids only (.timer m.name) step
+    match familyItems c v L.ids only (.timer m.name) step step
         ((Sound.get (timerQuestions L m) (timerQuestions_ofService sv.mem hm)).map (·.1)) (timerReport c v L m step) with
     | .ok more => items := items ++ more
     | .error why => return { internal := some why }
@@ -436,7 +444,7 @@ def serviceItems (sv : CheckedService c) (only : String → Bool) : ServiceItems
       if exact.any (OwnKey.same k) then none else some (ownText owns k)
     let g := Target.pair (ownText owns key1) (ownText owns key2) widened.eraseDups
     let step := ownText owns key1 ++ " then " ++ ownText owns key2
-    match familyItems c v L.ids only g step
+    match familyItems c v L.ids only g step s!"own {k1} {k2}"
         ((Sound.get (pairQuestions L c.T c.P v senv k1 k2) (pairQuestions_ofService sv.mem c.T senv k1 k2)).map (·.1))
         (pairReport c v L k1 k2 g step) with
     | .ok more => items := items ++ more
@@ -527,6 +535,8 @@ def prove (root path : String) (opts : Options) : Cmd Unit := do
   | none => pure ()
   | some c =>
     let solver ← Solver.find
+    -- The engine's own digest names this build in the direct keys; it is read while the questions are built.
+    let engine ← IO.asTask (prio := .dedicated) do return Sha256.hex (← IO.FS.readBinFile (← IO.appPath))
     let mut items : List Item := []
     let mut scopes : List (String × ServiceItems) := []
     for sv in c.services do
@@ -534,7 +544,12 @@ def prove (root path : String) (opts : Options) : Cmd Unit := do
       if let some m := r.internal then return ← internal m
       items := items ++ r.items
       scopes := scopes ++ [(sv.v.name, { r with items := [] })]
-    let cache := opts.cache / Sha256.hex (← solver.version).toUTF8
+    let version ← solver.version
+    let cache := opts.cache / Sha256.hex version.toUTF8
+    -- What builds every question's script, for the direct keys: the IR is the whole spec.
+    let ir := Sha256.hex (← IO.FS.readBinFile path)
+    let inputs := [← IO.ofExcept (← IO.wait engine), version] ++ solver.header ++ [ir]
+    let mut names : Std.HashSet (List String) := {}
     let mut questions : Array Job := #[]
     let mut placed : Array Placed := #[]
     let mut deads : Array (String × GenTarget × List (IO.Ref (Option (Except String Smt.Answer)))) := #[]
@@ -542,8 +557,11 @@ def prove (root path : String) (opts : Options) : Cmd Unit := do
       let ids := (c.services.find? (·.v.name == s)).bind (·.L.ids)
       for it in sc.shows do
         let mut refs := []
-        for q in it.asks do
-          let (j, r) ← Job.of (solver.runCached cache ids q.script)
+        for (step, q) in it.asks do
+          let name := ["shows", s, it.target.text, step]
+          if names.contains name then return ← internal s!"two questions are named {name}"
+          names := names.insert name
+          let (j, r) ← Job.of (solver.ask cache (directKey inputs name) ids q.script)
           questions := questions.push j
           refs := refs ++ [r]
         deads := deads.push (s, it.target, refs)
@@ -552,7 +570,9 @@ def prove (root path : String) (opts : Options) : Cmd Unit := do
       | .ready r => placed := placed.push (.ready r)
       | .skipped s g => placed := placed.push (.skipped s g)
       | .ask o =>
-        let (j, r) ← Job.of do pure ((← solver.runCached cache o.ids o.script) >>= o.read)
+        if names.contains o.name then return ← internal s!"two questions are named {o.name}"
+        names := names.insert o.name
+        let (j, r) ← Job.of do pure ((← solver.ask cache (directKey inputs o.name) o.ids o.script) >>= o.read)
         questions := questions.push j
         placed := placed.push (.asked r)
     runAll opts.jobs questions

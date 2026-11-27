@@ -56,6 +56,16 @@ def _root_.Tazuna.Smt.SymInput.text : SymInput v shs n → String
   | .event i _ => "event " ++ (v.subscribes.get i).name
   | .clock _ => "clock"
 
+/-- The input kind by its place, which tells apart kinds whose text is the same (answers to two pending shapes with
+the same request and sender). -/
+def _root_.Tazuna.Smt.SymInput.place : SymInput v shs n → String
+  | .command i .. => s!"command {(i : Nat)}"
+  | .query i .. => s!"query {(i : Nat)}"
+  | .answer k j .. => s!"answer {(k : Nat)} {(j : Nat)}"
+  | .unmatched .. => "unmatched answer"
+  | .event i _ => s!"event {(i : Nat)}"
+  | .clock _ => "clock"
+
 end
 
 -- A type the table does not declare shows by its index.

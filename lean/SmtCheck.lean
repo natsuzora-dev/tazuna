@@ -3461,11 +3461,34 @@ def refCheck (solver : Solver) : IO Bool := do
   let dir := (← IO.FS.createTempDir) / "cache"
   let ok ← match ← solver.runCached dir none { base with asserts := base.asserts ++ [.not (.ref 0)] } with
     | .error m => pure (m == noText)
-    | .ok a => IO.println s!"smt-check: an assertion holding a reference was asked: {repr a}"; pure false
+    | .ok (a, _) => IO.println s!"smt-check: an assertion holding a reference was asked: {repr a}"; pure false
   match ← solver.runCached dir none base with
-  | .ok (.sat _) => pure ok
-  | .ok a => IO.println s!"smt-check: the script without the reference: {repr a}"; pure false
+  | .ok (.sat _, _) => pure ok
+  | .ok (a, _) => IO.println s!"smt-check: the script without the reference: {repr a}"; pure false
   | .error m => IO.println s!"smt-check: the script without the reference: {m}"; pure false
+
+/-- prove's direct keys (`Solver.ask`, `directKey`). The second ask has the first one's key and another script, and
+no solver: it reads the first answer, as a direct key answers without building the script, which is why the key must
+name every input. With the engine's digest or the IR's changed, the key is another one, so the new script is asked. -/
+def directCheck (solver : Solver) : IO Bool := do
+  let dir := (← IO.FS.createTempDir) / "cache"
+  let sat : Script := { vars := [.bool], asserts := [.var 0], shows := [0] }
+  let unsat : Script := { vars := [.bool], asserts := [.var 0, .not (.var 0)] }
+  let inputs (engine ir : String) : List String := [engine, "z3 version"] ++ solver.header ++ [ir]
+  let name := ["target", "s", "g", "step"]
+  let cases : List (String × Solver × List String × Script × Bool) := [
+    ("first", solver, inputs "engine" "ir", sat, true),
+    ("same inputs", { solver with path := "/nonexistent/z3" }, inputs "engine" "ir", unsat, true),
+    ("another engine", solver, inputs "engine 2" "ir", unsat, false),
+    ("another spec", solver, inputs "engine" "ir 2", unsat, false)]
+  let mut ok := true
+  for (what, s, ins, script, wantSat) in cases do
+    match ← s.ask dir (directKey ins name) none script with
+    | .ok (.sat _) => if !wantSat then IO.println s!"smt-check: direct key, {what}: sat, want unsat"; ok := false
+    | .ok .unsat => if wantSat then IO.println s!"smt-check: direct key, {what}: unsat, want sat"; ok := false
+    | .ok a => IO.println s!"smt-check: direct key, {what}: {repr a}"; ok := false
+    | .error m => IO.println s!"smt-check: direct key, {what}: {m}"; ok := false
+  return ok
 
 /-! prove's questions (`questions`, `question_sound`): on the event service with the machine `calm`, each target's
 question is sat, and the step from the state and input the model decodes to reaches its end in a state that breaks the
@@ -4056,6 +4079,7 @@ def check (z3 : String) : IO Bool := do
   unless ← answerMCheck solver do ok := false
   unless ← reshareCheck 40 do ok := false
   unless ← refCheck solver do ok := false
+  unless ← directCheck solver do ok := false
   unless ← mixCheck solver do ok := false
   unless ← internalCheck solver do ok := false
   unless ← ownQueryCheck solver do ok := false
