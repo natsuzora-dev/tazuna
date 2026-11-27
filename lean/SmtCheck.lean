@@ -3420,28 +3420,36 @@ def tickClockCheck (solver : Solver) : IO Bool := do
       | _, _ => fail "the model does not decode"
     | a => fail s!"{repr a}"
 
-/-- A chain of `depth` levels where each level builds the same shared term twice as two objects over the level
-below: what an encoder does when it shares a term at each use instead of where it is built. Its script has one
-definition per level, and printing it must not compare the copies as trees (exponential in depth). -/
+/-- A chain of `depth` levels where each level builds the same shared term twice as two objects, each over both
+copies of the level below: what an encoder does when it shares a term at each use instead of where it is built.
+Comparing the two copies as trees takes time exponential in depth. Its script has one definition per level, and it
+holds a string and declares the id datatype, so what the solver reads codes names and strings in it (`Script.sent`,
+`Script.abs`). -/
 def reshared (depth : Nat) : Script :=
-  let level (t : Term) : Term := match (List.replicate 2 t).map (fun t => (Term.or t (.not t)).share) with
-    | [a, b] => .and a b
-    | _ => t
-  { vars := [.bool], asserts := [(List.range depth).foldl (fun t _ => level t) (.var 0)] }
+  let level (p : Term × Term) : Term × Term := ((Term.and p.1 p.2).share, (Term.and p.2 p.1).share)
+  let base := Term.eq (.var 0) (.str "a")
+  let (a, b) := (List.range depth).foldl (fun p _ => level p) (base, base)
+  { datatypes := [idDatatype], vars := [.str], asserts := [.and a b] }
 
-/-- Prints `reshared depth` within a second, with one definition per level. On a timeout the process exits at once:
-the printing still runs and might not end. -/
+/-- Prints `reshared depth`, with one definition per level, and builds what the solver reads for it with and without
+names as codes, with strings as codes too, all within a second: none may compare the copies as trees (exponential in
+depth). On a timeout the process exits at once: the work still runs and might not end. -/
 def reshareCheck (depth : Nat) : IO Bool := do
-  let task := Task.spawn (prio := .dedicated) fun _ => match (reshared depth).shared with
-    | some (_, ds) => ds.length
-    | none => 0
+  let task := Task.spawn (prio := .dedicated) fun _ =>
+    let s := reshared depth
+    (match s.shared with
+      | some (_, ds) => ds.length
+      | none => 0, ((s.sent (some 0)).abs.isSome, (s.sent none).abs.isSome))
   let start ← IO.monoMsNow
   while !(← IO.hasFinished task) && (← IO.monoMsNow) - start < 1000 do IO.sleep 10
   unless ← IO.hasFinished task do
-    IO.println "smt-check: re-shared chain: printing took over 1000 ms (shared copies compared as trees?)"
+    IO.println "smt-check: re-shared chain: reading it took over 1000 ms (shared copies compared as trees?)"
     IO.Process.exit 1
-  if task.get != depth then
-    IO.println s!"smt-check: re-shared chain: {task.get} definitions, want {depth}"; return false
+  let (defs, coded, plain) := task.get
+  if defs != depth then
+    IO.println s!"smt-check: re-shared chain: {defs} definitions, want {depth}"; return false
+  if !coded || !plain then
+    IO.println s!"smt-check: re-shared chain: no abstract variant (with codes {coded}, without {plain})"; return false
   return true
 
 /-- A script whose assertion holds a reference is never sent: the shared term `x or not x` prints as `s0`, and an

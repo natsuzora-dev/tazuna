@@ -161,12 +161,12 @@ theorem sent_model {L : Layout} {q : TypedScript} (M : Model)
     obtain ⟨d, hd, hsc⟩ := Option.bind_eq_some_iff.1 hc
     obtain ⟨hid, hdts⟩ := Script.code_datatypes hsc
     obtain ⟨M', c, hcod, hsel, hall'⟩ := code_model (Script.code_asserts hsc) M q.tys.length hall hid hS
-    have e : q.sent L = s' := by simp [TypedScript.sent, Script.sent, hc]
+    have e : q.sent L = s' := by simp [TypedScript.sent, Script.sent, ShareCommon.shareCommon', hc]
     refine ⟨M', ?_, by rw [e, hdts, Script.code_vars hsc]; exact hsel, by rw [e]; exact hall'⟩
     simp only [SentSorted, hc]
     exact ⟨d, c, hd, fun n hn => ⟨M.vars n, hM n hn, hcod n hn⟩⟩
   | none =>
-    have e : q.sent L = q.script := by simp [TypedScript.sent, Script.sent, hc]
+    have e : q.sent L = q.script := by simp [TypedScript.sent, Script.sent, ShareCommon.shareCommon', hc]
     refine ⟨M, ?_, by rw [e]; exact hS, by rw [e]; exact hall⟩
     simp only [SentSorted, hc]
     exact hM

@@ -158,8 +158,12 @@ def Script.code (d : Nat) (s : Script) : Option Script := do
   pure { s with datatypes := s.datatypes.set d codedIdDatatype, asserts }
 
 /-- What the solver reads for the script, `ids` being the id datatype if the script has one: the script with names as
-codes where `Script.code` builds it, else the script. -/
+codes where `Script.code` builds it, else the script. The assertions are first merged into one object per equal subterm
+(`shareCommon'`, the identity on values), as in `Script.shared`: the coding and the abstract variant (`Script.abs`)
+find a shared term they already did by `Term.same`, which answers at once for one object but compares two copies as
+trees, in time exponential in how deeply shared terms nest. -/
 def Script.sent (ids : Option Nat) (s : Script) : Script :=
+  let s := { s with asserts := ShareCommon.shareCommon' s.asserts }
   match ids.bind (s.code ·) with
   | some s' => s'
   | none => s
