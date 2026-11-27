@@ -364,11 +364,11 @@ theorem within_step {E : List AnyEffectSite} (chk : Checked P E T v) (senv : Ste
   have hord : ∀ m ∈ v.machines, m.key.ordered T = true := fun m hm => (chk.keys m hm).2
   rcases inputs_fit chk hin hW x with hx | ⟨-, h⟩
   · obtain ⟨ivs, hivs⟩ := Option.isSome_iff_exists.1 hx
-    rcases covered chk senv hkeys hW x hivs with ⟨inp, hmem, _, M, hM, hS, hxd, hcase⟩ | h
+    rcases covered chk senv hkeys hW x hivs with ⟨inp, hmem, _, M, hM, hsel, hS, hxd, hcase⟩ | h
     · obtain ⟨gs, qs, hqs, hun⟩ := hb inp hmem
       obtain ⟨t, ht, hcodes, hsites, hcond⟩ := bound_cond chk senv inp hqs hS hinv hsupp hheld hxd hcase
-        fun q hq' hn => (hun q hq' hn).noModel_at (questions_tys L T P v senv hqs q hq') M
-          fun n h => varSorted_of_sorted (hM n h)
+        fun q hq' hn => (hun q hq' hn).noModel_at (questions_tys L T P v senv hqs q hq') (questions_dts L T P v senv hqs q hq') M
+          (fun n h => varSorted_of_sorted (hM n h)) hsel
       have E := (step_encode chk senv (decode_state hS) hinv hxd ht).2 hcodes hsites (hcase t ht)
       exact within_stepRel chk.embeddable (E.2.1 hcond) hW
     · rw [h.2.2.1]; exact hW

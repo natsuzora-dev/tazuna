@@ -111,18 +111,20 @@ theorem unshown_at (chk : Checked P E T v) (he : v.Equivariant) (senv : StepEnv 
   have hord : ∀ m ∈ v.machines, m.key.ordered T = true := fun m hm => (chk.keys m hm).2
   have hsupp := Step.run_supp T he chk.reach _ Step.init_inv (Step.init_supp he) is hvalid
   rcases covered chk senv (run_keys T _ (Step.init_keys T hord) is) hs x hivs with
-    ⟨inp, hmem, hc, M, hM, hS, hxd, hcase⟩ | ⟨-, -, -, hq | hf⟩
+    ⟨inp, hmem, hc, M, hM, hsel, hS, hxd, hcase⟩ | ⟨-, -, -, hq | hf⟩
   · obtain ⟨a, ha, hshow, hor⟩ := hl inp hmem
-    have hun : ∀ q : TypedScript, q.tys = stateTys v (shapes v) ++ inp.tys → Unsat L q →
-        ∃ c ∈ q.script.asserts, ¬ Holds M c := fun q ht hu =>
-      hu.noModel_at ht M fun n h => varSorted_of_sorted (hM n h)
-    refine step_unshown chk senv ha (fun q hq => hun q ?_ (hshow q hq)) hS (run_inv T chk.reach _ Step.init_inv is)
+    have hun : ∀ q : TypedScript, q.tys = stateTys v (shapes v) ++ inp.tys → L.datatypes? = some q.datatypes →
+        Unsat L q → ∃ c ∈ q.script.asserts, ¬ Holds M c := fun q ht hd hu =>
+      hu.noModel_at ht hd M (fun n h => varSorted_of_sorted (hM n h)) hsel
+    refine step_unshown chk senv ha (fun q hq => hun q ?_ ?_ (hshow q hq)) hS (run_inv T chk.reach _ Step.init_inv is)
       hsupp (Tazuna.Ir.run_invariants T _ is hinit) hxd hcase
-      (hor.imp (fun hu => hun _ (stepAsk_tys L T P v senv ha _) hu) hF) hno
-    simp only [showsAsk] at hq
-    split at hq
-    · cases hq
-    · cases hq; exact stepAsk_tys L T P v senv ha _
+      (hor.imp (fun hu => hun _ (stepAsk_tys L T P v senv ha _) (stepAsk_dts L T P v senv ha _) hu) hF) hno
+    all_goals
+      simp only [showsAsk] at hq
+      split at hq
+      · cases hq
+      · cases hq
+        first | exact stepAsk_tys L T P v senv ha _ | exact stepAsk_dts L T P v senv ha _
   · obtain ⟨i, c, y, rfl⟩ := hq
     exact query_unshown hg _ i c y
   · exact (hno _ hf).elim

@@ -1097,8 +1097,8 @@ theorem generate_unreached (chk : Checked P E T v) (senv : StepEnv L (shapes v))
     (has : ∀ a ∈ Step.Assumption.ofRuns, a.Holds T (Step.State.init v) (ys ++ [x])) :
     ¬ Hits T v rules g x (step T v (run T v (Step.State.init v) ys).1 x) := by
   intro hhit
-  obtain ⟨M, hM, hrun, hA⟩ := runs_covered chk senv hL hB hnr (by simp [hlen]) (runFits_of _ _ _ _ _ _ _ hin has)
-  obtain ⟨a, ha, hna⟩ := hun.noModel M hM
+  obtain ⟨M, hM, hsel, hrun, hA⟩ := runs_covered chk senv hL hB hnr (by simp [hlen]) (runFits_of _ _ _ _ _ _ _ hin has)
+  obtain ⟨a, ha, hna⟩ := hun.noModel M hM (hsel _ (unrollBase_dts L T P v senv hB))
   refine hna (((B.holds_withGoal _).2 ⟨hA, ?_⟩) a ha)
   obtain ⟨st, hlast, ⟨k, hk, hdec, hrel⟩, hno, -⟩ := unrollRun_last x ys _ _ hrun
   simp only [genGoal, hlast]

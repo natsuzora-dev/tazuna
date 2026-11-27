@@ -4,9 +4,10 @@ import Tazuna.Smt.EncodeThm
 /-! Names as codes keep a script's models (`code_model`): a model of the script gives one of the variant with names as
 codes, whose variables hold the model's values with each name `s` as the code `c s` (`Coded`). The names the model
 compares are finitely many: those its variables hold and those the script's name terms denote. A name's code is its
-rank among them (`rank`), which keeps their order, so `<` between codes says what `str.<` said between names. The
-values with names as codes are kept apart (`codeV`): a name outside the ranked ones and a value that is not a name
-where a name stands are kept as they are, under constructors no code takes. -/
+rank among them (`rank`), which keeps their order, so `<` between codes says what `str.<` said between names. A name
+outside the ranked ones gets an Int below 0 that no other name gets, so a selector of a name still gives an Int
+(`selSorted_codedModel`), and a value that is not a name where a name stands is kept as it is, under a constructor no
+code takes (`codeV`). -/
 
 namespace Tazuna.Smt
 
@@ -173,15 +174,39 @@ theorem rank_inj {S : List String} {s t : String} (hs : s ∈ S) (ht : t ∈ S) 
     · exact absurd (rank_lt ht hts) (by omega)
     · exact String.le_antisymm hts hst
 
+/-- A number for each string, no two alike: its characters as digits in base `0x110001`, each one more than its code
+point. -/
+def strNum : List Char → Nat
+  | [] => 0
+  | c :: cs => c.toNat + 1 + 0x110001 * strNum cs
+
+theorem char_toNat_lt (c : Char) : c.toNat < 0x110000 := by
+  have := c.valid
+  simp only [Char.toNat, UInt32.isValidChar, Nat.isValidChar] at *
+  omega
+
+theorem strNum_inj : (a b : List Char) → strNum a = strNum b → a = b
+  | [], [], _ => rfl
+  | [], c :: cs, h | c :: cs, [], h => by simp only [strNum] at h; omega
+  | c :: cs, c' :: cs', h => by
+    simp only [strNum] at h
+    have hc := char_toNat_lt c
+    have hc' := char_toNat_lt c'
+    have h1 : c.toNat = c'.toNat := by omega
+    rw [Char.toNat_inj.1 h1, strNum_inj cs cs' (by omega)]
+
+theorem rank_nonneg (S : List String) (s : String) : 0 ≤ rank S s := Int.natCast_nonneg _
+
 /-! Values with names as codes. -/
 
 section
 variable (d : Nat) (S : List String)
 
-/-- A name as its code: its rank where it is ranked. A name outside the ranked ones, and a value that is not a name,
-are kept as they are under datatype `d + 1`'s constructors 1 and 0, which no code is. -/
+/-- A name as its code: its rank where it is ranked, else an Int below 0 that no other name has (`strNum`), so every
+name has an Int code, as the selector of a name gives an Int where the solver reads codes. A value that is not a name
+is kept as it is under datatype `d + 1`'s constructor 0, which no code is. -/
 def codeN : Val → Val
-  | .str s => if s ∈ S then .int (rank S s) else .ctor (d + 1) 1 [.str s]
+  | .str s => if s ∈ S then .int (rank S s) else .int (-1 - strNum s.toList)
   | v => .ctor (d + 1) 0 [v]
 
 -- A constructor 1 of `d` that is not a name keeps its fields after the code of what its name selector reads, the
@@ -209,7 +234,10 @@ variable {d : Nat} {S : List String}
 
 theorem codeN_inj {a b : Val} (h : codeN d S a = codeN d S b) : a = b := by
   cases a <;> cases b <;> simp only [codeN] at h <;> (try split at h) <;> (try split at h) <;> simp_all
-  rename_i ha hb; exact rank_inj ha hb h
+  · rename_i ha hb; exact rank_inj ha hb h
+  · rename_i s _ _ _; have := rank_nonneg S s; omega
+  · rename_i _ t _ _; have := rank_nonneg S t; omega
+  · exact String.ext (strNum_inj _ _ (by omega))
 
 theorem codeV_ctor_is (e k : Nat) (as : List Val) : ∃ bs, codeV d S (.ctor e k as) = .ctor e k bs := by
   unfold codeV
@@ -631,14 +659,124 @@ theorem codes_holds {d : Nat} {S : List String} {M : Model} : (ts ts' : List Ter
     · rw [code_denote t a ht (sub_left hs), codeV_toBool]; exact hM t (List.mem_cons_self ..)
     · exact codes_holds ts us hu (fun a h => hM a (List.mem_cons_of_mem _ h)) (sub_right hs) a ha
 
+/-! Names as codes keep values in their sorts, the id datatype's name field being an Int where the solver reads
+codes. -/
+
+section
+variable {d : Nat} {S : List String} {dts : List Datatype}
+
+theorem codeN_str (s : String) : ∃ n, codeN d S (.str s) = .int n := by
+  by_cases h : s ∈ S <;> simp [codeN, h]
+
+theorem ctors_set (hd : dts[d]? = some idDatatype) {e k : Nat} (hn : ¬ (e = d ∧ k = 1)) :
+    (dts.set d codedIdDatatype)[e]?.bind (·.ctors[k]?) = dts[e]?.bind (·.ctors[k]?) := by
+  by_cases he : d = e
+  · subst he
+    have hl : d < dts.length := (List.getElem?_eq_some_iff.1 hd).1
+    rw [List.getElem?_set_self hl, hd]
+    match k, hn with
+    | 0, _ => rfl
+    | 1, hn => exact absurd ⟨rfl, rfl⟩ hn
+    | _ + 2, _ => rfl
+  · rw [List.getElem?_set_ne he]
+
+theorem ctors_set_name (hd : dts[d]? = some idDatatype) :
+    (dts.set d codedIdDatatype)[d]?.bind (·.ctors[1]?) = some [.int] := by
+  rw [List.getElem?_set_self (List.getElem?_eq_some_iff.1 hd).1]; rfl
+
+mutual
+theorem codeV_inSrt (hd : dts[d]? = some idDatatype) : (s : Srt) → (w : Val) → Val.InSrt dts s w →
+    Val.InSrt (dts.set d codedIdDatatype) s (codeV d S w)
+  | .int, .int _, _ | .bool, .bool _, _ => trivial
+  | .str, .str _, h => h
+  | .dt i, .ctor e k vs, h => by
+    obtain ⟨rfl, fs, hfs, hvs⟩ := h
+    by_cases hn : e = d ∧ k = 1
+    · obtain ⟨rfl, rfl⟩ := hn
+      rw [hd] at hfs
+      cases hfs
+      match vs, hvs with
+      | [.str s], _ =>
+        obtain ⟨n, hc⟩ := codeN_str (d := e) (S := S) s
+        simp only [codeV, and_self, ite_true, hc]
+        exact ⟨rfl, [.int], ctors_set_name hd, trivial, trivial⟩
+    · have hv : codeV d S (.ctor e k vs) = .ctor e k (codeVs d S vs) := by simp [codeV, hn]
+      rw [hv]
+      exact ⟨rfl, fs, (ctors_set hd hn).trans hfs, codeVs_inSrts hd fs vs hvs⟩
+  | .int, .bool _, h | .int, .str _, h | .int, .ctor .., h | .bool, .int _, h | .bool, .str _, h
+  | .bool, .ctor .., h | .str, .int _, h | .str, .bool _, h | .str, .ctor .., h | .dt _, .int _, h
+  | .dt _, .bool _, h | .dt _, .str _, h => nomatch h
+theorem codeVs_inSrts (hd : dts[d]? = some idDatatype) : (fs : List Srt) → (vs : List Val) → Val.InSrts dts fs vs →
+    Val.InSrts (dts.set d codedIdDatatype) fs (codeVs d S vs)
+  | [], [], _ => trivial
+  | s :: ss, v :: vs, h => ⟨codeV_inSrt hd s v h.1, codeVs_inSrts hd ss vs h.2⟩
+  | [], _ :: _, h | _ :: _, [], h => nomatch h
+end
+
+mutual
+/-- A sort that holds a value where names are codes holds one where they are strings. -/
+theorem inSrt_uncoded (hd : dts[d]? = some idDatatype) : (s : Srt) → (w : Val) →
+    Val.InSrt (dts.set d codedIdDatatype) s w → ∃ w', Val.InSrt dts s w'
+  | .int, .int n, _ => ⟨.int n, trivial⟩
+  | .bool, .bool b, _ => ⟨.bool b, trivial⟩
+  | .str, .str t, h => ⟨.str t, h⟩
+  | .dt i, .ctor e k vs, h => by
+    obtain ⟨rfl, fs, hfs, hvs⟩ := h
+    by_cases hn : e = d ∧ k = 1
+    · obtain ⟨rfl, rfl⟩ := hn
+      exact ⟨.ctor e 1 [.str ""], rfl, [.str], by rw [hd]; rfl, rfl, trivial⟩
+    · obtain ⟨ws, hws⟩ := inSrts_uncoded hd fs vs hvs
+      exact ⟨.ctor e k ws, rfl, fs, (ctors_set hd hn).symm.trans hfs, hws⟩
+  | .int, .bool _, h | .int, .str _, h | .int, .ctor .., h | .bool, .int _, h | .bool, .str _, h
+  | .bool, .ctor .., h | .str, .int _, h | .str, .bool _, h | .str, .ctor .., h | .dt _, .int _, h
+  | .dt _, .bool _, h | .dt _, .str _, h => nomatch h
+theorem inSrts_uncoded (hd : dts[d]? = some idDatatype) : (fs : List Srt) → (vs : List Val) →
+    Val.InSrts (dts.set d codedIdDatatype) fs vs → ∃ ws, Val.InSrts dts fs ws
+  | [], [], _ => ⟨[], trivial⟩
+  | s :: ss, v :: vs, h =>
+    let ⟨w, hw⟩ := inSrt_uncoded hd s v h.1
+    let ⟨ws, hws⟩ := inSrts_uncoded hd ss vs h.2
+    ⟨w :: ws, hw, hws⟩
+  | [], _ :: _, h | _ :: _, [], h => nomatch h
+end
+
+/-- The model with names as codes gives values of their fields' sorts on other constructors where the model does. -/
+theorem selSorted_codedModel (hd : dts[d]? = some idDatatype) {M : Model} (hM : SelSorted dts M) :
+    SelSorted (dts.set d codedIdDatatype) (codedModel d S M) := by
+  intro e k j s v hf hinh
+  simp only [codedModel]
+  split
+  · rename_i hn
+    obtain ⟨rfl, rfl, rfl⟩ := hn
+    simp only [fieldSrt?, ctors_set_name hd] at hf
+    cases hf
+    have hstr : fieldSrt? dts e 1 0 = some .str := by simp only [fieldSrt?, hd]; rfl
+    match hw : M.selOther e 1 0 (uncodeV e S v), hM e 1 0 .str (uncodeV e S v) hstr ⟨.str "", rfl⟩ with
+    | .str t, _ => obtain ⟨n, hc⟩ := codeN_str (d := e) (S := S) t; rw [hc]; trivial
+  · rename_i hn
+    have hf' : fieldSrt? dts e k j = some s := by
+      by_cases hek : e = d ∧ k = 1
+      · obtain ⟨rfl, rfl⟩ := hek
+        simp only [fieldSrt?, ctors_set_name hd] at hf
+        match j, hf with
+        | 0, _ => exact absurd ⟨rfl, rfl, rfl⟩ hn
+      · simpa only [fieldSrt?, ctors_set hd hek] using hf
+    obtain ⟨w, hw⟩ := hinh
+    exact codeV_inSrt hd s _ (hM e k j s _ hf' (inSrt_uncoded hd s w hw))
+
+end
+
 /-- Names as codes keep models: where every assertion holds in a model, every assertion of the variant with names as
-codes holds in a model whose variables `n < k` hold the model's values with names as codes, by one coding `c`. -/
+codes holds in a model whose variables `n < k` hold the model's values with names as codes, by one coding `c`, and
+whose selectors on other constructors give values of their fields' sorts where the model's do, `d` being the id
+datatype of `dts`. -/
 theorem code_model {d : Nat} {ts ts' : List Term} (hc : Term.codes d ts = some ts') (M : Model) (k : Nat)
-    (hM : ∀ a ∈ ts, (a.denote M).toBool = true) :
+    (hM : ∀ a ∈ ts, (a.denote M).toBool = true) {dts : List Datatype} (hd : dts[d]? = some idDatatype)
+    (hS : SelSorted dts M) :
     ∃ (M' : Model) (c : String → Int), (∀ n < k, Coded d c (M.vars n) (M'.vars n)) ∧
-      ∀ a ∈ ts', (a.denote M').toBool = true := by
+      SelSorted (dts.set d codedIdDatatype) M' ∧ ∀ a ∈ ts', (a.denote M').toBool = true := by
   let S := ((List.range k).flatMap fun n => (M.vars n).names d) ++ Term.nameStrss d M ts
-  refine ⟨codedModel d S M, rank S, fun n hn => coded_codeV _ fun s hs => ?_, ?_⟩
+  refine ⟨codedModel d S M, rank S, fun n hn => coded_codeV _ fun s hs => ?_, selSorted_codedModel hd hS, ?_⟩
   · exact List.mem_append_left _ (List.mem_flatMap.2 ⟨n, List.mem_range.2 hn, hs⟩)
   · exact codes_holds ts ts' hc hM (fun s hs => List.mem_append_right _ hs)
 

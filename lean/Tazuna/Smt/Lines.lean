@@ -132,7 +132,7 @@ theorem forward_of_line {r e : Ty} {m : MachineV r e}
   obtain ⟨zk, hk⟩ := Option.isSome_iff_exists.1 hc.1
   obtain ⟨zs, hs⟩ := Option.isSome_iff_exists.1 hc.2.1
   obtain ⟨zr, hr⟩ := Option.isSome_iff_exists.1 hc.2.2
-  let M := coverModel [zk, zs, zr, .int now]
+  let M := coverModel L [zk, zs, zr, .int now]
   have hM : ∀ n (h : n < (timerTys m).length), Sorted L (timerTys m)[n] (M.vars n) := by
     intro n hn
     simp only [timerTys, List.length_cons, List.length_nil] at hn
@@ -141,7 +141,7 @@ theorem forward_of_line {r e : Ty} {m : MachineV r e}
     | 1, _ => exact sorted_of_embed hs
     | 2, _ => exact sorted_of_embed hr
     | 3, _ => exact ⟨now, rfl⟩
-  exact (timer_sound m hq ht hM ⟨key, st, records, now, decode_embed _ _ _ hk, decode_embed _ _ _ hs,
+  exact (timer_sound m hq ht hM (layoutSel_coverModel L _) ⟨key, st, records, now, decode_embed _ _ _ hk, decode_embed _ _ _ hs,
     decode_embed _ _ _ hr, rfl⟩).2 hb
 
 theorem firesAt_of_lines {r e : Ty} {records : r.den0} {now : Int} : {ms : List (MachineV r e)} →

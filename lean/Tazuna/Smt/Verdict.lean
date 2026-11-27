@@ -50,14 +50,26 @@ def SentSorted (L : Layout) (q : TypedScript) (M : Model) : Prop :=
   | none => ∀ n (h : n < q.tys.length), VarSorted L q.tys[n] (M.vars n)
 
 /-- The solver found no model of what it reads for the question (`TypedScript.sent`): no model whose variables hold
-values of the sorts of the question's types (`SentSorted`) satisfies every assertion. A model of the script as SMT-LIB
-reads it is such a model (`Term.denote` states the standard's meaning), so this is what an unsat answer says; the
-question's own script then has no model either (`Unsat.noModel`). The sorts hold values, as SMT-LIB's do, so an unsat
-answer is never free: a script with no assertion is not unsat, and a sort with no value cannot make a question unsat
-whatever it asks. `sorts_inhabited` proves the sorts of every script an encoder builds hold values. -/
+values of the sorts of the question's types (`SentSorted`) and whose selectors on other constructors give values of
+their fields' sorts (`SelSorted`) satisfies every assertion. This says no more than an unsat answer: in a script the
+solver accepts, which is well sorted, every term of such a model denotes a value of its sort (`Val.InSrt`), and on
+those values `Term.denote` is the standard's meaning, so the model is an SMT-LIB structure satisfying the script. Ints
+are unbounded, `div` and `mod` are Euclidean (Lean's `/` and `%` on `Int`), `str.len` counts code points and `str.<`
+orders them lexicographically; division by 0 is the model's, as the standard leaves it. A Lean string cannot hold a
+surrogate code point, which SMT-LIB's can, so the models are fewer than SMT-LIB's, never more. Without `SelSorted`
+they would be more: a selector on another constructor could give an Int at a String field, which makes
+`(not (= s ""))` and `(= (str.len s) 0)` hold at once. The question's own script then has no model either
+(`Unsat.noModel`). The sorts hold values, as SMT-LIB's do, so an
+unsat answer is never free: a script with no assertion is not unsat, and a sort with no value cannot make a question
+unsat whatever it asks. `sorts_inhabited` proves the sorts of every script an encoder builds hold values. -/
 structure Unsat (L : Layout) (q : TypedScript) : Prop where
   sorts : SortsInhabited L q.tys
-  noSentModel : ∀ M : Model, SentSorted L q M → ∃ a ∈ (q.sent L).asserts, ¬ Holds M a
+  noSentModel : ∀ M : Model, SentSorted L q M → SelSorted (q.sent L).datatypes M →
+    ∃ a ∈ (q.sent L).asserts, ¬ Holds M a
+
+/-- The model's selectors on other constructors give values of their fields' sorts in the layout's datatypes, which
+every question built from the layout declares. -/
+def LayoutSel (L : Layout) (M : Model) : Prop := ∀ dts, L.datatypes? = some dts → SelSorted dts M
 
 theorem Script.code_asserts {d : Nat} {s s' : Script} (h : s.code d = some s') : Term.codes d s.asserts = some s'.asserts := by
   unfold Script.code at h
@@ -73,27 +85,46 @@ theorem Script.code_asserts {d : Nat} {s s' : Script} (h : s.code d = some s') :
 
 /-- An unsat question has no model whose variables hold values of its types: where the solver read names as codes,
 a model would give one of what it read with each name as its code (`code_model`). -/
+theorem Script.code_datatypes {d : Nat} {s s' : Script} (h : s.code d = some s') :
+    s.datatypes[d]? = some idDatatype ∧ s'.datatypes = s.datatypes.set d codedIdDatatype := by
+  unfold Script.code at h
+  cases hc : (Term.codesC d s.asserts {}).1 with
+  | none => simp [hc] at h
+  | some as =>
+    simp only [hc] at h
+    by_cases hg : (s.datatypes[d]? == some idDatatype) = true
+    · simp only [hg, guard, ite_true, Option.pure_def] at h
+      cases h; exact ⟨by simpa using hg, rfl⟩
+    · simp [hg, guard, failure] at h
+
+/-- An unsat question has no model whose variables hold values of its types and whose selectors on other
+constructors give values of their fields' sorts: where the solver read names as codes, a model would give one of what
+it read with each name as its code (`code_model`). -/
 theorem Unsat.noModel {L : Layout} {q : TypedScript} (h : Unsat L q) (M : Model)
-    (hM : ∀ n (h : n < q.tys.length), VarSorted L q.tys[n] (M.vars n)) : ∃ a ∈ q.script.asserts, ¬ Holds M a := by
+    (hM : ∀ n (h : n < q.tys.length), VarSorted L q.tys[n] (M.vars n)) (hS : SelSorted q.datatypes M) :
+    ∃ a ∈ q.script.asserts, ¬ Holds M a := by
   have hs := h.noSentModel
   unfold TypedScript.sent Script.sent SentSorted at hs
   split at hs
   · rename_i s' hc
     simp only [hc] at hs
     obtain ⟨d, hd, hsc⟩ := Option.bind_eq_some_iff.1 hc
+    obtain ⟨hid, hdts⟩ := Script.code_datatypes hsc
     refine Classical.byContradiction fun hno => ?_
-    obtain ⟨M', c, hcod, hall⟩ := code_model (Script.code_asserts hsc) M q.tys.length
-      (fun a ha => Classical.byContradiction fun hna => hno ⟨a, ha, hna⟩)
-    obtain ⟨a, ha, hna⟩ := hs M' ⟨d, c, hd, fun n hn => ⟨M.vars n, hM n hn, hcod n hn⟩⟩
+    obtain ⟨M', c, hcod, hsel, hall⟩ := code_model (Script.code_asserts hsc) M q.tys.length
+      (fun a ha => Classical.byContradiction fun hna => hno ⟨a, ha, hna⟩) hid hS
+    obtain ⟨a, ha, hna⟩ := hs M' ⟨d, c, hd, fun n hn => ⟨M.vars n, hM n hn, hcod n hn⟩⟩ (hdts ▸ hsel)
     exact hna (hall a ha)
   · rename_i hc
     simp only [hc] at hs
-    exact hs M hM
+    exact hs M hM hS
 
-/-- An unsat question has no model whose variables hold values of the types it was built with. -/
-theorem Unsat.noModel_at {L : Layout} {q : TypedScript} (h : Unsat L q) {tys : List Ty} (ht : q.tys = tys) (M : Model)
-    (hM : ∀ n (h : n < tys.length), VarSorted L tys[n] (M.vars n)) : ∃ a ∈ q.script.asserts, ¬ Holds M a := by
-  subst ht; exact h.noModel M hM
+/-- An unsat question has no model whose variables hold values of the types it was built with and whose selectors
+give values of their fields' sorts in the layout's datatypes, which the question declares. -/
+theorem Unsat.noModel_at {L : Layout} {q : TypedScript} (h : Unsat L q) {tys : List Ty} (ht : q.tys = tys)
+    (hd : L.datatypes? = some q.datatypes) (M : Model) (hM : ∀ n (h : n < tys.length), VarSorted L tys[n] (M.vars n))
+    (hS : LayoutSel L M) : ∃ a ∈ q.script.asserts, ¬ Holds M a := by
+  subst ht; exact h.noModel M hM (hS _ hd)
 
 section
 variable {M : Model}
@@ -778,12 +809,14 @@ theorem bound_cond {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P 
   exact ⟨a.t, stepAsk_t ha, hparts.1, hparts.2, hcond⟩
 
 /-- The questions about the input kind `inp` cover the step from `s` on `x`: some model whose variables hold values of
-their sorts holds the state and the input, in the case the questions ask about. A state and an input within the slots
-are some model's (`decode_reachable`, T3). -/
+their sorts, and whose selectors on other constructors values of their fields' sorts, holds the state and the input,
+in the case the questions ask about. A state and an input within the slots are some model's (`decode_reachable`,
+T3). -/
 def Covered (L : Layout) (T : List TypeDecl) (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v))
     (inp : SymInput v (shapes v) senv.nT) (s : State v) (x : Input v) : Prop :=
   ∃ (hc : v.caller.isData = true) (M : Model),
     (∀ j (h : j < (stateTys v (shapes v) ++ inp.tys).length), Sorted L (stateTys v (shapes v) ++ inp.tys)[j] (M.vars j)) ∧
+    LayoutSel L M ∧
     (SymState.vars 0).decode M L T (shapes v) = some s ∧ inp.decode M L hc = some x ∧
     ∀ t, encodeStep L T P v senv (SymState.vars 0) inp = .ok t → Holds M t.out.case
 
@@ -802,9 +835,10 @@ theorem verdict_covered {P : List AnySite} {E : List AnyEffectSite} (chk : Check
     (is : List (Input v)) (hsupp : Step.StateSupp (run T v (Step.State.init v) is).1) (x : Input v)
     (hcov : Covered L T P v senv inp (run T v (Step.State.init v) is).1 x) :
     (step T v (run T v (Step.State.init v) is).1 x).outcome ≠ .fault f := by
-  obtain ⟨hc, M, hM, hS, hx, hcase⟩ := hcov
+  obtain ⟨hc, M, hM, hsel, hS, hx, hcase⟩ := hcov
   have hno : ∀ q ∈ qs, Unsat L q.ask → ∃ a ∈ q.script.asserts, ¬ Holds M a := fun q hq' hu =>
-    hu.noModel_at (questions_tys L T P v senv hq q hq') M fun n h => varSorted_of_sorted (hM n h)
+    hu.noModel_at (questions_tys L T P v senv hq q hq') (questions_dts L T P v senv hq q hq') M
+      (fun n h => varSorted_of_sorted (hM n h)) hsel
   exact question_fault chk senv inp hq hS (run_inv T chk.reach _ Step.init_inv is) hsupp
     (Tazuna.Ir.run_invariants T _ is hinit) hx hcase (.inl fun q hq' h => hno q hq' (hun q hq' (.inl h))) f hf
     fun q hq' h => hno q hq' (hun q hq' (.inr h))

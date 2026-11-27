@@ -65,10 +65,10 @@ theorem queued_at {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E
     (hreach : x.effect.Reach P)
     (hcf : ∀ p ∈ L.ownPairs v.event, PairLine L T P v senv (ownFits L.count T a0.state x) p) :
     ∀ b, Step.runOwn T a0 x = .ok b → ∃ os, b.own = a0.own ++ os ∧ ∀ y ∈ os, ∃ z, RelV L (.dsl .effect [v.event]) y.effect z := by
-  obtain ⟨M, hM, hS, hx1, hx2⟩ := pair_model hkeys hW hx hx
+  obtain ⟨M, hM, hsel, hS, hx1, hx2⟩ := pair_model hkeys hW hx hx
   obtain ⟨p, hp, ht1, ht2⟩ := pair_kinds senv hx1 hx2
   obtain ⟨bq, tq, hq, -, hor⟩ := hcf p hp
-  obtain ⟨o, ho, hb, -⟩ := pair_unfold chk hL senv hq hM hS hinv.below hsupp hx1 hx2 ht1 ht2 hreach hreach
+  obtain ⟨o, ho, hb, -⟩ := pair_unfold chk hL senv hq hM hsel hS hinv.below hsupp hx1 hx2 ht1 ht2 hreach hreach
   have hR := decode_state hS
   have hfit : Holds M o.codes ∧ ownFits L.count T a0.state x := hor.elim
     (fun h => ⟨(hb h).1, ((pair_fits chk senv hR hinv hqk hx1 hx2 hreach hreach ht1 ht2 ho (hb h).1).1

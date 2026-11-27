@@ -88,11 +88,12 @@ theorem begins_coded {P : List AnySite} {E : List AnyEffectSite} {T : List TypeD
     (hb : Step.Begins T s x a) : QueueCoded L a := by
   obtain ⟨ivs, hivs⟩ := Option.isSome_iff_exists.1 hx
   have hord : ∀ m ∈ v.machines, m.key.ordered T = true := fun m hm => (chk.keys m hm).2
-  rcases covered chk senv hkeys hW x hivs with ⟨inp, hmem, _, M, hM, hS, hxd, hcase⟩ | h
+  rcases covered chk senv hkeys hW x hivs with ⟨inp, hmem, _, M, hM, hsel, hS, hxd, hcase⟩ | h
   · obtain ⟨gs, qs, hqs, hor⟩ := hq inp hmem
     rcases hor with hun | hfit
     · obtain ⟨t, ht, hcodes, hsites, hcond⟩ := bound_cond chk senv inp hqs hS hinv hsupp hheld hxd hcase
-        fun q hq' hn => (hun q hq' hn).noModel_at (questions_tys L T P v senv hqs q hq') M fun n h => varSorted_of_sorted (hM n h)
+        fun q hq' hn => (hun q hq' hn).noModel_at (questions_tys L T P v senv hqs q hq') (questions_dts L T P v senv hqs q hq') M
+          (fun n h => varSorted_of_sorted (hM n h)) hsel
       exact ((step_encode chk senv (decode_state hS) hinv hxd ht).2 hcodes hsites (hcase t ht)).2.2 hcond a hb
     · obtain ⟨a, ha, -⟩ := bind_ok.1 hqs
       have ht := stepAsk_t ha

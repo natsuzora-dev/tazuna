@@ -109,7 +109,7 @@ theorem effSorted_of_rel {e : Ty} {x : OwnEffectV e} {z : Val}
 /-- A model of a pair question's variables: the state's values, then the two effects'. -/
 theorem pair_model {s : State v} (hkeys : Step.KeysOk T s) (hW : Within L (shapes v) s) {x1 x2 : OwnEffectV v.event}
     (he1 : ∃ z, RelV L (.dsl .effect [v.event]) x1.effect z) (he2 : ∃ z, RelV L (.dsl .effect [v.event]) x2.effect z) :
-    ∃ M : Model, (∀ n (h : n < (pairTys v).length), VarSorted L (pairTys v)[n] (M.vars n)) ∧
+    ∃ M : Model, (∀ n (h : n < (pairTys v).length), VarSorted L (pairTys v)[n] (M.vars n)) ∧ LayoutSel L M ∧
       (SymState.vars (v := v) 0).decode M L T (shapes v) = some s ∧
       RelV L (.dsl .effect [v.event]) x1.effect (M.vars (pairVar v)) ∧
       RelV L (.dsl .effect [v.event]) x2.effect (M.vars (pairVar v + 1)) := by
@@ -121,13 +121,13 @@ theorem pair_model {s : State v} (hkeys : Step.KeysOk T s) (hW : Within L (shape
   have hs2 := effSorted_of_rel hz2
   have hsorted := embedState_sorted hvals
   have hlen : vals.length = (stateTys v (shapes v)).length := (forall2_length hsorted).symm
-  have hst : ∀ j (hj : j < vals.length), (coverModel (vals ++ [z1, z2])).vars (0 + j) = vals[j] := fun j hj =>
+  have hst : ∀ j (hj : j < vals.length), (coverModel L (vals ++ [z1, z2])).vars (0 + j) = vals[j] := fun j hj =>
     coverModel_vars (by rw [Nat.zero_add, List.getElem?_append_left hj, List.getElem?_eq_getElem hj])
-  have hv1 : (coverModel (vals ++ [z1, z2])).vars (pairVar v) = z1 :=
+  have hv1 : (coverModel L (vals ++ [z1, z2])).vars (pairVar v) = z1 :=
     coverModel_vars (by rw [pairVar, stateWidth, ← hlen, List.getElem?_append_right (Nat.le_refl _)]; simp)
-  have hv2 : (coverModel (vals ++ [z1, z2])).vars (pairVar v + 1) = z2 :=
+  have hv2 : (coverModel L (vals ++ [z1, z2])).vars (pairVar v + 1) = z2 :=
     coverModel_vars (by rw [pairVar, stateWidth, ← hlen, List.getElem?_append_right (by omega)]; simp)
-  refine ⟨coverModel (vals ++ [z1, z2]), fun n hn => ?_,
+  refine ⟨coverModel L (vals ++ [z1, z2]), fun n hn => ?_, layoutSel_coverModel L _,
     decode_embedState 0 T s pv hpv (fun sm h => (hkeys sm h).2) vals hvals hst, by rw [hv1]; exact hz1, by rw [hv2]; exact hz2⟩
   have hpl : (pairTys v).length = (stateTys v (shapes v)).length + 2 := by simp [pairTys]
   by_cases hlt : n < (stateTys v (shapes v)).length
@@ -164,9 +164,9 @@ theorem pairs_at {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E 
     (he2 : ∃ z, RelV L (.dsl .effect [v.event]) x2.effect z)
     (hreach1 : x1.effect.Reach P) (hreach2 : x2.effect.Reach P) :
     Step.PairCommutes T a0 x1 x2 := by
-  obtain ⟨M, hM, hS, hx1, hx2⟩ := pair_model hkeys hW he1 he2
+  obtain ⟨M, hM, hsel, hS, hx1, hx2⟩ := pair_model hkeys hW he1 he2
   obtain ⟨p, hp, ht1, ht2⟩ := pair_kinds senv hx1 hx2
-  exact pair_sound chk hL senv (hall p hp) hM hS hinv.below hsupp hqk hsa hx1 hx2 hreach1 hreach2 ht1 ht2
+  exact pair_sound chk hL senv (hall p hp) hM hsel hS hinv.below hsupp hqk hsa hx1 hx2 hreach1 hreach2 ht1 ht2
 
 end
 

@@ -269,6 +269,29 @@ structure Model where
   /-- The value of each definition `s<i>`; a model of a script gives each the value of its body. -/
   defs : Nat → Val
 
+mutual
+/-- The value is one of the sort `s` in a script declaring the datatypes `dts`: an Int, a Bool, a string of SMT-LIB's
+domain, or a constructor of the datatype with fields of their sorts. -/
+def Val.InSrt (dts : List Datatype) : Srt → Val → Prop
+  | .int, .int _ | .bool, .bool _ => True
+  | .str, .str s => inDomain s = true
+  | .dt i, .ctor e k vs => e = i ∧ ∃ fs, (dts[i]?.bind (·.ctors[k]?)) = some fs ∧ Val.InSrts dts fs vs
+  | _, _ => False
+def Val.InSrts (dts : List Datatype) : List Srt → List Val → Prop
+  | [], [] => True
+  | s :: ss, v :: vs => Val.InSrt dts s v ∧ Val.InSrts dts ss vs
+  | _, _ => False
+end
+
+/-- The sort of field `j` of constructor `k` of datatype `d`. -/
+def fieldSrt? (dts : List Datatype) (d k j : Nat) : Option Srt := (dts[d]?.bind (·.ctors[k]?)).bind (·[j]?)
+
+/-- A selector applied to a value of another constructor gives a value of its field's sort, wherever that sort holds
+one: SMT-LIB 2.6 leaves the value open but keeps it in the sort (Definition 8 and Remark 11), and a solver accepts only
+datatypes whose sorts hold values (Section 4.2.3), so every field sort of a script it answers does. -/
+def SelSorted (dts : List Datatype) (M : Model) : Prop :=
+  ∀ d k j s v, fieldSrt? dts d k j = some s → (∃ w, Val.InSrt dts s w) → Val.InSrt dts s (M.selOther d k j v)
+
 -- SMT-LIB leaves a selector on a field its constructor lacks to the model, and the default stands for that value.
 set_option linter.tazuna.silentDefault false in
 mutual

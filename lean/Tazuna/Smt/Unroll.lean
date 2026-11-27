@@ -310,6 +310,16 @@ def unrollBase (d : Nat) : Except Refusal (UnrollBase v senv.nT) := do
   let vars ← r.1.mapM fun ty => need (lacks ty) (L.srt? ty)
   pure ⟨dts, r.1, vars, r.2.1, r.2.2.1, r.2.2.2⟩
 
+/-- The runs declare the layout's datatypes. -/
+theorem unrollBase_dts {d : Nat} {B : UnrollBase v senv.nT} (hB : unrollBase L T P v senv d = .ok B) :
+    L.datatypes? = some B.datatypes := by
+  simp only [unrollBase] at hB
+  obtain ⟨_, -, hB⟩ := bind_ok.1 hB
+  obtain ⟨dts, hdts, hB⟩ := bind_ok.1 hB
+  obtain ⟨_, -, hB⟩ := bind_ok.1 hB
+  cases pure_ok.1 hB
+  exact need_ok.1 hdts
+
 end
 
 /-- The kind a step of an unrolled run takes in the model: the first it picks. The state after the step is that

@@ -482,6 +482,26 @@ theorem stepAsk_tys {inp : SymInput v (shapes v) senv.nT} {a : StepAsk v} (ha : 
   cases pure_ok.1 ha
   rfl
 
+/-- Every question about an input kind declares the layout's datatypes. -/
+theorem stepAsk_dts {inp : SymInput v (shapes v) senv.nT} {a : StepAsk v} (ha : stepAsk L T P v senv inp = .ok a)
+    (X : List Term) : L.datatypes? = some (a.script X).datatypes := by
+  simp only [stepAsk] at ha
+  iterate 9 obtain ⟨_, -, ha⟩ := bind_ok.1 ha
+  obtain ⟨dts, hdts, ha⟩ := bind_ok.1 ha
+  cases pure_ok.1 ha
+  exact need_ok.1 hdts
+
+theorem questions_dts {inp : SymInput v (shapes v) senv.nT} {gs : List Target} {qs : List (Question v (shapes v) senv.nT)}
+    (hq : questions L T P v senv inp = .ok (gs, qs)) : ∀ q ∈ qs, L.datatypes? = some q.ask.datatypes := by
+  simp only [questions] at hq
+  obtain ⟨a, ha, hq⟩ := bind_ok.1 hq
+  cases pure_ok.1 hq
+  intro q hq'
+  simp only [List.mem_cons, List.mem_map] at hq'
+  rcases hq' with rfl | ⟨g, -, rfl⟩
+  · exact stepAsk_dts L T P v senv ha _
+  · exact stepAsk_dts L T P v senv ha _
+
 theorem questions_tys {inp : SymInput v (shapes v) senv.nT} {gs : List Target} {qs : List (Question v (shapes v) senv.nT)}
     (hq : questions L T P v senv inp = .ok (gs, qs)) : ∀ q ∈ qs, q.ask.tys = stateTys v (shapes v) ++ inp.tys := by
   simp only [questions] at hq

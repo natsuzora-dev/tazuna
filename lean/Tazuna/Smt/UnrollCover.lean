@@ -905,14 +905,14 @@ generate's "unreached within `d` steps" rests on this. -/
 theorem runs_covered (hL : SortedLayout L) {d : Nat} {B : UnrollBase v senv.nT}
     (hB : unrollBase L T P v senv d = .ok B) (hnr : B.refused = [])
     {xs : List (Input v)} (hlen : xs.length = d) (hfits : RunFits L T P v chk.callerData [] (Step.State.init v) xs) :
-    ∃ M : Model, (∀ n (h : n < B.tys.length), VarSorted L B.tys[n] (M.vars n)) ∧
+    ∃ M : Model, (∀ n (h : n < B.tys.length), VarSorted L B.tys[n] (M.vars n)) ∧ LayoutSel L M ∧
       UnrollRun L T M chk.callerData (Step.State.init v) B.steps xs ∧ ∀ a ∈ B.asserts, Holds M a := by
   subst hlen
   simp only [unrollBase] at hB
   obtain ⟨S0, hS0, hB⟩ := bind_ok.1 hB
   obtain ⟨dts, hdts, hB⟩ := bind_ok.1 hB
   have hv := unrollSteps_vals chk senv xs S0 [] 0 0
-  have hcov := unrollSteps_covers (M := coverModel (runVals L v chk.callerData senv.nT 0 0 xs)) chk senv hL xs S0 [] 0 0
+  have hcov := unrollSteps_covers (M := coverModel L (runVals L v chk.callerData senv.nT 0 0 xs)) chk senv hL xs S0 [] 0 0
     (init_rel (need_ok.1 hS0)) Step.init_inv (fun _ => rfl) IdsExact.nil
   rcases hr : unrollSteps L T P v senv S0 [] 0 0 xs.length with ⟨tys, asserts, steps, refused⟩
   rw [hr] at hB hv hcov
@@ -923,7 +923,7 @@ theorem runs_covered (hL : SortedLayout L) {d : Nat} {B : UnrollBase v senv.nT}
   have hc := hcov hsrt hnr hfits fun q h => by
     rw [Nat.zero_add]
     exact coverModel_vars (List.getElem?_eq_getElem h)
-  exact ⟨_, fun n h => varSorted_of_sorted (forall2_sorted_vars hsorted n h), hc.2, hc.1⟩
+  exact ⟨_, fun n h => varSorted_of_sorted (forall2_sorted_vars hsorted n h), layoutSel_coverModel L _, hc.2, hc.1⟩
 
 end
 

@@ -102,19 +102,19 @@ theorem state_answers (chk : Checked P E T v) (senv : StepEnv L (shapes v)) {res
   · have hno : ∀ f, (step T v s x).outcome ≠ .fault f := fun f h => by rw [hacc] at h; cases h
     rcases inputs_fit chk hin hW x with hx | ⟨hu, -⟩
     · obtain ⟨ivs, hivs⟩ := Option.isSome_iff_exists.1 hx
-      rcases covered chk senv hkeys hW x hivs with ⟨inp, hmem, hc, M, hM, hS, hxd, hcase⟩ | ⟨-, -, -, hq | hf⟩
+      rcases covered chk senv hkeys hW x hivs with ⟨inp, hmem, hc, M, hM, hsel, hS, hxd, hcase⟩ | ⟨-, -, -, hq | hf⟩
       · obtain ⟨a, q, ha, hq, hu, hb⟩ := hl inp hmem
-        have hun : ∀ q' : TypedScript, q'.tys = stateTys v (shapes v) ++ inp.tys → Unsat L q' →
-            ∃ c ∈ q'.script.asserts, ¬ Holds M c := fun q' ht hu' =>
-          hu'.noModel_at ht M fun n h => varSorted_of_sorted (hM n h)
-        have hqt : q.tys = stateTys v (shapes v) ++ inp.tys := by
+        have hun : ∀ q' : TypedScript, q'.tys = stateTys v (shapes v) ++ inp.tys → L.datatypes? = some q'.datatypes →
+            Unsat L q' → ∃ c ∈ q'.script.asserts, ¬ Holds M c := fun q' ht hd hu' =>
+          hu'.noModel_at ht hd M (fun n h => varSorted_of_sorted (hM n h)) hsel
+        have hqt : q.tys = stateTys v (shapes v) ++ inp.tys ∧ L.datatypes? = some q.datatypes := by
           obtain ⟨_, -, hq'⟩ := bind_ok.1 hq
           obtain ⟨_, -, hq'⟩ := bind_ok.1 hq'
           obtain ⟨_, -, hq'⟩ := bind_ok.1 hq'
           cases pure_ok.1 hq'
-          exact stepAsk_tys L T P v senv ha _
-        exact step_answers chk senv ha hq (hun q hqt hu) (hun _ (stepAsk_tys L T P v senv ha _) hb) hS hinv hsupp
-          hheld hxd hcase hno
+          exact ⟨stepAsk_tys L T P v senv ha _, stepAsk_dts L T P v senv ha _⟩
+        exact step_answers chk senv ha hq (hun q hqt.1 hqt.2 hu)
+          (hun _ (stepAsk_tys L T P v senv ha _) (stepAsk_dts L T P v senv ha _) hb) hS hinv hsupp hheld hxd hcase hno
       · obtain ⟨i, c, y, rfl⟩ := hq
         exact absurd hacc (by simp only [step]; split <;> simp)
       · exact absurd hf (hno _)

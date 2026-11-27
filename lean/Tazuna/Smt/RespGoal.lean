@@ -467,9 +467,9 @@ theorem response_within (chk : Checked P E T v) (senv : StepEnv L (shapes v)) (h
     ¬ resp.Violated ((run T v (Step.State.init v) xs).2.map Result.moment) := by
   intro hviol
   have htime : Step.TimelyRun T (Step.State.init v) xs := has .timelyClock (by simp [Step.Assumption.ofResponses])
-  obtain ⟨M, hM, hrun, hA⟩ := runs_covered chk senv hL hB hnr hlen
+  obtain ⟨M, hM, hsel, hrun, hA⟩ := runs_covered chk senv hL hB hnr hlen
     (runFits_of _ _ _ _ _ _ _ hin fun a ha => has a (List.mem_append_left _ ha))
-  obtain ⟨a, ha, hna⟩ := hun.noModel M hM
+  obtain ⟨a, ha, hna⟩ := hun.noModel M hM (hsel _ (unrollBase_dts L T P v senv hB))
   exact hna (((B.holds_withGoal g).2 ⟨hA, (respGoal_iff hrun hg).2 ⟨hsrc, hrf, htime, hviol⟩⟩) a ha)
 
 /-- Goal soundness: in every model of prove's script for the response whose variables hold values of their sorts, the

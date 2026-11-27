@@ -152,7 +152,7 @@ theorem sorts_inhabited (hL : SortedLayout L) (hd : L.datatypes? = some dts) {ty
   have hs := mapM_some_mem (f := L.srt?) (xs := tys) (by simp [hv])
   have hw : ∀ n (h : n < tys.length), ∃ w, VarSorted L tys[n] w := fun n h =>
     varSorted_exists hL hd (hs _ (List.getElem_mem h)) (ht _ (List.getElem_mem h))
-  refine ⟨{ coverModel [] with vars := fun n => if h : n < tys.length then (hw n h).choose else .bool false },
+  refine ⟨{ coverModel L [] with vars := fun n => if h : n < tys.length then (hw n h).choose else .bool false },
     fun n h => ?_⟩
   simp only [h, dite_true]
   exact (hw n h).choose_spec
