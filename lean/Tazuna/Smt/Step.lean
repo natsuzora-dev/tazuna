@@ -54,7 +54,8 @@ def encodeStep (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v))
     let (apply, ca) ← v.apply.code L
     let (inv, ci) ← v.invariants.code L
     let ks ← need (.limit (.slots v.caller)) (callerTerms L x.data.origin x.callers)
-    let ⟨o, c, cs⟩ ← encodeCommand L T P v (shapes v) senv x cc apply inv ks S caller input
+    let live := (SymInput.command (shs := shapes v) (slots := senv.nT) i caller input).live P
+    let ⟨o, c, cs⟩ ← encodeCommand L T P live v (shapes v) senv x cc apply inv ks S caller input
     pure ⟨.command o, c, andT cx (andT ca ci), cs⟩
   | .query i caller input => do
     let q := v.queries.get i
@@ -65,17 +66,20 @@ def encodeStep (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v))
   | .answer k j to value => do
     let (apply, ca) ← v.apply.code L
     let (inv, ci) ← v.invariants.code L
-    let ⟨o, c, cs⟩ ← encodeAnswer L T P (shapes v) k (shapes v)[k] senv j apply inv S to value
+    let live := (SymInput.answer (v := v) (shs := shapes v) k j to value).live P
+    let ⟨o, c, cs⟩ ← encodeAnswer L T P live (shapes v) k (shapes v)[k] senv j apply inv S to value
     pure ⟨.answer o, c, andT ca ci, cs⟩
   | .unmatched t to _ => pure ⟨.unmatched (answerUnmatchedT L senv t S.pending to), tt, tt, tt⟩
   | .event i value => do
     let (ec, ce) ← EventCode.of L v i
-    let ⟨o, c, cs⟩ ← encodeEvent L T P v (shapes v) senv ec S value
+    let live := (SymInput.event (shs := shapes v) (slots := senv.nT) i value).live P
+    let ⟨o, c, cs⟩ ← encodeEvent L T P live v (shapes v) senv ec S value
     pure ⟨.event o, c, ce, cs⟩
   | .clock time => do
     let (apply, ca) ← v.apply.code L
     let (inv, ci) ← v.invariants.code L
-    let ⟨o, c, cs⟩ ← encodeClock L T P v (shapes v) senv apply inv S time
+    let live := (SymInput.clock (v := v) (shs := shapes v) (slots := senv.nT) time).live P
+    let ⟨o, c, cs⟩ ← encodeClock L T P live v (shapes v) senv apply inv S time
     pure ⟨.clock o, c, andT ca ci, cs⟩
 
 end
@@ -193,7 +197,8 @@ theorem step_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV} (
       rw [holds_andT, holds_andT] at hcodes; exact hcodes
     have hks' := need_ok.1 hks
     have ex := command_encode chk (fun _ => shapes_inSites chk.reach) (shapesHold_shapes v) s hinv i caller input hcc hcx
-      happ hca hinvc hci hks' senv hR hsc hsi hcmd hcs
+      happ hca hinvc hci hks' senv hR hsc hsi _ (fun _ hb => liveJ_site hb) (fun _ o _ hb ho h => liveJ_run T chk.reach hb o ho h)
+      (fun _ _ hdec h => liveJ_command T chk.reach i s _ input hdec h) hcmd hcs
     refine ⟨ex.1, ex.2.1, fun hcond a hb => ?_⟩
     cases hb with
     | command _ _ _ _ h => exact ex.2.2 hcond a h
@@ -216,7 +221,9 @@ theorem step_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV} (
     obtain ⟨hca, hci⟩ := (holds_andT _ _).1 hcodes
     have hx' : decodeAnswer M L (answerTy (shapes v)[k].output (shapes v)[k].rejection) toT valT = some x := hx
     obtain ⟨hty, to, value, rfl, hto, hval⟩ := decode_answer hx'
-    have ex := answer_encode chk (fun _ => shapes_inSites chk.reach) (shapesHold_shapes v) s hinv hk to value happ hca hinvc hci senv j hR hto hty hval hans hcs
+    have ex := answer_encode chk (fun _ => shapes_inSites chk.reach) (shapesHold_shapes v) s hinv hk to value happ hca hinvc hci senv j hR hto hty hval
+      _ (fun _ hb => liveJ_site hb) (fun _ o _ hb ho h => liveJ_run T chk.reach hb o ho h)
+      (fun env _ h => liveJ_answer T chk.reach (shapes_inSites chk.reach (List.getElem_mem _)).1 _ value env h) hans hcs
     refine ⟨by rw [ex.1]; exact ⟨fun h => h hhit, fun h _ => h⟩, fun hcond => (ex.2 hcond hhit).1, fun hcond a hb => ?_⟩
     cases hb with
     | answer _ _ p h _ hp hhold happ => exact (ex.2 hcond hhit).2 p hp h hhold a happ
@@ -240,7 +247,8 @@ theorem step_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV} (
     obtain ⟨⟨o, c, cs⟩, hev, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
     have ex := fun hce => event_encode chk (fun _ => shapes_inSites chk.reach) (shapesHold_shapes v) s hinv i value hec
-      hce hR hsv senv hev
+      hce hR hsv senv _ (fun _ hb => liveJ_site hb) (fun _ o _ hb ho h => liveJ_run T chk.reach hb o ho h)
+      (fun _ h => liveJ_event T chk.reach i s value h) hev
     refine ⟨eventCode_exact hec, fun hce hcs _ => ⟨(ex hce hcs).1, (ex hce hcs).2.1, fun hcond a hb => ?_⟩⟩
     cases hb with
     | event _ _ _ h => exact (ex hce hcs).2.2 hcond a h
@@ -253,7 +261,8 @@ theorem step_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV} (
     refine ⟨apply_inv_exact happ hinvc, fun hcodes hcs _ => ?_⟩
     obtain ⟨hca, hci⟩ := (holds_andT _ _).1 hcodes
     have ex := clock_encode chk (fun _ => shapes_inSites chk.reach) (shapesHold_shapes v) s hinv time happ hca hinvc hci
-      hR hst senv hcl hcs
+      hR hst senv _ (fun _ hb => liveJ_site hb) (fun _ o _ hb ho h => liveJ_run T chk.reach hb o ho h)
+      (fun _ _ _ hf h => liveJ_clock chk.reach _ _ hf h) hcl hcs
     refine ⟨ex.1, ex.2.1, fun hcond a hb => ?_⟩
     cases hb with
     | clock _ s' effs _ hlt hf h => exact ex.2.2 hcond hlt s' effs hf a h

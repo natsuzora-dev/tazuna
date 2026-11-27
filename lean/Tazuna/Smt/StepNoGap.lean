@@ -380,6 +380,7 @@ end
 
 section
 variable {L : Layout} {P : List AnySite} {ds : List (String × DeclaredV)} {H : List HandleSite} {v : ServiceV}
+  {live : Option (List SiteId)}
 
 /-- The types and codes a command's step needs. -/
 structure CommandOk (L : Layout) (P : List AnySite) (ds : List (String × DeclaredV)) (H : List HandleSite)
@@ -497,6 +498,7 @@ end
 
 section
 variable {L : Layout} {P : List AnySite} {ds : List (String × DeclaredV)} {H : List HandleSite} {v : ServiceV}
+  {live : Option (List SiteId)}
 
 theorem tupleCodes_ok (d : Nat) (x : Term) : (Γ : List Ty) → (i : Nat) → {σ : Codes Γ} →
     tupleCodes d Γ x i = some σ → (∀ u ∈ Γ, Avail L u) → CodesOk L P ds H Γ σ
@@ -599,7 +601,7 @@ theorem encodeOwnKind_sound {shs : List (PendingShape v.event)} (h : ServiceGot 
 theorem encodeOwnStep_sound {shs : List (PendingShape v.event)} (h : ServiceGot L P ds H v shs) (T : List TypeDecl)
     (senv : StepEnv L shs) {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)} (happ : CodeOk L P ds H _ apply)
     (records now fresh n q eff : Term) (xs : PerMachine (fun _ => Term) v.machines) :
-    Sound (fun _ => True) (encodeOwnStep L T P v shs senv apply records now fresh n q eff xs) := by
+    Sound (fun _ => True) (encodeOwnStep L T P live v shs senv apply records now fresh n q eff xs) := by
   unfold encodeOwnStep
   refine sound_bind (sound_mapM _ fun ⟨key, j⟩ hkj => ?_) fun _ _ => trivial
   exact sound_bind (encodeOwnKind_sound h T senv _ happ _ _ _ _ _ _ _ _ (List.mem_of_getElem? (List.mem_zipIdx_iff_getElem?.1 hkj))) fun _ _ => trivial
@@ -609,11 +611,12 @@ end
 
 section
 variable {L : Layout} {P : List AnySite} {ds : List (String × DeclaredV)} {H : List HandleSite} {v : ServiceV}
+  {live : Option (List SiteId)}
 
 theorem encodeSettle_sound {shs : List (PendingShape v.event)} (h : ServiceGot L P ds H v shs) (T : List TypeDecl)
     (senv : StepEnv L shs) {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)} (happ : CodeOk L P ds H _ apply)
     (dflt now : Term) : (fuel k : Nat) → (S : List OwnSlot) → (t : StepTerms v) →
-    Sound (fun _ => True) (encodeSettle L T P v shs senv apply dflt now fuel k S t)
+    Sound (fun _ => True) (encodeSettle L T P live v shs senv apply dflt now fuel k S t)
   | 0, _, _, _ => trivial
   | f + 1, k, S, t => by
     simp only [encodeSettle]
@@ -634,7 +637,7 @@ theorem instFitsT_sound {r e : Ty} : (ms : List (MachineV r e)) → (∀ m ∈ m
 theorem encodeFinish_sound {shs : List (PendingShape v.event)} (h : ServiceGot L P ds H v shs) (T : List TypeDecl)
     (senv : StepEnv L shs) {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)} (happ : CodeOk L P ds H _ apply)
     {inv : Code (Ty.fn [v.records] Ty.rules)} (hinv : CodeOk L P ds H _ inv) (now fresh pending : Term)
-    (o : EventsOut v) : Sound (fun _ => True) (encodeFinish L T P v shs senv apply inv now fresh pending o) := by
+    (o : EventsOut v) : Sound (fun _ => True) (encodeFinish L T P live v shs senv apply inv now fresh pending o) := by
   have hL := h.sorted
   unfold encodeFinish
   refine sound_bind (encodeSettle_sound h T senv happ _ _ _ _ _ _) fun _ _ => ?_
@@ -649,7 +652,7 @@ theorem encodeCommand_sound {shs : List (PendingShape v.event)} (h : ServiceGot 
     (hens : CodeOk L P ds H _ cc.ensures) {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)}
     (happ : CodeOk L P ds H _ apply) {inv : Code (Ty.fn [v.records] Ty.rules)} (hinv : CodeOk L P ds H _ inv)
     (callers : List Term) (S : SymState v) (caller input : Term) :
-    Sound (fun _ => True) (encodeCommand L T P v shs senv x cc apply inv callers S caller input) := by
+    Sound (fun _ => True) (encodeCommand L T P live v shs senv x cc apply inv callers S caller input) := by
   have hL := h.sorted
   unfold encodeCommand
   refine sound_bind (adtCtor_sound (avail_of_got h.origin) _ _) fun _ _ => ?_
@@ -669,7 +672,7 @@ theorem encodeWrap_sound {i : Fin v.subscribes.length} {ec : EventCode v i} (hw 
 theorem encodeEvent_sound {shs : List (PendingShape v.event)} (h : ServiceGot L P ds H v shs) (T : List TypeDecl)
     (senv : StepEnv L shs) {i : Fin v.subscribes.length} {ec : EventCode v i} (ha : CodeOk L P ds H _ ec.apply)
     (hw : CodeOk L P ds H _ ec.wrap) (hn : CodeOk L P ds H _ ec.invariants) (S : SymState v) (value : Term) :
-    Sound (fun _ => True) (encodeEvent L T P v shs senv ec S value) := by
+    Sound (fun _ => True) (encodeEvent L T P live v shs senv ec S value) := by
   unfold encodeEvent
   refine sound_bind (encodeWrap_sound hw (h.subscribes i).1 (avail_of_got h.event) _) fun _ _ => ?_
   refine sound_bind (encodeEvents_sound h T senv ha _ _ _ _ _ _) fun _ _ => ?_
@@ -688,6 +691,7 @@ end
 
 section
 variable {L : Layout} {P : List AnySite} {ds : List (String × DeclaredV)} {H : List HandleSite} {v : ServiceV}
+  {live : Option (List SiteId)}
 
 /-- What an answer to a request of the shape needs: the captured values' tuples, the input's and answer's types and
 the shape's sites. -/
@@ -722,7 +726,7 @@ theorem encodeAnswer_sound {shs : List (PendingShape v.event)} (h : ServiceGot L
     (k : Nat) {sh : PendingShape v.event} (ha : AnswerOk L P ds H sh) (senv : StepEnv L shs) (j : Fin senv.nT)
     {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)} (happ : CodeOk L P ds H _ apply)
     {inv : Code (Ty.fn [v.records] Ty.rules)} (hinv : CodeOk L P ds H _ inv) (S : SymState v) (to value : Term) :
-    Sound (fun _ => True) (encodeAnswer L T P shs k sh senv j apply inv S to value) := by
+    Sound (fun _ => True) (encodeAnswer L T P live shs k sh senv j apply inv S to value) := by
   have hL := h.sorted
   unfold encodeAnswer
   refine sound_bind (findE_sound hL (avail_of_got ha.answerΓ) has_find_tuple) fun _ _ => ?_
@@ -848,11 +852,12 @@ end
 
 section
 variable {L : Layout} {P : List AnySite} {ds : List (String × DeclaredV)} {H : List HandleSite} {v : ServiceV}
+  {live : Option (List SiteId)}
 
 theorem encodeClock_sound {shs : List (PendingShape v.event)} (h : ServiceGot L P ds H v shs) (T : List TypeDecl)
     (senv : StepEnv L shs) {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)} (happ : CodeOk L P ds H _ apply)
     {inv : Code (Ty.fn [v.records] Ty.rules)} (hinv : CodeOk L P ds H _ inv) (S : SymState v) (time : Term) :
-    Sound (fun _ => True) (encodeClock L T P v shs senv apply inv S time) := by
+    Sound (fun _ => True) (encodeClock L T P live v shs senv apply inv S time) := by
   unfold encodeClock
   refine sound_bind (encodeRounds_sound h.sorted T senv h.entry _ h.machines _ _ _ _ _ _ _) fun _ _ => ?_
   exact sound_bind (encodeFinish_sound h T senv happ hinv _ _ _ _) fun _ _ => trivial
@@ -862,6 +867,7 @@ end
 
 section
 variable {L : Layout} {P : List AnySite} {ds : List (String × DeclaredV)} {H : List HandleSite} {v : ServiceV}
+  {live : Option (List SiteId)}
 
 /-- The step encoding refuses only for the spec's reasons where the layout has every type the step looks up and the
 pending shapes' types and sites. -/

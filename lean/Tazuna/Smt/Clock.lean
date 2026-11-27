@@ -554,12 +554,12 @@ structure ClockOut (v : ServiceV) where
 /-- A clock line's step from the state terms: `cascade + 1` firing rounds at the line's time `time`, then the step's end
 from the requests and own effects the rounds start. Each part's condition is asked only where the step reaches it;
 the second term is the codes' condition. -/
-def encodeClock (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
+def encodeClock (P : List AnySite) (live : Option (List SiteId)) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
     (apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)) (invariants : Code (Ty.fn [v.records] Ty.rules))
     (S : SymState v) (time : Term) : Except Refusal (Encoded (ClockOut v)) := do
   let (ro, cr) ← encodeRounds L T shs v.declared senv v.machines S.records time (v.bounds.cascadeNat + 1) S.machines tt
     S.nextId (.int 0)
-  let ⟨fo, cf, cfx⟩ ← encodeFinish L T P v shs senv apply invariants time S.fresh S.pending
+  let ⟨fo, cf, cfx⟩ ← encodeFinish L T P live v shs senv apply invariants time S.fresh S.pending
     ⟨S.records, ro.tables, ro.nextId, ro.news, ro.owns, ro.queued, []⟩
   let forward := Term.le S.now time
   pure ⟨⟨forward, ro.over, ro, fo⟩, .ite forward (andT cr (.ite ro.over tt cf)) tt, cfx⟩
@@ -908,7 +908,12 @@ theorem clock_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked 
     {S : SymState v} (hR : StateRel M L T shs S s) {st : Term} (hst : st.denote M = .int time)
     (senv : StepEnv L shs)
     {o : ClockOut v} {cond cfx : Term}
-    (henc : encodeClock L T P v shs senv apply inv S st = .ok ⟨o, cond, cfx⟩)
+    {live : Option (List SiteId)} (J : Step.Acc v → Prop)
+    (hJl : ∀ b, J b → ∀ o ∈ b.own, ∀ l, live = some l → o.site ∈ l)
+    (hJr : ∀ b o b', J b → o ∈ b.own → Step.runOwn T b o = .ok b' → J b')
+    (hJ : ∀ s' effs a1, Step.fire { s with now := time } (v.bounds.cascadeNat + 1) = some (s', effs) →
+      Step.start { state := s' } effs = .ok a1 → J a1)
+    (henc : encodeClock L T P live v shs senv apply inv S st = .ok ⟨o, cond, cfx⟩)
     (hcfx : Holds M cfx) :
     let r := step T v s (.clock time)
     (Holds M cond ↔ (s.now ≤ time →
@@ -964,7 +969,8 @@ theorem clock_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked 
           rw [(finish_encode chk hshs hshp happ hca hci hcinv senv s
             .accepted { state := s0 } rfl hinv0 hst hR.pending hdone
             (fun a1 h => ⟨Step.start_inv { state := s' } effs hinv' hreach hfrom h,
-              Step.start_queue { state := s' } effs h (by simp [Step.QueueOk]) hreach⟩) h2 hcfx).1]
+              Step.start_queue { state := s' } effs h (by simp [Step.QueueOk]) hreach⟩) J hJl hJr
+            (fun a1 h => hJ s' effs a1 hfire h) h2 hcfx).1]
           constructor
           · intro h s'' effs' heq
             simp only [Option.some.injEq, Prod.mk.injEq] at heq
@@ -1010,7 +1016,8 @@ theorem clock_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked 
         exact (finish_encode chk hshs hshp happ hca hci hcinv senv s
           .accepted { state := s0 } rfl hinv0 hst hR.pending hdone
           (fun a1 h => ⟨Step.start_inv { state := s' } effs hinv' hreach (Step.fire_inv chk.machines s0 hinv0 _ hfire).2.2 h,
-            Step.start_queue { state := s' } effs h (by simp [Step.QueueOk]) hreach⟩) h2 hcfx).2 hrest
+            Step.start_queue { state := s' } effs h (by simp [Step.QueueOk]) hreach⟩) J hJl hJr
+            (fun a1 h => hJ s' effs a1 hfire h) h2 hcfx).2 hrest
     · have hlt : time < s.now := by omega
       simp only [ht, decide_false, Val.toBool, Bool.false_eq_true, ite_false, r, step, hlt, ite_true]
   · have hfw : (Term.le S.now st).denote M = .bool true := by

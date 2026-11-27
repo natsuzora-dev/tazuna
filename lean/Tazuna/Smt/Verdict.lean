@@ -434,7 +434,8 @@ theorem settle_breaks {f : Fault} (o : SettleOut v) (h : o.fault? M = some f) :
     have hkm := List.mem_of_find?_eq_some hk
     have htest := List.find?_some hk
     obtain ⟨g, hg, hcov, hbr⟩ := kind_breaks k.2 hkf
-    refine ⟨g, List.mem_append_left _ (List.mem_flatMap.2 ⟨st, hmem, List.mem_flatMap.2 ⟨k, hkm, hg⟩⟩), hcov, ?_⟩
+    refine ⟨g, List.mem_append_left _ (List.mem_flatMap.2 ⟨st, hmem, List.mem_flatMap.2 ⟨k, List.mem_append_left _ hkm, hg⟩⟩),
+      hcov, ?_⟩
     have hb : Holds M (anyT (o.steps.map fun st => andT st.1 (anyT (st.2.kinds.map fun k => andT k.1 (k.2.breaks g))))) :=
       (holds_anyT _).2 ⟨_, List.mem_map_of_mem hmem, (holds_andT _ _).2 ⟨hpred.1,
         (holds_anyT _).2 ⟨_, List.mem_map_of_mem hkm, (holds_andT _ _).2 ⟨htest, hbr⟩⟩⟩⟩
@@ -851,8 +852,8 @@ theorem question_fault {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
       have hw := Term.const?_denote M _ hk
       simp only [Holds, hw] at hbr
       simp [hbr]
-  exact stepAsk_goal chk senv ha hS hinv hsupp hkeys hx hcase hside hheldH hcond (hun ⟨inp, some g, _⟩
-    (List.mem_cons_of_mem _ (List.mem_map.2 ⟨g, List.mem_filter.2 ⟨mem_dedup hg, hkeep⟩, rfl⟩)) ⟨g, rfl, hn⟩) hbr
+  exact stepAsk_goal chk senv ha hS hinv hsupp hkeys hx hcase hside hheldH hcond (hun ⟨inp, some g, _, _⟩
+    (List.mem_cons_of_mem _ (List.mem_map.2 ⟨g, List.mem_filter.2 ⟨mem_dedup hg, by simp only [hkeep, Bool.true_or]⟩, rfl⟩)) ⟨g, rfl, hn⟩) hbr
 
 /-- What an input kind's bound question says where it has no model: wherever the symbolic state decodes to a state of
 the right shape whose names are below its counter and whose invariants hold and the symbolic input to an input, in

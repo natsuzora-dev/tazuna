@@ -132,6 +132,9 @@ elab "#check_tazuna_reach" : command => do
     -- and every step keeps each machine's instances at the keys `instances` gives at the records (`Step.KeysOk`), as
     -- the questions assume of their state.
     ``Tazuna.Smt.fault_sound,
+    -- A question whose goal is false in every model (a target of an own kind the step cannot queue) has no model, so
+    -- prove reads it as unsat without the solver.
+    ``Tazuna.Smt.questions_decided,
     -- T4 for every run (Prove.proved): where every input kind's lines about the rules named n read proved, the
     -- initial state fits the slots and every value an input carries does, no step of any run on valid inputs from an
     -- initial state whose invariants hold faults naming n. The bound questions keep every reached state within the slots

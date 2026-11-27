@@ -23,7 +23,7 @@ variable (L : Layout) (T : List TypeDecl)
 /-- A command step's outcome terms, its condition and the codes' condition, from the codes of the command's and the
 service's functions, the terms of the state, the outside caller and the input, and the listed origins' constants. The
 condition asks only for what the step computes: the step's end only where `decide` accepted and `ensures` held. -/
-def encodeCommand (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
+def encodeCommand (P : List AnySite) (live : Option (List SiteId)) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
     (x : CommandV v.records v.event v.caller) (cc : CommandCode x) (apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records))
     (invariants : Code (Ty.fn [v.records] Ty.rules)) (callers : List Term)
     (S : SymState v) (caller input : Term) :
@@ -32,7 +32,7 @@ def encodeCommand (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.
   let (a, c1) ← encodeAdmit (c := Ty.origin v.caller) L cc.accepts callers origin input
   let cx ← encodeCtx L S.records S.now S.fresh origin input
   let (dc, cd) ← encodeDecide L T v shs senv x cc apply cx S.now S.records S.machines S.nextId (.int 0)
-  let ⟨fo, cf, cfx⟩ ← encodeFinish L T P v shs senv apply invariants S.now (.add S.fresh (.int 1)) S.pending dc.after
+  let ⟨fo, cf, cfx⟩ ← encodeFinish L T P live v shs senv apply invariants S.now (.add S.fresh (.int 1)) S.pending dc.after
   pure ⟨⟨a.callerOk, a.rules, dc, fo⟩,
     .ite a.callerOk (andT c1 (.ite (allT (a.rules.map (·.2)))
       (andT cd (.ite (.and dc.ok (allT (dc.ensures.map (·.2)))) cf tt)) tt)) tt, cfx⟩
@@ -78,7 +78,12 @@ theorem command_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV
     (hsc : RelV L v.caller (Ty.up _ ((v.commands.get i).data).caller caller) (sc.denote M))
     (hsi : RelV L (v.commands.get i).input (Ty.up _ ((v.commands.get i).data).input input) (si.denote M))
     {o : CommandOut v} {cond cfx : Term}
-    (henc : encodeCommand L T P v shs senv (v.commands.get i) cc apply inv ks S sc si = .ok ⟨o, cond, cfx⟩) (hcfx : Holds M cfx) :
+    {live : Option (List SiteId)} (J : Step.Acc v → Prop)
+    (hJl : ∀ b, J b → ∀ o ∈ b.own, ∀ l, live = some l → o.site ∈ l)
+    (hJr : ∀ b o b', J b → o ∈ b.own → Step.runOwn T b o = .ok b' → J b')
+    (hJ : ∀ events a1, (v.commands.get i).decide.fn (Step.ctx s s.records (Step.outside caller) input, ()) = .inl (events, ()) →
+      Step.applyEvents T { state := { s with fresh := s.fresh + 1 } } events = .ok a1 → J a1)
+    (henc : encodeCommand L T P live v shs senv (v.commands.get i) cc apply inv ks S sc si = .ok ⟨o, cond, cfx⟩) (hcfx : Holds M cfx) :
     let x := v.commands.get i
     let ctx := Step.ctx s s.records (Step.outside caller) input
     let r := step T v s (.command i caller input)
@@ -120,10 +125,11 @@ theorem command_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV
   have D := decide_encode chk hshs hshp x hcc hccx happ hca senv { state := s1 } ctx hcx hR.now hR.records hR.machines
     hR.nextId (q := .int 0) (q0 := 0) rfl (fresh := .add S.fresh (.int 1)) (by simp [Term.denote, hR.fresh, s1, Val.toInt])
     h2
-  have hfin := fun events (hacc : AccRel M L T shs { state := s1 } dc.after (.add S.fresh (.int 1)) 0
+  have hfin := fun events (hdv : x.decide.fn (ctx, ()) = .inl (events, ()))
+      (hacc : AccRel M L T shs { state := s1 } dc.after (.add S.fresh (.int 1)) 0
       (Step.applyEvents T { state := s1 } events)) =>
     finish_encode chk hshs hshp happ hca hinv hci senv s1 .accepted { state := s1 } rfl hinv1 hR.now hR.pending hacc
-      (applyEvents_ok chk.reach _ rfl hinv1 events) h3 hcfx
+      (applyEvents_ok chk.reach _ rfl hinv1 events) J hJl hJr (fun a1 h => hJ events a1 hdv h) h3 hcfx
   refine ⟨?_, fun hc => ?_, fun hc a hex => ?_⟩
   · obtain ⟨⟨_, c1'⟩, g1, hcc0⟩ := bind_ok.1 hcc
     obtain ⟨_, -, hcc0⟩ := bind_ok.1 hcc0
@@ -168,7 +174,7 @@ theorem command_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV
           obtain ⟨hokt, hbe, hacc, -⟩ := R (E.2 h)
           rw [holds_ite_tt (b := decide (Step.broken (x.ensures.fn (ctx, (Step.reactAll T s1 events).1.records, ())) = []))
             (by simp only [Term.denote, toBool_bool, hokt, toBool_allT_rules, hbe, Bool.true_and]), decide_eq_true_iff]
-          exact imp_congr_right fun _ => (hfin events hacc).1
+          exact imp_congr_right fun _ => (hfin events hdv hacc).1
         exact ⟨fun ⟨⟨p2, pd⟩, ht⟩ => ⟨p2, pd, (tail ⟨p2, pd⟩).1 ht⟩,
           fun ⟨p2, pd, pt⟩ => ⟨⟨p2, pd⟩, (tail ⟨p2, pd⟩).2 pt⟩⟩
     constructor
@@ -226,7 +232,8 @@ theorem command_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV
               exact decide_eq_true (by rw [← hr]; exact hbe'))).1 hct rfl
           rw [happly] at hacc
           exact (finish_encode chk hshs hshp happ hca hinv hci senv s1 .accepted { state := s1 } rfl hinv1 hR.now hR.pending hacc
-            (fun a1 h => applyEvents_ok chk.reach _ rfl hinv1 events a1 (happly.trans h)) h3 hcfx).2 hcf
+            (fun a1 h => applyEvents_ok chk.reach _ rfl hinv1 events a1 (happly.trans h)) J hJl hJr
+            (fun a1 h => hJ events a1 hdec (happly.trans h)) h3 hcfx).2 hcf
   · simp only [Step.execCommand, x] at hex
     split at hex
     · cases hex

@@ -1062,4 +1062,335 @@ theorem step_events (hi : 15 ≤ i) (hq : Quiet i v) (hc : ∀ k ∈ v.cascadeEv
 
 end Step
 
+/-! The own effects a step queues. An own effect names the kept function it runs at its answer, written at a site;
+the cascade's encoding asks only for the own kinds whose answer site some function the step runs can write. A
+machine's `effect` may write any of its sites. A reaction whose code is a `case` on one of its arguments writes only
+the sites of the clauses an allowed value can take: a clause whose pattern is a constructor of the declaration `i`
+that `ok` rules out never runs (`EffectFun.reach_live`). -/
+
+/-- Whether a pattern can match a value of the declaration `i` built with a constructor `ok` allows. -/
+def Pat.live (i : Nat) (ok : Nat → Bool) {t : Ty} {Δ : List Ty} : Pat t Δ → Bool
+  | @Pat.ctor j _ _ _ v _ => j != i || ok v.val
+  | _ => true
+
+section
+variable (i : Nat) (ok : Nat → Bool) {G : List Ty} (D : Defs G)
+
+/-- The kept functions the clauses an allowed value can take write. -/
+def Clauses.liveSites {Γ : List Ty} {t r : Ty} {sh : List Shape} : Clauses G Γ t r sh → List AnySite
+  | .nil => []
+  | .cons p body rest => (if p.live i ok then body.sites D else []) ++ Clauses.liveSites rest
+  | .guarded p g body rest => (if p.live i ok then g.sites D ++ body.sites D else []) ++ Clauses.liveSites rest
+
+/-- The globals the clauses an allowed value can take read. -/
+def Clauses.liveGlobals {Γ : List Ty} {t r : Ty} {sh : List Shape} : Clauses G Γ t r sh → List Nat
+  | .nil => []
+  | .cons p body rest => (if p.live i ok then body.globals else []) ++ Clauses.liveGlobals rest
+  | .guarded p g body rest => (if p.live i ok then g.globals ++ body.globals else []) ++ Clauses.liveGlobals rest
+
+/-- The kept functions a function's value writes when its arguments hold only allowed values of the declaration `i`,
+with those of every global it reads: a `case` on an argument right under the function takes only the clauses such a
+value can match; any other source writes what it uses. -/
+def Expr.liveUses {Γ : List Ty} {t : Ty} : Expr G Γ t → List AnySite
+  | .lam (.case (.var _) cs _) =>
+    Clauses.liveSites i ok D cs ++ (Clauses.liveGlobals i ok cs).flatMap (D.usesAt sitesC)
+  | e => e.uses sitesC D
+
+end
+
+/-- The kept functions a function that returns effects writes for allowed arguments (`Expr.liveUses`). -/
+def EffectFun.liveUses (i : Nat) (ok : Nat → Bool) {ps : List Ty} {r : Ty} (f : EffectFun ps r) : List AnySite :=
+  f.body.liveUses i ok f.defs
+
+theorem Alts.index_inr {fs : List Ty} {vs : List (List Ty)} (y : Ty.alts vs) :
+    Alts.index (vs := fs :: vs) (.inr y) = Alts.index y + 1 := by
+  simp only [Alts.index, Alts.view]
+
+theorem Alts.index_proj : {vs : List (List Ty)} → (x : Ty.alts vs) → (v : Fin vs.length) →
+    {y : Ty.dens (vs.get v)} → Alts.proj x v = some y → Alts.index x = v.val
+  | _ :: _, .inl _, ⟨0, _⟩, _, _ => rfl
+  | _ :: _, .inr y, ⟨k + 1, hk⟩, _, hp => by
+    rw [Alts.index_inr, Alts.index_proj y ⟨k, Nat.lt_of_succ_lt_succ hk⟩ hp]
+  | _ :: _, .inl _, ⟨_ + 1, _⟩, _, hp => by cases hp
+  | _ :: _, .inr _, ⟨0, _⟩, _, hp => by cases hp
+
+section
+variable {i : Nat} {okV : Nat → Prop} {ok : Nat → Bool}
+
+/-- A pattern that matches an allowed value is live. -/
+theorem Pat.live_of_match (hok : ∀ k, okV k → ok k = true) {t : Ty} {Δ : List Ty} :
+    (p : Pat t Δ) → (x : t.den) → {δ : Ty.dens Δ} → p.match x = some δ → Ok i okV t x → p.live i ok = true
+  | @Pat.ctor j _ _ _ v ps, x, _, hm, hx => by
+    simp only [Pat.match, Option.bind_eq_some_iff] at hm
+    obtain ⟨y, hy, -⟩ := hm
+    simp only [Pat.live, Bool.or_eq_true, bne_iff_ne, ne_eq]
+    by_cases hj : j = i
+    · have := hx.1 hj
+      rw [Alts.index_proj x v hy] at this
+      exact .inr (hok _ this)
+    · exact .inl hj
+  | .wild, _, _, _, _ | .bind, _, _, _, _ | .int _, _, _, _, _ | .str _, _, _, _, _ | .tuple _, _, _, _, _
+  | .as _, _, _, _, _ => rfl
+
+variable {P : List AnySite} {E : List AnyEffectSite} {G : List Ty} {D : Defs G} {g : Ty.dens G}
+  (hg : ∀ {t : Ty} (v : Var G t), (∀ s ∈ D.usesAt sitesC v.idx, s ∈ P) → Reach P E t (v.get g))
+  (hDE : ∀ s ∈ D.effectSites, s ∈ E)
+include hg hDE
+
+/-- The clause an allowed value takes reaches only the sites the live clauses write. -/
+theorem Clauses.reach_live (hok : ∀ k, okV k → ok k = true) {Γ : List Ty} {t r : Ty} {sh : List Shape} :
+    (cs : Clauses G Γ t r sh) → (∀ s ∈ Clauses.liveSites i ok D cs, s ∈ P) →
+    GlobalsIn P D (Clauses.liveGlobals i ok cs) → (∀ s ∈ Clauses.effectSites D cs, s ∈ E) → (ρ : Ty.dens Γ) →
+    Reaches P E Γ ρ → (x : t.den) → Reach P E t x → Ok i okV t x →
+    (h : ∃ s ∈ sh, Shape.Matches t s x) → Reach P E r (Clauses.eval D g cs ρ x h)
+  | .nil, _, _, _, _, _, _, _, _, h => False.elim (by simp at h)
+  | .cons p body rest, hs, hu, he, ρ, hρ, x, hx, hox, h => by
+    simp only [Clauses.eval]
+    split
+    · rename_i δ hm
+      have hl := Pat.live_of_match hok p x hm hox
+      simp only [Clauses.liveSites, Clauses.liveGlobals, hl, ite_true] at hs hu
+      exact Expr.reach P D g hg hDE body (sub_l hs) (sub_l hu) (sub_l he) _
+        (Dens.reach_append P δ ρ (Pat.reach_match P p x hm hx) hρ)
+    · simp only [Clauses.liveSites, Clauses.liveGlobals] at hs hu
+      exact Clauses.reach_live hok rest (sub_r hs) (sub_r hu) (sub_r he) ρ hρ x hx hox _
+  | .guarded p guard body rest, hs, hu, he, ρ, hρ, x, hx, hox, h => by
+    simp only [Clauses.eval]
+    split
+    · rename_i δ hm
+      have hl := Pat.live_of_match hok p x hm hox
+      simp only [Clauses.liveSites, Clauses.liveGlobals, hl, ite_true] at hs hu
+      split
+      · exact Expr.reach P D g hg hDE body (sub_r (sub_l hs)) (sub_r (sub_l hu)) (sub_r (sub_l he)) _
+          (Dens.reach_append P δ ρ (Pat.reach_match P p x hm hx) hρ)
+      · exact Clauses.reach_live hok rest (sub_r hs) (sub_r hu) (sub_r he) ρ hρ x hx hox h
+    · simp only [Clauses.liveSites, Clauses.liveGlobals] at hs hu
+      exact Clauses.reach_live hok rest (sub_r hs) (sub_r hu) (sub_r he) ρ hρ x hx hox h
+
+end
+
+/-- What a function that returns effects returns for allowed arguments reaches only the sites it writes for them
+(`EffectFun.liveUses`), where the values it captured cannot hold a value of the declaration `i`. -/
+theorem EffectFun.reach_live {i : Nat} {okV : Nat → Prop} {ok : Nat → Bool} (hok : ∀ k, okV k → ok k = true)
+    {P P' : List AnySite} {E : List AnyEffectSite} {ps : List Ty} {r : Ty} (f : EffectFun ps r) (hf : f.Reach P E)
+    (hP' : ∀ s ∈ f.liveUses i ok, s ∈ P') (hΓ : (Ty.tuple f.Γ).mentions i = false) (xs : (Ty.tuple ps).den0)
+    (hxs : Oks i okV ps (Ty.up _ f.hps xs)) : Tazuna.Ir.Reach P' E r (f.apply xs) := by
+  have hg : ∀ {t : Ty} (v : Var f.G t), (∀ s ∈ f.defs.usesAt sitesC v.idx, s ∈ P') →
+      Tazuna.Ir.Reach P' E t (v.get f.defs.eval) := fun v h => Defs.reach P' f.defs hf.defsEffectSites v h
+  have hu := hf.effectSites
+  unfold EffectFun.apply
+  unfold EffectFun.liveUses at hP'
+  revert hu hP'
+  generalize f.body = body
+  intro hP' hu
+  have hρ : Reaches P' E f.Γ (Ty.up _ f.hΓ f.env) := reach_data P' (.tuple f.Γ) f.hΓ _
+  have hps : Reaches P' E ps (Ty.up _ f.hps xs) := reach_data P' (.tuple ps) f.hps _
+  have hdflt : (∀ s ∈ body.uses sitesC f.defs, s ∈ P') → Tazuna.Ir.Reach P' E r
+      (body.eval f.defs f.defs.eval (Ty.up _ f.hΓ f.env) (Ty.up _ f.hps xs)) := fun h => by
+    simp only [Expr.uses, Expr.usesWith, sitesC] at h
+    exact Expr.reach P' f.defs f.defs.eval hg hf.defsEffectSites body (sub_l h)
+      (fun j hj s hs => sub_r h s (List.mem_flatMap.2 ⟨j, hj, hs⟩)) hu _ hρ _ hps
+  unfold Expr.liveUses at hP'
+  revert hP' hu hdflt
+  split
+  · rename_i h1 h2
+    simp only [Ty.fn.injEq] at h1
+    obtain ⟨rfl, rfl⟩ := h1
+    cases eq_of_heq h2
+    intro hP' hu _
+    simp only [Expr.eval]
+    have hρ' := Dens.reach_append P' (Ty.up _ f.hps xs) _ hps hρ
+    have hok' : Oks i okV (ps ++ f.Γ) (Dens.append (Ty.up _ f.hps xs) (Ty.up _ f.hΓ f.env)) :=
+      Dens.ok_append _ _ hxs (oks_free _ hΓ _)
+    exact Clauses.reach_live hg hf.defsEffectSites hok _ (sub_l hP')
+      (fun j hj s hs => sub_r hP' s (List.mem_flatMap.2 ⟨j, hj, hs⟩))
+      (by simpa [Expr.effectSites] using hu) _ hρ' _ (Var.reach P' _ _ hρ') (Var.ok _ _ hok') _
+  · intro hP' _ hdflt
+    exact hdflt hP'
+
+/-- The kept functions the cascade's own effects can name: every site a machine's `effect` writes, and what each
+reaction writes for an event built with a constructor `ok` allows. -/
+def ServiceV.liveSites (v : ServiceV) (i : Nat) (ok : Nat → Bool) : List AnySite :=
+  v.machines.flatMap (·.effect.usedSites) ++ v.reactions.flatMap (·.react.liveUses i ok)
+
+namespace Step
+
+variable (T : List TypeDecl) {v : ServiceV} {i : Nat} {okV : Nat → Prop} {ok : Nat → Bool}
+  {P : List AnySite} {E : List AnyEffectSite}
+
+section
+variable (hi : 15 ≤ i) (hq : Quiet i v) (hc : ∀ k ∈ v.cascadeEvs i, okV k) (hv : v.Reach P E)
+  (hok : ∀ k, okV k → ok k = true) {P' : List AnySite} (hP' : ∀ s ∈ v.liveSites i ok, s ∈ P')
+include hi hq hc hv hok hP'
+
+set_option linter.unusedSectionVars false
+
+theorem enter_live {m : MachineV v.records v.event} (hm : m ∈ v.machines) (records : v.records.den0) (now : Int)
+    (key : m.key.den0) (st : m.state.den0) : EffsReach P' (enter m records now key st).2 := by
+  intro x hx
+  simp only [enter, List.mem_map, Option.mem_toList] at hx
+  obtain ⟨eff, heff, rfl⟩ := hx
+  have hr := (hv.machines m hm).effect
+  exact MachineV.reach_effectAt P' m ⟨hr.site, fun s hs => hP' s (by
+    simp only [ServiceV.liveSites, List.mem_append, List.mem_flatMap]; exact .inl ⟨m, hm, hs⟩),
+    hr.effectSites, hr.defsEffectSites⟩ key st records now eff heff
+
+theorem react_live (s : State v) (ev : v.event.den0)
+    (hev : ∀ h : v.event.isData = true, Ok i okV v.event (Ty.up _ h ev)) : EffsReach P' (react T s ev).2 := by
+  let records := v.apply.fn (.inl (s.records, s.now, ()), ev, ())
+  have hm := mem_reactMachines_effs T records s.now ev s.machines
+  intro x hx
+  rcases List.mem_append.1 hx with h | h
+  · obtain ⟨sm, hsm, h⟩ := hm x h
+    simp only [machineStep, List.mem_flatMap, List.mem_map] at h
+    obtain ⟨_, ⟨k, -, rfl⟩, h⟩ := h
+    revert h
+    unfold reactKey
+    split
+    · split
+      · exact enter_live hi hq hc hv hok hP' (PerMachine.fst_mem hsm) _ _ _ _ x
+      · intro h; cases h
+    · exact enter_live hi hq hc hv hok hP' (PerMachine.fst_mem hsm) _ _ _ _ x
+  · simp only [List.mem_flatMap, List.mem_map] at h
+    obtain ⟨y, hy, eff, heff, rfl⟩ := h
+    have hr := EffectFun.reach_live hok y.react (hv.reactions y hy) (fun s hs => hP' s (by
+      simp only [ServiceV.liveSites, List.mem_append, List.mem_flatMap]; exact .inr ⟨y, hy, hs⟩))
+      (hq.reactions y hy) (.inl (records, s.now, ()), ev, ()) (oks_up_cons _ _ _ (fun _ => ok_free _ (by
+        simp [Ty.reactionCtx, Ty.mentionsL, Ty.mentions, Ty.mentionsLL, hq.records]; omega) _)
+        (fun _ => oks_up_cons _ _ _ hev (fun _ => trivial)))
+    exact hr eff heff
+
+theorem applyEvents_live (evs : List v.event.den0)
+    (hevs : ∀ ev ∈ evs, ∀ h : v.event.isData = true, Ok i okV v.event (Ty.up _ h ev)) :
+    (a : Acc v) → QueueOk P' a → {a' : Acc v} → applyEvents T a evs = .ok a' → QueueOk P' a' := by
+  induction evs with
+  | nil => intro a ha a' h; simp only [applyEvents, List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at h; exact h ▸ ha
+  | cons ev evs ih =>
+    intro a ha a' h
+    simp only [applyEvents, List.foldlM_cons, bind, Except.bind] at h
+    split at h
+    · cases h
+    · rename_i a1 h1
+      exact ih (fun y hy => hevs y (by simp [hy])) a1
+        (start_queue _ _ h1 ha (react_live T hi hq hc hv hok hP' a.state ev (hevs ev (by simp)))) h
+
+theorem execCommand_live (a : Acc v) (hqa : QueueOk P' a)
+    (x : CommandV v.records v.event v.caller) (hx : x ∈ v.commands) (hd : ∀ k ∈ x.decide.evs i, okV k)
+    (caller : (Ty.origin v.caller).den0) (input : x.input.den0) {r : Ran v x.rejection}
+    (h : execCommand T a x caller input = .ok r) (a' : Acc v) (ha' : r = .accepted a' ∨ ∃ j, r = .rejected a' j) :
+    QueueOk P' a' := by
+  obtain ⟨hin, -, hΓ⟩ := hq.commands x hx
+  have hf := Fun.ok_eval (okV := okV) hi x.decide hd (oks_free _ hΓ _)
+  have hps : (Ty.tuple [Ty.ctx v.records x.input v.caller]).isData = true := by
+    have := x.decide.ht; simp only [Ty.isData, Bool.and_eq_true] at this; exact this.1
+  simp only [execCommand] at h
+  split at h
+  · cases h; rcases ha' with h | ⟨_, h⟩ <;> cases h
+  · split at h
+    · rename_i evs hdec
+      simp only [bind, Except.bind] at h
+      split at h
+      · cases h
+      · rename_i a2 h2
+        split at h
+        · cases h
+        · cases h
+          rcases ha' with h | ⟨_, h⟩ <;> cases h
+          exact applyEvents_live T hi hq hc hv hok hP' evs (result_events x.decide hps _ (hf _ (oks_free _ (by
+            simp [Ty.ctx, Ty.origin, Ty.mentionsL, Ty.mentions, Ty.mentionsLL, hin, hq.records, hq.caller]; omega) _))
+            hdec) { a with state := { a.state with fresh := a.state.fresh + 1 } } hqa h2
+    · cases h; rcases ha' with h | ⟨_, h⟩ <;> cases h; exact hqa
+
+/-- An internal step keeps the waiting own effects' sites in `P'`. -/
+theorem runOwn_live (a : Acc v) (hqa : QueueOk P' a) (eff : OwnEffectV v.event)
+    (he : EffOk i okV eff.effect) {a' : Acc v} (h : runOwn T a eff = .ok a') : QueueOk P' a' := by
+  revert h
+  cases eff with
+  | command name c i' j value onAnswer =>
+    unfold runOwn
+    dsimp only
+    generalize Ty.same c v.caller = oc
+    cases oc with
+    | none => intro h; cases h
+    | some hc' =>
+      generalize hox : ownCommand (v := v) name i' j = ox
+      cases ox with
+      | none => intro h; cases h
+      | some x =>
+        obtain ⟨x, hi', hj⟩ := x
+        have hmem := ownCommand_mem hox
+        subst hj
+        intro h
+        have hrej := (hq.commands x hmem).2.1
+        cases hown : v.ownRuns x with
+        | false => exact (runCommand_notOwn T a x hown _ _ h).elim
+        | true =>
+          have hd : ∀ k ∈ x.decide.evs i, okV k := fun k hk => hc k (by
+            simp only [ServiceV.cascadeEvs, List.mem_append, List.mem_flatMap, List.mem_filter]
+            exact .inr ⟨x, ⟨hmem, hown⟩, hk⟩)
+          have hps : (Ty.tuple [Ty.result Ty.nil x.rejection]).isData = true := by
+            have := onAnswer.ht; simp only [Ty.isData, Bool.and_eq_true] at this; exact this.1
+          simp only [runCommand, bind, Except.bind] at h
+          split at h
+          · cases h
+          · rename_i r hr
+            have hl := execCommand_live T hi hq hc hv hok hP' a hqa x hmem hd _ _ hr
+            split at h
+            · cases h
+            · exact applyEvents_live T hi hq hc hv hok hP' _ (fn_events _ hps _ (he hrej _)) _ (hl _ (.inl rfl)) h
+            · exact applyEvents_live T hi hq hc hv hok hP' _ (fn_events _ hps _ (he hrej _)) _
+                (hl _ (.inr ⟨_, rfl⟩)) h
+  | query name c i' o value onAnswer =>
+    unfold runOwn
+    dsimp only
+    generalize Ty.same c v.caller = oc
+    cases oc with
+    | none => intro h; cases h
+    | some hc' =>
+      generalize hox : ownQuery (v := v) name i' o = ox
+      cases ox with
+      | none => intro h; cases h
+      | some x =>
+        obtain ⟨x, hi', ho⟩ := x
+        have hmem := ownQuery_mem hox
+        subst ho
+        intro h
+        have hps : (Ty.tuple [x.output]).isData = true := by
+          have := onAnswer.ht; simp only [Ty.isData, Bool.and_eq_true] at this; exact this.1
+        simp only [runQuery] at h
+        split at h
+        · cases h
+        · exact applyEvents_live T hi hq hc hv hok hP' _ (fn_events _ hps _ (he (hq.queries x hmem) _))
+            { a with state := { a.state with fresh := a.state.fresh + 1 } } hqa h
+
+/-- What the cascade keeps of a step in progress: the events and own effects allowed, the own effects' sites in
+`P'`. -/
+def LiveOk (i : Nat) (okV : Nat → Prop) (P' : List AnySite) (a : Acc v) : Prop := AccOk i okV false a ∧ QueueOk P' a
+
+theorem liveOk_runOwn (a : Acc v) (ha : LiveOk i okV P' a) (eff : OwnEffectV v.event)
+    (he : eff ∈ a.own) {a' : Acc v} (h : runOwn T a eff = .ok a') : LiveOk i okV P' a' :=
+  ⟨runOwn_ok T hi hq hc a ha.1 eff (ha.1.own eff he) h,
+    runOwn_live T hi hq hc hv hok hP' a ha.2 eff (ha.1.own eff he) h⟩
+
+theorem fire_live (s : State v) : (fuel : Nat) → {r : State v × List (Sender × EffectV v.event)} →
+    fire s fuel = some r → EffsReach P' r.2
+  | 0, _, h => by cases h
+  | fuel + 1, r, h => by
+    rw [fire] at h
+    split at h
+    · cases h; intro x hx; cases hx
+    · rename_i d _
+      obtain ⟨r', hr, rfl⟩ := Option.map_eq_some_iff.1 h
+      have h2 := fire_live { s with machines := (fireMachines s.records s.now d false s.machines).1 } fuel hr
+      have hfx := mem_fireMachines_effs s.records s.now d false s.machines
+      intro x hx
+      rcases List.mem_append.1 hx with hx | hx
+      · obtain ⟨ms, hms, k, st, hx⟩ := hfx x hx
+        exact enter_live hi hq hc hv hok hP' (PerMachine.fst_mem hms) _ _ _ _ x hx
+      · exact h2 x hx
+
+end
+
+end Step
+
 end Tazuna.Ir

@@ -311,15 +311,22 @@ def OwnKindOut.breaks : OwnKindOut v → Target → Term
   | .missing name, .effect c => if name = c then tt else .bool false
   | _, _ => .bool false
 
-/-- What the cascade can break: each own kind's targets, and its bound. -/
+/-- What the cascade can break: each own kind's targets, and its bound. The own kinds the step cannot queue keep their
+targets here, so the step's lines do not depend on what the code rules out. -/
 def SettleOut.targets (o : SettleOut v) : List Target :=
-  o.steps.flatMap (fun st => st.2.kinds.flatMap (·.2.targets)) ++ [.cascade]
+  o.steps.flatMap (fun st => (st.2.kinds ++ st.2.dropped).flatMap (·.2.targets)) ++ [.cascade]
 
 /-- Whether the cascade faults by the target: a place past the bound is occupied, or an internal step that runs
 breaks it in the kind its effect is. -/
 def SettleOut.breaks (o : SettleOut v) : Target → Term
   | .cascade => o.over
   | g => anyT (o.steps.map fun st => andT st.1 (anyT (st.2.kinds.map fun k => andT k.1 (k.2.breaks g))))
+
+/-- `SettleOut.breaks` with the own kinds the step cannot queue taken in: `prove` lists a target its terms do not rule
+out, as it did before the cascade left those kinds out. Only `Term.const?` reads it; no script holds it. -/
+def SettleOut.listed (o : SettleOut v) : Target → Term
+  | .cascade => o.over
+  | g => anyT (o.steps.map fun st => andT st.1 (anyT ((st.2.kinds ++ st.2.dropped).map fun k => andT k.1 (k.2.breaks g))))
 
 /-- What the input itself can break, where it is the command `cmd`: the command's `ensures` rules, or a clock line's
 bound on firing rounds. -/
@@ -357,6 +364,13 @@ def StepOut.breaks (o : StepOut v) (cmd : Option String) : Target → Term
     | some fo => [andT o.reached (fo.settle.breaks g)]
     | none => [])
 
+/-- `StepOut.breaks` with `SettleOut.listed` for the cascade: whether `prove` lists the target for the step. -/
+def StepOut.listed (o : StepOut v) (cmd : Option String) : Target → Term
+  | .invariant mach rule => o.breaks cmd (.invariant mach rule)
+  | g => anyT (o.topBreaks cmd g ++ match o.finish? with
+    | some fo => [andT o.reached (fo.settle.listed g)]
+    | none => [])
+
 end
 
 /-- The command an input names. -/
@@ -387,6 +401,8 @@ structure Question (v : ServiceV) (shs : List (PendingShape v.event)) (n : Nat) 
   input : SymInput v shs n
   target : Option Target
   ask : TypedScript
+  /-- The goal is false in every model, so the question has none (`questions_decided`) and needs no solver. -/
+  decided : Bool
 
 abbrev Question.script {v : ServiceV} {shs : List (PendingShape v.event)} {n : Nat} (q : Question v shs n) : Script :=
   q.ask.script
@@ -476,9 +492,33 @@ def questions (inp : SymInput v (shapes v) senv.nT) :
     Except Refusal (List Target × List (Question v (shapes v) senv.nT)) := do
   let a ← stepAsk L T P v senv inp
   let cmd := inp.command?
-  let targets := (dedup (a.t.out.targets cmd)).filter
-    fun g => (a.t.out.breaks cmd g).const?.map Val.toBool != some false
-  pure (targets, ⟨inp, none, a.bound⟩ :: targets.map fun g => ⟨inp, some g, a.ask (a.t.out.breaks cmd g)⟩)
+  let targets := (dedup (a.t.out.targets cmd)).filter fun g =>
+    (a.t.out.breaks cmd g).const?.map Val.toBool != some false || (a.t.out.listed cmd g).const?.map Val.toBool != some false
+  pure (targets, ⟨inp, none, a.bound, false⟩ :: targets.map fun g =>
+    ⟨inp, some g, a.ask (a.t.out.breaks cmd g), (a.t.out.breaks cmd g).const?.map Val.toBool == some false⟩)
+
+/-- A decided question has no model: its goal is false in every one. -/
+theorem questions_decided {inp : SymInput v (shapes v) senv.nT} {gs : List Target}
+    {qs : List (Question v (shapes v) senv.nT)} (hq : questions L T P v senv inp = .ok (gs, qs)) :
+    ∀ q ∈ qs, q.decided = true → ∀ M, ∃ a ∈ q.script.asserts, ¬ Holds M a := by
+  simp only [questions] at hq
+  obtain ⟨a, ha, hq⟩ := bind_ok.1 hq
+  cases pure_ok.1 hq
+  have hx : ∀ X, (a.script X).asserts = X := fun X => by
+    simp only [stepAsk] at ha
+    repeat (obtain ⟨_, -, ha⟩ := bind_ok.1 ha)
+    cases pure_ok.1 ha
+    rfl
+  intro q hq' hd M
+  simp only [List.mem_cons, List.mem_map] at hq'
+  rcases hq' with rfl | ⟨g, -, rfl⟩
+  · cases hd
+  · simp only [beq_iff_eq, Option.map_eq_some_iff] at hd
+    obtain ⟨w, hw, hwf⟩ := hd
+    refine ⟨a.t.out.breaks inp.command? g, ?_, ?_⟩
+    · simp only [Question.script, TypedScript.script, StepAsk.ask, List.mem_append, hx]
+      exact .inr (by simp)
+    · simp [Holds, Term.const?_denote M _ hw, hwf]
 
 theorem mapM_need {α : Type} {w : Ty → Refusal} {f : Ty → Option α} : {tys : List Ty} → {xs : List α} →
     tys.mapM (fun t => need (w t) (f t)) = .ok xs → tys.mapM f = some xs

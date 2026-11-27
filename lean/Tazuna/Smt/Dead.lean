@@ -1,6 +1,6 @@
 import Tazuna.Smt.GenGoal
 import Tazuna.Smt.Reached
-import Tazuna.Semantics.Emits
+import Tazuna.Smt.Cone
 
 /-! Dead targets: prove asks of each of generate's targets whether a step of each input kind, from a state of the right
 shape whose invariants hold, shows a class the target aims at (`showsAsk`), the T4 step question with generate's goal
@@ -26,12 +26,6 @@ def _root_.Tazuna.Ir.GenTarget.byQuery (v : ServiceV) : GenTarget → Bool
   | .invalid c _ => v.queries.any (·.name == c)
   | _ => false
 
-/-- The declaration of the service's event type, where it is a custom type of the program's own. -/
-def eventDecl (v : ServiceV) : Option Nat :=
-  match v.event with
-  | .adt i _ _ => if prelude.length ≤ i then some i else none
-  | _ => none
-
 section
 variable {v : ServiceV} {shs : List (PendingShape v.event)} {n : Nat}
 
@@ -40,29 +34,6 @@ def SymInput.silent : SymInput v shs n → Bool
   | .query .. => true
   | .command k _ _ => !(v.commands.get k).callers.any isOutside
   | _ => false
-
-/-- Whether the kind is a clock line. -/
-def SymInput.isClock : SymInput v shs n → Bool
-  | .clock _ => true
-  | _ => false
-
-/-- The constructors of the event declaration `i` an answer of the type `t` can apply: its `on_answer`, a site of that
-type, and the cascade's; none where a value the step starts from can hold an event. -/
-def answerEvs (P : List AnySite) (v : ServiceV) (i : Nat) (t : Ty) : Option (List Nat) :=
-  let ss := sitesOf P (.fn [t] (.list v.event))
-  if v.quiet i && !t.mentions i && ss.all (fun s => !(Ty.tuple s.1).mentions i) then
-    some (ss.flatMap (fun s => s.2.body.evs i (s.2.defs.evs i)) ++ v.cascadeEvs i)
-  else none
-
-/-- The constructors of the event declaration `i` a step of the kind can apply, read off the functions it runs
-(`Step.step_events`); none where a value the step starts from can hold an event, or for a query. -/
-def SymInput.evs (P : List AnySite) (i : Nat) : SymInput v shs n → Option (List Nat)
-  | .command k _ _ => if v.quiet i then some ((v.commands.get k).decide.evs i ++ v.cascadeEvs i) else none
-  | .answer k _ _ _ => answerEvs P v i (answerTy shs[k].output shs[k].rejection)
-  | .unmatched t _ _ => answerEvs P v i t
-  | .event k _ => if v.quiet i then some ((v.subscribes.get k).wrap.evs i ++ v.cascadeEvs i) else none
-  | .clock _ => if v.quiet i then some (v.cascadeEvs i) else none
-  | .query .. => none
 
 /-- Whether the code leaves it possible that a step of the kind shows a class of an event or request target: an event
 built with the target's constructor, a request at all. Other targets are left to the questions. -/
@@ -126,24 +97,6 @@ theorem query_unshown {rules : RuleNames} {g : GenTarget} (hg : g.byQuery v = fa
 section
 variable {v : ServiceV} {shs : List (PendingShape v.event)} {n : Nat} {M : Model} {L : Layout} (T : List TypeDecl)
 
-theorem eventDecl_some {i : Nat} (h : eventDecl v = some i) : 15 ≤ i ∧ ∃ a vs, v.event = .adt i a vs := by
-  unfold eventDecl at h
-  split at h
-  · rename_i j a vs he
-    split at h
-    · rename_i hle; cases h; exact ⟨hle, a, vs, he⟩
-    · cases h
-  · cases h
-
-theorem decodeAnswer_some {t : Ty} {to value : Term} {x : Input v} (h : decodeAnswer M L t to value = some x) :
-    ∃ m y, x = .answer m ⟨t, y⟩ := by
-  unfold decodeAnswer at h
-  split at h
-  · simp only [Option.bind_eq_some_iff, Option.map_eq_some_iff] at h
-    obtain ⟨m, -, y, -, rfl⟩ := h
-    exact ⟨m, _, rfl⟩
-  · cases h
-
 theorem silent_step {inp : SymInput v shs n} (h : inp.silent = true) {hc : v.caller.isData = true} {x : Input v}
     (hx : inp.decode M L hc = some x) (s : State v) : (step T v s x).events = [] ∧ (step T v s x).out = [] := by
   cases inp with
@@ -159,64 +112,6 @@ theorem silent_step {inp : SymInput v shs n} (h : inp.silent = true) {hc : v.cal
     simp only [step, Step.execCommand, Step.admit, Step.any_outside _ h]
     exact ⟨rfl, rfl⟩
   | _ => simp [SymInput.silent] at h
-
-theorem answerEvs_some {P : List AnySite} {i : Nat} {t : Ty} {ns : List Nat} (h : answerEvs P v i t = some ns) :
-    v.quiet i = true ∧ (∀ k ∈ v.cascadeEvs i, k ∈ ns) ∧ t.mentions i = false ∧
-      ∀ s ∈ sitesOf P (.fn [t] (.list v.event)),
-        (Ty.tuple s.1).mentions i = false ∧ ∀ k ∈ s.2.body.evs i (s.2.defs.evs i), k ∈ ns := by
-  unfold answerEvs at h
-  dsimp only at h
-  split at h
-  · rename_i hq
-    cases h
-    simp only [Bool.and_eq_true, Bool.not_eq_true', List.all_eq_true] at hq
-    obtain ⟨⟨hq, ht⟩, hs⟩ := hq
-    refine ⟨hq, fun k hk => List.mem_append_right _ hk, ht, fun s hs' => ⟨by simpa using hs s hs', fun k hk => ?_⟩⟩
-    exact List.mem_append_left _ (List.mem_flatMap.2 ⟨s, hs', hk⟩)
-  · cases h
-
-/-- What `SymInput.evs` reads is what `Step.step_events` needs of every input the kind decodes to. -/
-theorem evs_entry {P : List AnySite} {i : Nat} {inp : SymInput v shs n} {ns : List Nat} (h : inp.evs P i = some ns)
-    {hc : v.caller.isData = true} {x : Input v} (hx : inp.decode M L hc = some x) :
-    Quiet i v ∧ (∀ k ∈ v.cascadeEvs i, k ∈ ns) ∧ Step.EntryOk P i (· ∈ ns) x ∧ x.isClock = inp.isClock := by
-  cases inp with
-  | command k caller input =>
-    simp only [SymInput.evs] at h
-    split at h
-    · rename_i hq
-      cases h
-      simp only [SymInput.decode, Option.bind_eq_some_iff, Option.map_eq_some_iff] at hx
-      obtain ⟨c, -, y, -, rfl⟩ := hx
-      exact ⟨quiet_facts hq, fun k hk => List.mem_append_right _ hk,
-        .inr fun k hk => List.mem_append_left _ hk, rfl⟩
-    · cases h
-  | answer k j to value =>
-    obtain ⟨hq, hcas, ht, hs⟩ := answerEvs_some h
-    obtain ⟨m, y, rfl⟩ := decodeAnswer_some hx
-    exact ⟨quiet_facts hq, hcas, ⟨ht, hs⟩, rfl⟩
-  | unmatched t to value =>
-    obtain ⟨hq, hcas, ht, hs⟩ := answerEvs_some h
-    obtain ⟨m, y, rfl⟩ := decodeAnswer_some hx
-    exact ⟨quiet_facts hq, hcas, ⟨ht, hs⟩, rfl⟩
-  | event k value =>
-    simp only [SymInput.evs] at h
-    split at h
-    · rename_i hq
-      cases h
-      simp only [SymInput.decode, Option.map_eq_some_iff] at hx
-      obtain ⟨y, -, rfl⟩ := hx
-      exact ⟨quiet_facts hq, fun k hk => List.mem_append_right _ hk, fun k hk => List.mem_append_left _ hk, rfl⟩
-    · cases h
-  | clock time =>
-    simp only [SymInput.evs] at h
-    split at h
-    · rename_i hq
-      cases h
-      simp only [SymInput.decode, Option.map_eq_some_iff] at hx
-      obtain ⟨y, -, rfl⟩ := hx
-      exact ⟨quiet_facts hq, fun k hk => hk, trivial, rfl⟩
-    · cases h
-  | query => cases h
 
 /-- Where the code rules a kind out (`mayShow`), no step of the kind from a state whose pending requests hold the
 program's sites shows a class of the target: the cone of influence of the step's events. -/

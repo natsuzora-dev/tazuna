@@ -423,7 +423,8 @@ def serviceItems (sv : CheckedService c) (only : String → Bool) : ServiceItems
       -- The bound questions of every input kind decide together whether the service's lines say proved or within
       -- the bounds (`proved_sound`), so each is asked whatever `--only` keeps.
       let asked := if kept.any (·.target.isSome) then kept else kept.filter (·.target.isNone)
-      items := items ++ asked.map (fun q => .ask ⟨match q.target with
+      -- A decided question has no model (`questions_decided`): its line is the one an unsat answer gives.
+      items := items ++ asked.map (fun q => if q.decided then .ready (.unsat v.name step q.target) else .ask ⟨match q.target with
           | some g => ["target", v.name, g.text, inp.place]
           | none => ["bound", v.name, "", inp.place], q.script, L.ids, answerReport c v L senv sv.callerData q⟩) ++
         (qs.filterMap fun q => q.target.bind fun g => if kept.any (·.target == some g) then none else some g).map

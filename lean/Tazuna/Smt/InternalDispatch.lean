@@ -1,4 +1,5 @@
 import Tazuna.Smt.InternalStep
+import Tazuna.Smt.Cone
 
 /-! The internal step for whichever own effect a queue place holds: `Step.runOwn` picks the service's command or query
 by the effect's name and types, and the encoder makes the same choice per own kind, statically (`ownShape`), with the
@@ -94,6 +95,9 @@ terms. -/
 structure OwnStepOut (v : ServiceV) where
   kinds : List (Term × OwnKindOut v)
   terms : StepTerms v
+  /-- The own kinds the step cannot queue, with their tests: `prove` lists their targets as the step's, and their
+  questions have no model. -/
+  dropped : List (Term × OwnKindOut v)
 
 /-- The fault the model's kind names: the outcome terms of the kind whose test holds. -/
 def OwnStepOut.fault? {v : ServiceV} (M : Model) (o : OwnStepOut v) : Option Fault :=
@@ -132,18 +136,27 @@ def encodeOwnKind (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.
     pure ⟨⟨.query x.name o, ⟨.or (.not o.callerOk) (.not (allT (o.rules.map (·.2)))), o.answered, .add fresh (.int 1)⟩⟩,
       c, cq⟩
 
-/-- The internal step for the own effect term `eff`: every own kind's, merged by the variant tests; its condition
-asks each kind's only where its test holds. The second term is the codes' condition, which holds statically. -/
-def encodeOwnStep (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
+/-- Whether the cascade asks for the own kind: the step can queue an effect with its answer site (`SymInput.live`), or
+the step bounds nothing. -/
+def ownLive (live : Option (List SiteId)) (key : OwnKey) : Bool := live.all fun l => l.contains key.answer.site
+
+/-- The internal step for the own effect term `eff`: each own kind the step can queue (`ownLive`), merged by the
+variant tests; its condition asks each kind's only where its test holds. Every own kind is encoded, so a refusal and
+the codes' condition, which holds statically, are the same whatever the step can queue. -/
+def encodeOwnStep (P : List AnySite) (live : Option (List SiteId)) (v : ServiceV) (shs : List (PendingShape v.event))
+    (senv : StepEnv L shs)
     (apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)) (records now fresh n q eff : Term) (xs : PerMachine (fun _ => Term) v.machines) :
     Except Refusal (Encoded (OwnStepOut v)) := do
   let nR := (L.effectsOf v.event).length
   let eff := Term.share eff
   let ks ← (L.ownsOf v.event).zipIdx.mapM fun (key, j) => do
-    pure (Term.share (.is senv.dE (nR + j) eff), ← encodeOwnKind L T P v shs senv nR apply records now fresh n q eff xs j key)
+    pure (ownLive live key, Term.share (.is senv.dE (nR + j) eff),
+      ← encodeOwnKind L T P v shs senv nR apply records now fresh n q eff xs j key)
+  let ls := (ks.filter (·.1)).map (·.2)
   let base : StepTerms v := ⟨tt, ⟨records, xs, n, [], [], q, []⟩, fresh⟩
-  pure ⟨⟨ks.map fun k => (k.1, k.2.out.kind), ks.foldr (fun k t => pickTerms k.1 k.2.out.terms t) base⟩,
-    allT (ks.map fun k => .ite k.1 k.2.cond tt), allT (ks.map (·.2.codes))⟩
+  pure ⟨⟨ls.map fun k => (k.1, k.2.out.kind), ls.foldr (fun k t => pickTerms k.1 k.2.out.terms t) base,
+      (ks.filter (!·.1)).map fun k => (k.2.1, k.2.2.out.kind)⟩,
+    allT (ls.map fun k => .ite k.1 k.2.cond tt), allT (ks.map (·.2.2.codes))⟩
 
 end
 
@@ -611,9 +624,45 @@ theorem find_hit {α : Type} {k : Nat} : (l : List (Term × α)) → {y : Term �
       rw [List.find?_cons, hz]
       exact find_hit (k := k) l (by simpa using hy) (fun i kk h => by simpa using ht (i + 1) kk (by simpa using h))
 
-/-- An own effect's internal step: where the codes' condition holds, the condition holds exactly when the internal
-step `Step.runOwn` runs fits (`ownFits`); wherever it holds, the fault term holds exactly when the model's kind names a
-fault, which is `Step.runOwn`'s, and otherwise the internal step runs to its end with what the merged terms denote. -/
+/-- Keeping the flagged entries of a list whose tests hold exactly at one flagged index keeps a list whose tests hold
+exactly at one index, at that entry. -/
+theorem filter_tests {α : Type} {y : Term × α} : (ks : List (Bool × Term × α)) → (k : Nat) → ks[k]? = some (true, y) →
+    (∀ (i : Nat) (z : Bool × Term × α), ks[i]? = some z → z.2.1.denote M = .bool (decide (i = k))) →
+    ∃ m, ((ks.filter (·.1)).map (·.2))[m]? = some y ∧
+      ∀ (i : Nat) (z : Term × α), ((ks.filter (·.1)).map (·.2))[i]? = some z → z.1.denote M = .bool (decide (i = m))
+  | [], _, h, _ => by simp at h
+  | z :: zs, 0, hk, ht => by
+    simp only [List.getElem?_cons_zero, Option.some.injEq] at hk
+    subst hk
+    refine ⟨0, by simp, fun i w hw => ?_⟩
+    cases i with
+    | zero => simp only [List.filter_cons_of_pos, List.map_cons, List.getElem?_cons_zero, Option.some.injEq] at hw
+              subst hw; simpa using ht 0 _ rfl
+    | succ i =>
+      simp only [List.filter_cons_of_pos, List.map_cons, List.getElem?_cons_succ] at hw
+      obtain ⟨⟨b, w'⟩, hm, rfl⟩ := List.mem_map.1 (List.mem_of_getElem? hw)
+      obtain ⟨j, hj⟩ := List.mem_iff_getElem?.1 (List.mem_filter.1 hm).1
+      simpa using ht (j + 1) _ (by simpa using hj)
+  | z :: zs, k + 1, hk, ht => by
+    obtain ⟨m, hm, hms⟩ := filter_tests zs k (by simpa using hk) (fun i w hw => by simpa using ht (i + 1) w (by simpa using hw))
+    have hz : z.2.1.denote M = .bool false := by simpa using ht 0 z rfl
+    cases hb : z.1 with
+    | false =>
+      refine ⟨m, by simpa [List.filter_cons, hb] using hm, fun i w hw => hms i w (by simpa [List.filter_cons, hb] using hw)⟩
+    | true =>
+      refine ⟨m + 1, by simpa [List.filter_cons, hb] using hm, fun i w hw => ?_⟩
+      cases i with
+      | zero =>
+        simp only [List.filter_cons, hb, ite_true, List.map_cons, List.getElem?_cons_zero, Option.some.injEq] at hw
+        subst hw; simpa using hz
+      | succ i =>
+        simp only [List.filter_cons, hb, ite_true, List.map_cons, List.getElem?_cons_succ] at hw
+        simpa using hms i w hw
+
+/-- An own effect's internal step: where the codes' condition holds and the step can queue the effect's kind
+(`ownLive`), the condition holds exactly when the internal step `Step.runOwn` runs fits (`ownFits`); wherever it
+holds, the fault term holds exactly when the model's kind names a fault, which is `Step.runOwn`'s, and otherwise the
+internal step runs to its end with what the merged terms denote. -/
 theorem ownStep_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P) (hshp : ShapesHold shs v.declared)
     (a : Step.Acc v)
@@ -626,8 +675,9 @@ theorem ownStep_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
     (hn : n.denote M = .int (Int.ofNat a.state.nextId)) (hq : q.denote M = .int q0)
     (hms : MachinesRel M L T v.machines xs a.state.machines)
     (x : OwnEffectV v.event) (hx : RelV L (.dsl .effect [v.event]) x.effect (eff.denote M)) (hreach : x.effect.Reach P)
+    {live : Option (List SiteId)} (hlive : ∀ l, live = some l → x.site ∈ l)
     {o : OwnStepOut v} {cond codes : Term}
-    (henc : encodeOwnStep L T P v shs senv apply records now fresh n q eff xs = .ok ⟨o, cond, codes⟩)
+    (henc : encodeOwnStep L T P live v shs senv apply records now fresh n q eff xs = .ok ⟨o, cond, codes⟩)
     (hcodes : Holds M codes) :
     (Holds M cond ↔ ownFits L.count T a.state x) ∧
     (Holds M cond → o.terms.fault.denote M = .bool (o.fault? M).isSome ∧
@@ -646,11 +696,20 @@ theorem ownStep_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
     rw [Term.denote_share]; exact heff
   have hzk : ((L.ownsOf v.event).zipIdx)[k]? = some (key, k) := by
     rw [List.getElem?_zipIdx, hk]; simp
+  have hlk : ownLive live key = true := by
+    unfold ownLive
+    cases hl : live with
+    | none => rfl
+    | some l =>
+      have hs := hlive l hl
+      simp only [Option.all_some, List.contains_iff_mem]
+      cases key <;> cases x <;> simp only [OwnKey.Holds] at hkey <;>
+        first | exact hkey.elim | (obtain ⟨-, -, -, -, hsite, -⟩ := hkey; simpa [OwnKey.answer, OwnEffectV.site, hsite] using hs)
   obtain ⟨kk, hkk, hR⟩ := forall2_getElem? hF hzk
   obtain ⟨⟨⟨ko, st⟩, c, cx⟩, hkind, hR⟩ := bind_ok.1 hR
   cases pure_ok.1 hR
-  have htests : ∀ (i : Nat) (y : Term × Encoded (OwnKindStep v)), ks[i]? = some y →
-      y.1.denote M = .bool (decide (i = k)) := by
+  have htests : ∀ (i : Nat) (y : Bool × Term × Encoded (OwnKindStep v)), ks[i]? = some y →
+      y.2.1.denote M = .bool (decide (i = k)) := by
     intro i y hy
     obtain ⟨⟨key', i'⟩, hz, hR'⟩ := forall2_getElem? (forall2_flip hF) hy
     obtain ⟨_, -, hR'⟩ := bind_ok.1 hR'
@@ -663,30 +722,33 @@ theorem ownStep_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
     by_cases h : i = k
     · subst h; simp
     · simp [h, Ne.symm h]
+  rw [hlk] at hkk
+  obtain ⟨m, hlm, hltests⟩ := filter_tests ks k hkk htests
+  generalize hls : (ks.filter (·.1)).map (·.2) = ls at hlm hltests
   have hcxk : Holds M cx := (holds_allT _).1 hcodes _ (List.mem_map.2 ⟨_, List.mem_of_getElem? hkk, rfl⟩)
   refine ⟨?_, fun hc => ?_⟩
   · rw [← (ownKind_encode chk hshs hshp a happ hca senv hrec hnow hfresh hn hq hms x
       hreach heff' hkey hkind hcxk).1, holds_allT]
-    have htk := htests k _ hkk
+    have htk := hltests m _ hlm
     simp only [decide_true] at htk
     constructor
     · intro h
-      have := (holds_ite _ _ _).1 (h _ (List.mem_map.2 ⟨_, List.mem_of_getElem? hkk, rfl⟩))
+      have := (holds_ite _ _ _).1 (h _ (List.mem_map.2 ⟨_, List.mem_of_getElem? hlm, rfl⟩))
       simpa [htk, toBool_bool] using this
     · intro h t ht
       obtain ⟨y, hy, rfl⟩ := List.mem_map.1 ht
       obtain ⟨i, hi, rfl⟩ := List.getElem_of_mem hy
-      have hti := htests i ks[i] (List.getElem?_eq_getElem hi)
+      have hti := hltests i ls[i] (List.getElem?_eq_getElem hi)
       rw [holds_ite, hti, toBool_bool]
-      by_cases hik : i = k
-      · subst hik
-        rw [List.getElem?_eq_getElem hi, Option.some.injEq] at hkk
+      by_cases him : i = m
+      · subst him
+        rw [List.getElem?_eq_getElem hi, Option.some.injEq] at hlm
         simp only [decide_true, ite_true]
-        rw [hkk]; exact h
-      · simp only [hik, decide_false, Bool.false_eq_true, ite_false]
+        rw [hlm]; exact h
+      · simp only [him, decide_false, Bool.false_eq_true, ite_false]
         exact holds_tt
-  · have hcall := (holds_allT _).1 hc _ (List.mem_map.2 ⟨_, List.mem_of_getElem? hkk, rfl⟩)
-    have htk := htests k _ hkk
+  · have hcall := (holds_allT _).1 hc _ (List.mem_map.2 ⟨_, List.mem_of_getElem? hlm, rfl⟩)
+    have htk := hltests m _ hlm
     simp only [decide_true] at htk
     have hck : Holds M c := by
       have := (holds_ite _ _ _).1 hcall
@@ -694,22 +756,23 @@ theorem ownStep_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
     obtain ⟨hfault, hrun⟩ := (ownKind_encode chk hshs hshp a happ hca senv hrec hnow hfresh hn hq
       hms x hreach heff' hkey hkind hcxk).2 hck
     obtain ⟨hag, htab⟩ := fold_hit (e := v.event) (M := M) (L := L) ⟨tt, ⟨records, xs, n, [], [], q, []⟩, fresh⟩ ⟨rfl, rfl, rfl⟩
-      (ks.map fun k => (k.1, k.2.out.terms)) k (c := Term.share (.is senv.dE ((L.effectsOf v.event).length + k) (Term.share eff)))
-      (st := st) (by simp [hkk])
+      (ls.map fun k => (k.1, k.2.out.terms)) m (c := Term.share (.is senv.dE ((L.effectsOf v.event).length + k) (Term.share eff)))
+      (st := st) (by simp [hlm])
       (fun i y hy => by
         rw [List.getElem?_map] at hy
         obtain ⟨z, hz, rfl⟩ := Option.map_eq_some_iff.1 hy
-        exact htests i z hz)
+        exact hltests i z hz)
     rw [List.foldr_map] at hag htab
-    have hfk : (OwnStepOut.fault? M ⟨ks.map fun k => (k.1, k.2.out.kind),
-        ks.foldr (fun k t => pickTerms k.1 k.2.out.terms t) ⟨tt, ⟨records, xs, n, [], [], q, []⟩, fresh⟩⟩) = ko.fault? M := by
+    have hfk : (OwnStepOut.fault? M ⟨ls.map fun k => (k.1, k.2.out.kind),
+        ls.foldr (fun k t => pickTerms k.1 k.2.out.terms t) ⟨tt, ⟨records, xs, n, [], [], q, []⟩, fresh⟩,
+        (ks.filter (!·.1)).map fun k => (k.2.1, k.2.2.out.kind)⟩) = ko.fault? M := by
       unfold OwnStepOut.fault?
-      rw [find_hit (k := k) (ks.map fun k => (k.1, k.2.out.kind))
-        (y := (Term.share (.is senv.dE ((L.effectsOf v.event).length + k) (Term.share eff)), ko)) (by simp [hkk])
+      rw [find_hit (k := m) (ls.map fun k => (k.1, k.2.out.kind))
+        (y := (Term.share (.is senv.dE ((L.effectsOf v.event).length + k) (Term.share eff)), ko)) (by simp [hlm])
         (fun i y hy => by
           rw [List.getElem?_map] at hy
           obtain ⟨z, hz, rfl⟩ := Option.map_eq_some_iff.1 hy
-          exact htests i z hz)]
+          exact hltests i z hz)]
       rfl
     rw [hfk]
     refine ⟨hag.fault.trans hfault, ?_⟩

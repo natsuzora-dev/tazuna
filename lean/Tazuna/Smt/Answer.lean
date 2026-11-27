@@ -262,7 +262,7 @@ variable (L : Layout) (T : List TypeDecl) {v : ServiceV}
 /-- An answer step's terms at slot `j` for requests of the shape `sh`, the `k`-th of `shs`, its condition and the
 codes' condition, from the codes of the service's `apply` and `invariants` and the terms of the state, the wire id
 the answer names and the answer. -/
-def encodeAnswer (P : List AnySite) (shs : List (PendingShape v.event)) (k : Nat) (sh : PendingShape v.event)
+def encodeAnswer (P : List AnySite) (live : Option (List SiteId)) (shs : List (PendingShape v.event)) (k : Nat) (sh : PendingShape v.event)
     (senv : StepEnv L shs) (j : Fin senv.nT) (apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records))
     (invariants : Code (Ty.fn [v.records] Ty.rules)) (S : SymState v) (to value : Term) : Except Refusal (Encoded (AnswerOut v)) := do
   let de := senv.dP
@@ -279,7 +279,7 @@ def encodeAnswer (P : List AnySite) (shs : List (PendingShape v.event)) (k : Nat
   let evt ← Code.dataTermE _ evs
   let (dl, nl, dtl) ← collD L (.list v.event) [v.event]
   let (o, c4) ← encodeEvents L T v shs senv apply S.now (slotsOf dl dtl nl 1 evt) S.records S.machines S.nextId (.int 0)
-  let ⟨fo, cf, cfx⟩ ← encodeFinish L T P v shs senv apply invariants S.now S.fresh
+  let ⟨fo, cf, cfx⟩ ← encodeFinish L T P live v shs senv apply invariants S.now S.fresh
     (slotsTerm senv.dT senv.dtT (filterSlots PS (keepQs to PS))) o
   pure ⟨⟨hit, rules, evt, o, fo⟩,
     .ite hit (andT c1 (andT c2 (andT c3 (.ite (allT (rules.map (·.2))) (andT c4 cf) tt)))) tt, cfx⟩
@@ -346,7 +346,13 @@ theorem answer_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
     (hans : (answerTy sh.output sh.rejection).isData = true)
     (hval : RelV L _ (Ty.up _ hans value) (valT.denote M))
     {o : AnswerOut v} {cond cfx : Term}
-    (henc : encodeAnswer L T P shs k sh senv j apply inv S toT valT =
+    {live : Option (List SiteId)} (J : Step.Acc v → Prop)
+    (hJl : ∀ b, J b → ∀ o ∈ b.own, ∀ l, live = some l → o.site ∈ l)
+    (hJr : ∀ b o b', J b → o ∈ b.own → Step.runOwn T b o = .ok b' → J b')
+    (hJ : ∀ (env : (Ty.tuple sh.answerΓ).den0) a1,
+      Step.applyEvents T { state := { s with pending := s.pending.filter (·.id != to) } }
+        ((sh.onAnswer.fn env).fn (value, ())) = .ok a1 → J a1)
+    (henc : encodeAnswer L T P live shs k sh senv j apply inv S toT valT =
       .ok ⟨o, cond, cfx⟩) (hcfx : Holds M cfx) :
     let r := step T v s (.answer to ⟨_, value⟩)
     (Holds M cond ↔ (Holds M o.hit →
@@ -613,8 +619,8 @@ theorem answer_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
       have ef : Holds M c4 → (Holds M cf ↔ finishFits L.count T (sh0 :: rest) (Step.applyEvents T { state := s' } evL)) :=
         fun hc4 => (finish_encode chk hshs hshp happ hca hinv hci senv s .accepted
           { state := s' } rfl hinv' hR.now hrem (loop_acc (T := T) chk hshs hshp happ hca senv
-            { state := s' } hR.now hSl hhl hR.records hR.machines hR.nextId (q := .int 0) (q0 := 0) rfl hR.fresh h12 hc4) (applyEvents_ok chk.reach _ rfl hinv' _) h12'
-          hcfx).1
+            { state := s' } hR.now hSl hhl hR.records hR.machines hR.nextId (q := .int 0) (q0 := 0) rfl hR.fresh h12 hc4) (applyEvents_ok chk.reach _ rfl hinv' _) J hJl hJr
+          (fun a1 h => hJ _ a1 h) h12' hcfx).1
       constructor
       · rintro ⟨hc4, hcf⟩
         exact ⟨e4.1 hc4, (ef hc4).1 hcf⟩
@@ -828,7 +834,8 @@ theorem answer_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
       simp only
       obtain ⟨hcf, hdone⟩ := hnil hb
       exact (finish_encode chk hshs hshp happ0 hca hinv0 hci senv s
-        .accepted { state := s' } rfl hinv' hR.now hrem hdone (applyEvents_ok chk.reach _ rfl hinv' _) h12' hcfx).2 hcf
+        .accepted { state := s' } rfl hinv' hR.now hrem hdone (applyEvents_ok chk.reach _ rfl hinv' _) J hJl hJr
+        (fun a1 h => hJ _ a1 h) h12' hcfx).2 hcf
     · rw [hfind] at hp
       cases hp
       exact (hnil hhold).2.queueCoded rfl a happly

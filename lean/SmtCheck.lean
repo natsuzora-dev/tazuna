@@ -2917,15 +2917,15 @@ def dispLayoutOf (slots : Nat) (dead : List OwnKey := []) : Layout :=
 
 /-- v0..v5 the state, v6 the effect, v7 the records after, v8 the next id after, v9 the instance table after, v10 the
 fault, v11 the fresh counter after, then per new request slot its flag and id. -/
-def dispScriptOf (slots : Nat) (effect : Layout → Except Refusal Term) (goal : List Term) (dead : List OwnKey := []) :
-    Except String (Script × Nat × OwnStepOut dispSvc) := do
+def dispScriptOf (slots : Nat) (effect : Layout → Except Refusal Term) (goal : List Term) (dead : List OwnKey := [])
+    (live : Option (List SiteId) := none) : Except String (Script × Nat × OwnStepOut dispSvc) := do
   let L := dispLayoutOf slots dead
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0
   let (apply, ca) ← enc (dispSvc.apply.code L)
   let senv ← enc (StepEnv.of L dispShapes)
   let eff ← enc (effect L)
-  let ⟨o, cond, codes⟩ ← enc (encodeOwnStep L prelude dispSites dispSvc dispShapes senv apply S.records S.now
+  let ⟨o, cond, codes⟩ ← enc (encodeOwnStep L prelude dispSites live dispSvc dispShapes senv apply S.records S.now
     S.fresh S.nextId (.int 0) (.var 6) S.machines)
   let below ← enc (pendingBelowT L dispShapes S.pending S.nextId)
   let some wf := S.wf L (v := dispSvc) dispShapes | throw "no well-formedness"
@@ -2968,10 +2968,15 @@ def dispCheck (solver : Solver) : IO Bool := do
      ("next", fun L => ownT L nextKey (.int 3) [], nextFx, twiceFx),
      ("a negative twice", fun L => ownT L twiceKey (.int (-3)) [.int 5], bobFx, twiceFx)]
   let mut ok := true
-  for (name, effect, fx, other) in cases do
-    match dispScriptOf 3 effect goal [deadKey] with
+  -- Each case again where the step can queue only the effect's kind (`ownLive`): the other kinds are left out, and the
+  -- internal step is still the one `Step.runOwn` runs.
+  for ((name, effect, fx, other), live) in cases.flatMap fun c => [(c, none), (c, some [c.2.2.1.site])] do
+    let name := if live.isSome then name ++ " (its kind alone)" else name
+    match dispScriptOf 3 effect goal [deadKey] live with
     | .error m => ok ← fail s!"{name}: {m}"
     | .ok (script, nn, o) =>
+      if live.isSome && (o.kinds.length != 1 || o.dropped.length != 2) then
+        ok ← fail s!"{name}: {o.kinds.length} kinds encoded and {o.dropped.length} left out, not 1 and 2"
       match ← solver.run script with
       | .sat vs =>
         let M := modelOf vs
@@ -3051,7 +3056,7 @@ def cascadeTermsOf (slots fuel : Nat) (effects : List (Layout → Except Refusal
   let effs ← effects.mapM fun f => enc (f L)
   let queue : List OwnSlot := effs.zipIdx.map fun (e, j) => ⟨tt, .int j, e⟩
   let t : StepTerms dispSvc := ⟨.bool false, ⟨S.records, S.machines, S.nextId, [], [], .int effs.length, []⟩, S.fresh⟩
-  let ⟨o, cond, codes⟩ ← enc (encodeSettle L prelude dispSites dispSvc dispShapes senv apply (effs.headD tt) S.now
+  let ⟨o, cond, codes⟩ ← enc (encodeSettle L prelude dispSites none dispSvc dispShapes senv apply (effs.headD tt) S.now
     fuel 0 queue t)
   let below ← enc (pendingBelowT L dispShapes S.pending S.nextId)
   let some wf := S.wf L (v := dispSvc) dispShapes | throw "no well-formedness"

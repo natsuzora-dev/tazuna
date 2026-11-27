@@ -131,11 +131,11 @@ structure EventOut (v : ServiceV) where
 
 /-- An event step's terms, its condition and the codes' condition, from the subscription's and the service's codes
 and the terms of the state and the received value. -/
-def encodeEvent (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
+def encodeEvent (P : List AnySite) (live : Option (List SiteId)) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
     {i : Fin v.subscribes.length} (ec : EventCode v i) (S : SymState v) (value : Term) : Except Refusal (Encoded (EventOut v)) := do
   let (et, cw) ← encodeWrap ec value
   let (o, c) ← encodeEvents L T v shs senv ec.apply S.now [(tt, ⟨[et], rfl⟩)] S.records S.machines S.nextId (.int 0)
-  let ⟨fo, cf, cx⟩ ← encodeFinish L T P v shs senv ec.apply ec.invariants S.now S.fresh S.pending o
+  let ⟨fo, cf, cx⟩ ← encodeFinish L T P live v shs senv ec.apply ec.invariants S.now S.fresh S.pending o
   pure ⟨⟨et, o, fo⟩, andT cw (andT c cf), cx⟩
 
 end
@@ -154,7 +154,11 @@ theorem event_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked 
     (hsv : RelV L _ (Ty.up _ ((v.eventData i)).value value) (sv.denote M))
     (senv : StepEnv L shs)
     {o : EventOut v} {c cx : Term}
-    (henc : encodeEvent L T P v shs senv ec S sv = .ok ⟨o, c, cx⟩)
+    {live : Option (List SiteId)} (J : Step.Acc v → Prop)
+    (hJl : ∀ b, J b → ∀ o ∈ b.own, ∀ l, live = some l → o.site ∈ l)
+    (hJr : ∀ b o b', J b → o ∈ b.own → Step.runOwn T b o = .ok b' → J b')
+    (hJ : ∀ a1, Step.applyEvents T { state := s } [(v.subscribes.get i).wrap.fn (value, ())] = .ok a1 → J a1)
+    (henc : encodeEvent L T P live v shs senv ec S sv = .ok ⟨o, c, cx⟩)
     (hcx : Holds M cx) :
     let ev := (v.subscribes.get i).wrap.fn (value, ())
     (Holds M c ↔ (v.subscribes.get i).wrap.appFits L.count (value, ()) ∧ eventsFit L.count T s [ev] ∧
@@ -185,7 +189,7 @@ theorem event_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked 
   have ef := fun (hcw : Holds M cw) (hc : Holds M ce') =>
     finish_encode chk hshs hshp g1 hc1 g3 hc3 senv s
       .accepted { state := s } rfl hinv hR.now hR.pending (hacc hcw hc)
-      (applyEvents_ok chk.reach _ rfl hinv _) hf hcx
+      (applyEvents_ok chk.reach _ rfl hinv _) J hJl hJr hJ hf hcx
   rw [holds_andT, holds_andT]
   refine ⟨⟨fun ⟨hcw, hc, hcf⟩ => ⟨ew.1.1 hcw, (e2 hcw).1 hc, ((ef hcw hc).1).1 hcf⟩, fun ⟨p1, p2, p3⟩ => ?_⟩,
     fun ⟨hcw, hc, hcf⟩ => (ef hcw hc).2 hcf, fun ⟨hcw, hc, _⟩ => (hacc hcw hc).queueCoded rfl⟩

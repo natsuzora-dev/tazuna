@@ -42,7 +42,7 @@ theorem forall_zipIdx_iff {α : Type} (p : α → Prop) (l : List α) : (∀ x �
   exact h (a, i) (List.mem_zipIdx_iff_getElem?.2 hi)
 
 section
-variable {M : Model} {L : Layout} {T : List TypeDecl} {v : ServiceV} {P : List AnySite}
+variable {M : Model} {L : Layout} {T : List TypeDecl} {v : ServiceV} {P : List AnySite} {live : Option (List SiteId)}
   {shs : List (PendingShape v.event)} {senv : StepEnv L shs} {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)}
 
 theorem ownKind_codes {nR : Nat} {records now fresh n q eff : Term} {xs : PerMachine (fun _ => Term) v.machines}
@@ -75,7 +75,7 @@ theorem ownKind_codes {nR : Nat} {records now fresh n q eff : Term} {xs : PerMac
 
 theorem ownStep_codes {records now fresh n q eff : Term} {xs : PerMachine (fun _ => Term) v.machines}
     {o : OwnStepOut v} {c cx : Term}
-    (h : encodeOwnStep L T P v shs senv apply records now fresh n q eff xs = .ok ⟨o, c, cx⟩) :
+    (h : encodeOwnStep L T P live v shs senv apply records now fresh n q eff xs = .ok ⟨o, c, cx⟩) :
     Holds M cx ↔ ∀ key ∈ L.ownsOf v.event, ownCodesFit L.count (ownShape v P key) := by
   unfold encodeOwnStep at h
   obtain ⟨ks, hks, h⟩ := bind_ok.1 h
@@ -83,7 +83,7 @@ theorem ownStep_codes {records now fresh n q eff : Term} {xs : PerMachine (fun _
   rw [holds_allT, List.forall_mem_map,
     ← forall_zipIdx_iff (fun key => ownCodesFit L.count (ownShape v P key)) (L.ownsOf v.event)]
   refine (forall2_forall_iff (p := fun kj => ownCodesFit L.count (ownShape v P kj.1))
-    (q := fun y => Holds M y.2.codes) ?_ (mapM_ok _ _ _ hks)).symm
+    (q := fun y => Holds M y.2.2.codes) ?_ (mapM_ok _ _ _ hks)).symm
   intro kj y hy
   obtain ⟨r, hr, hy⟩ := bind_ok.1 hy
   cases pure_ok.1 hy
@@ -93,7 +93,7 @@ theorem ownStep_codes {records now fresh n q eff : Term} {xs : PerMachine (fun _
 fit. -/
 theorem settle_codes {dflt now : Term} :
     (fuel k : Nat) → (S : List OwnSlot) → (t : StepTerms v) → {o : SettleOut v} → {c cx : Term} →
-    encodeSettle L T P v shs senv apply dflt now fuel k S t = .ok ⟨o, c, cx⟩ →
+    encodeSettle L T P live v shs senv apply dflt now fuel k S t = .ok ⟨o, c, cx⟩ →
     (Holds M cx ↔ (fuel ≠ 0 → ∀ key ∈ L.ownsOf v.event, ownCodesFit L.count (ownShape v P key)))
   | 0, _, _, _, _, _, _, h => by
     simp only [encodeSettle] at h
@@ -108,7 +108,7 @@ theorem settle_codes {dflt now : Term} :
     exact ⟨fun ⟨a, _⟩ _ => a, fun a => ⟨a (by omega), fun _ => a (by omega)⟩⟩
 
 theorem finish_codes {inv : Code (Ty.fn [v.records] Ty.rules)} {now fresh pending : Term} {eo : EventsOut v}
-    {fo : FinishOut v} {c cx : Term} (h : encodeFinish L T P v shs senv apply inv now fresh pending eo = .ok ⟨fo, c, cx⟩) :
+    {fo : FinishOut v} {c cx : Term} (h : encodeFinish L T P live v shs senv apply inv now fresh pending eo = .ok ⟨fo, c, cx⟩) :
     Holds M cx ↔ SitesFit L P v := by
   unfold encodeFinish at h
   obtain ⟨⟨so, cs, cx'⟩, h1, h⟩ := bind_ok.1 h
