@@ -1,9 +1,9 @@
 import Tazuna.Ir.Literal
 import Tazuna.Smt.Term
 
-/-! SMT-LIB text as S-expressions: printing, and reading back what a solver prints. The printer writes each token
-followed by one space; the reader takes any whitespace, so it reads a solver's own layout too. `SExp.parse_print`
-proves that reading a printed S-expression gives it back. -/
+/-! SMT-LIB text as S-expressions: printing, and reading back what a solver prints. The printer writes a list's items
+one space apart inside its parentheses, as solvers print; the reader takes any whitespace, so it reads any layout.
+`SExp.parse_print` proves that reading a printed S-expression gives it back. -/
 
 namespace Tazuna.Smt
 
@@ -49,8 +49,6 @@ def Token.chars : Token → List Char
   | .num n => (decimalDigits n).map digitChar
   | .str s => '"' :: s.toList.flatMap escape ++ ['"']
 
-def render (ts : List Token) : List Char := ts.flatMap fun t => t.chars ++ [' ']
-
 mutual
 def SExp.tokens : SExp → List Token
   | .sym s => [.sym s]
@@ -62,49 +60,62 @@ def SExp.tokensList : List SExp → List Token
   | x :: xs => SExp.tokens x ++ SExp.tokensList xs
 end
 
-def SExp.print (e : SExp) : String := String.ofList (render e.tokens)
+mutual
+/-- The text of an S-expression as SMT-LIB solvers print one: a list's items one space apart inside its parentheses,
+as in `(f x (g y))`. -/
+def SExp.layout : SExp → List Char
+  | .sym s => (Token.sym s).chars
+  | .num n => (Token.num n).chars
+  | .str s => (Token.str s).chars
+  | .list xs => '(' :: SExp.layoutList xs ++ [')']
+def SExp.layoutList : List SExp → List Char
+  | [] => []
+  | x :: xs => SExp.layout x ++ SExp.layoutRest xs
+/-- Items after the first, each after a space. -/
+def SExp.layoutRest : List SExp → List Char
+  | [] => []
+  | x :: xs => ' ' :: SExp.layout x ++ SExp.layoutRest xs
+end
+
+def SExp.print (e : SExp) : String := String.ofList e.layout
 
 mutual
 /-- `SExp.print` after the text `acc`, appended in place: the compiled printer, since a script's text built as a list
 of characters took most of the time a cache hit spends. -/
 def SExp.write (acc : String) : SExp → String
-  | .sym s => (acc ++ s).push ' '
-  | .num n => (acc ++ String.ofList (Token.num n).chars).push ' '
-  | .str s => (acc ++ String.ofList (Token.str s).chars).push ' '
-  | .list xs => ((SExp.writeList ((acc.push '(').push ' ') xs).push ')').push ' '
+  | .sym s => acc ++ s
+  | .num n => acc ++ String.ofList (Token.num n).chars
+  | .str s => acc ++ String.ofList (Token.str s).chars
+  | .list xs => (SExp.writeList (acc.push '(') xs).push ')'
 def SExp.writeList (acc : String) : List SExp → String
   | [] => acc
-  | x :: xs => SExp.writeList (SExp.write acc x) xs
+  | x :: xs => SExp.writeRest (SExp.write acc x) xs
+def SExp.writeRest (acc : String) : List SExp → String
+  | [] => acc
+  | x :: xs => SExp.writeRest (SExp.write (acc.push ' ') x) xs
 end
 
 def SExp.printFast (e : SExp) : String := SExp.write "" e
 
-theorem render_append (a b : List Token) : render (a ++ b) = render a ++ render b := List.flatMap_append
-
 mutual
-theorem SExp.write_eq (acc : String) : (e : SExp) → SExp.write acc e = acc ++ String.ofList (render e.tokens)
-  | .sym s => by
-    simp [SExp.write, SExp.tokens, render, Token.chars, String.push_eq_append, String.ofList_append,
-      String.append_assoc, String.ofList_cons]
-  | .num n => by
-    simp [SExp.write, SExp.tokens, render, String.push_eq_append, String.ofList_append, String.append_assoc,
-      String.ofList_cons]
-  | .str s => by
-    simp only [SExp.write, SExp.tokens, render, List.flatMap_cons, List.flatMap_nil, List.append_nil,
-      String.push_eq_append, String.ofList_append, String.append_assoc, String.ofList_cons, String.ofList_nil,
-      String.append_empty]
+theorem SExp.write_eq (acc : String) : (e : SExp) → SExp.write acc e = acc ++ String.ofList e.layout
+  | .sym s => by simp [SExp.write, SExp.layout, Token.chars]
+  | .num n => by simp [SExp.write, SExp.layout]
+  | .str s => by simp only [SExp.write, SExp.layout]
   | .list xs => by
     rw [SExp.write, SExp.writeList_eq]
-    simp [SExp.tokens, render, Token.chars, String.push_eq_append, String.ofList_append, String.append_assoc,
-      String.ofList_cons]
-    rw [← String.append_assoc]
-    rfl
+    simp [SExp.layout, String.push_eq_append, String.ofList_append, String.append_assoc, String.ofList_cons]
 theorem SExp.writeList_eq (acc : String) : (xs : List SExp) →
-    SExp.writeList acc xs = acc ++ String.ofList (render (SExp.tokensList xs))
-  | [] => by simp [SExp.writeList, SExp.tokensList, render]
+    SExp.writeList acc xs = acc ++ String.ofList (SExp.layoutList xs)
+  | [] => by simp [SExp.writeList, SExp.layoutList]
   | x :: xs => by
-    rw [SExp.writeList, SExp.writeList_eq, SExp.write_eq, SExp.tokensList, render_append, String.ofList_append,
-      String.append_assoc]
+    rw [SExp.writeList, SExp.writeRest_eq, SExp.write_eq, SExp.layoutList, String.ofList_append, String.append_assoc]
+theorem SExp.writeRest_eq (acc : String) : (xs : List SExp) →
+    SExp.writeRest acc xs = acc ++ String.ofList (SExp.layoutRest xs)
+  | [] => by simp [SExp.writeRest, SExp.layoutRest]
+  | x :: xs => by
+    rw [SExp.writeRest, SExp.writeRest_eq, SExp.write_eq, SExp.layoutRest]
+    simp [String.push_eq_append, String.ofList_append, String.append_assoc, String.ofList_cons]
 end
 
 @[csimp] theorem SExp.print_eq_printFast : @SExp.print = @SExp.printFast := by
@@ -329,9 +340,6 @@ theorem idle_space : idleStep ' ' = some (.idle, []) := by decide
 theorem idle_lp : idleStep '(' = some (.idle, [.lp]) := by decide
 theorem idle_rp : idleStep ')' = some (.idle, [.rp]) := by decide
 theorem idle_quote : idleStep '"' = some (.str [], []) := by decide
-theorem space_not_sym : isSymChar ' ' = false := by decide
-theorem space_not_digit : isDigit ' ' = false := by decide
-theorem space_ne_quote : (' ' : Char) ≠ '"' := by decide
 
 theorem idle_sym (c : Char) (hdig : isDigit c = false) (hsym : isSymChar c = true) :
     idleStep c = some (.sym [c], []) := by
@@ -350,54 +358,62 @@ theorem idle_digit (d : Nat) (h : d < 10) : idleStep (digitChar d) = some (.num 
   have key : ∀ e : Fin 10, idleStep (digitChar e) = some (.num e.val, []) := by decide
   exact key ⟨d, h⟩
 
-theorem lex_sym_body (acc cs rest : List Char) (h : ∀ x ∈ cs, isSymChar x = true) :
-    lexFrom (.sym acc) (cs ++ ' ' :: rest) = (lexFrom .idle rest).map (.sym (String.ofList (acc ++ cs)) :: ·) := by
-  induction cs generalizing acc with
-  | nil =>
-    simp only [List.nil_append, List.append_nil, lexFrom, lexStep, space_not_sym, Bool.false_eq_true, ite_false,
-      idle_space, Option.map_some, Option.bind_eq_bind, Option.bind_some]
-    cases lexFrom .idle rest <;> rfl
-  | cons c cs ih =>
-    simp only [List.cons_append, lexFrom, lexStep, h c (by simp), ite_true, Option.bind_eq_bind, Option.bind_some,
-      List.nil_append]
-    rw [ih (acc ++ [c]) (fun x hx => h x (by simp [hx]))]
-    simp only [List.append_assoc, List.singleton_append]
-    cases lexFrom .idle rest <;> rfl
+theorem lexFrom_cons {st st' : Lex} {c : Char} {ts : List Token} (cs : List Char) (h : lexStep st c = some (st', ts)) :
+    lexFrom st (c :: cs) = (lexFrom st' cs).map (ts ++ ·) := by
+  cases st <;> simp only [lexFrom, h, Option.bind_eq_bind, Option.bind_some] <;> cases lexFrom st' cs <;> rfl
 
-theorem lex_num_body (acc : Nat) (ds : List Nat) (rest : List Char) (h : ∀ d ∈ ds, d < 10) :
-    lexFrom (.num acc) (ds.map digitChar ++ ' ' :: rest) =
-      (lexFrom .idle rest).map (.num (ds.foldl (fun a d => a * 10 + d) acc) :: ·) := by
+theorem lexFrom_idle {st' : Lex} {c : Char} {ts : List Token} (cs : List Char) (h : idleStep c = some (st', ts)) :
+    lexFrom .idle (c :: cs) = (lexFrom st' cs).map (ts ++ ·) := lexFrom_cons (st := .idle) cs h
+
+/-- What the printer writes after an S-expression: nothing, the space before the next item, or the `)` of its list. -/
+def Gap (rest : List Char) : Prop := ∀ c r, rest = c :: r → c = ' ' ∨ c = ')'
+
+/-- At a gap, the lexer emits the token it holds in state `st` and goes on idle. -/
+theorem lex_pending (st : Lex) (tok : Token)
+    (hst : ∀ c, (c = ' ' ∨ c = ')') → lexStep st c = (idleStep c).map fun (s, ts) => (s, tok :: ts))
+    (hend : lexFrom st [] = some [tok]) (rest : List Char) (hg : Gap rest) :
+    lexFrom st rest = (lexFrom .idle rest).map (tok :: ·) := by
+  cases rest with
+  | nil => simp [hend, lexFrom]
+  | cons c r =>
+    rcases hg c r rfl with rfl | rfl
+    · rw [lexFrom_cons r (by rw [hst ' ' (.inl rfl), idle_space]; rfl), lexFrom_idle r idle_space]
+      cases lexFrom .idle r <;> rfl
+    · rw [lexFrom_cons r (by rw [hst ')' (.inr rfl), idle_rp]; rfl), lexFrom_idle r idle_rp]
+      cases lexFrom .idle r <;> rfl
+
+theorem lex_sym_chars (acc cs rest : List Char) (h : ∀ x ∈ cs, isSymChar x = true) :
+    lexFrom (.sym acc) (cs ++ rest) = lexFrom (.sym (acc ++ cs)) rest := by
+  induction cs generalizing acc with
+  | nil => simp
+  | cons c cs ih =>
+    rw [List.cons_append, lexFrom_cons (st' := .sym (acc ++ [c])) (ts := []) _ (by simp [lexStep, h c (by simp)]),
+      ih (acc ++ [c]) (fun x hx => h x (by simp [hx]))]
+    simp
+
+theorem lex_num_chars (acc : Nat) (ds : List Nat) (rest : List Char) (h : ∀ d ∈ ds, d < 10) :
+    lexFrom (.num acc) (ds.map digitChar ++ rest) = lexFrom (.num (ds.foldl (fun a d => a * 10 + d) acc)) rest := by
   induction ds generalizing acc with
-  | nil =>
-    simp only [List.map_nil, List.nil_append, List.foldl_nil, lexFrom, lexStep, space_not_digit,
-      Bool.false_eq_true, ite_false, idle_space, Option.map_some, Option.bind_eq_bind, Option.bind_some]
-    cases lexFrom .idle rest <;> rfl
+  | nil => simp
   | cons d ds ih =>
     have hd := digitChar_facts ⟨d, h d (by simp)⟩
-    simp only [List.map_cons, List.cons_append, lexFrom, lexStep, hd.1, ite_true, hd.2, Option.bind_eq_bind,
-      Option.bind_some, List.nil_append, List.foldl_cons]
-    rw [ih _ (fun x hx => h x (by simp [hx]))]
-    cases lexFrom .idle rest <;> rfl
+    rw [List.map_cons, List.cons_append,
+      lexFrom_cons (st' := .num (acc * 10 + d)) (ts := []) _ (by simp [lexStep, hd.1, hd.2]),
+      ih _ (fun x hx => h x (by simp [hx]))]
+    simp
 
-theorem lex_token (t : Token) (ht : t.wf) (rest : List Char) :
-    lexFrom .idle (t.chars ++ ' ' :: rest) = (lexFrom .idle rest).map (t :: ·) := by
+theorem lex_atom (t : Token) (ht : t.wf) (hl : t ≠ .lp) (hr : t ≠ .rp) (rest : List Char) (hg : Gap rest) :
+    lexFrom .idle (t.chars ++ rest) = (lexFrom .idle rest).map (t :: ·) := by
   cases t with
-  | lp =>
-    simp only [Token.chars, List.cons_append, List.nil_append, lexFrom, lexStep, idle_lp, idle_space, Option.bind_eq_bind,
-      Option.bind_some]
-    cases lexFrom .idle rest <;> rfl
-  | rp =>
-    simp only [Token.chars, List.cons_append, List.nil_append, lexFrom, lexStep, idle_rp, idle_space, Option.bind_eq_bind,
-      Option.bind_some]
-    cases lexFrom .idle rest <;> rfl
+  | lp => exact absurd rfl hl
+  | rp => exact absurd rfl hr
   | sym s =>
     obtain ⟨c, cs, hs, hdig, hsym, hcs⟩ := ht
-    simp only [Token.chars, hs, List.cons_append, lexFrom, lexStep, idle_sym c hdig hsym, Option.bind_eq_bind,
-      Option.bind_some, List.nil_append]
-    rw [lex_sym_body [c] cs rest hcs]
-    have : String.ofList ([c] ++ cs) = s := by rw [List.singleton_append, ← hs, String.ofList_toList]
-    rw [this]
-    cases lexFrom .idle rest <;> rfl
+    rw [Token.chars, hs, List.cons_append, lexFrom_idle _ (idle_sym c hdig hsym), lex_sym_chars [c] cs rest hcs,
+      lex_pending _ (.sym s) (fun x hx => by
+        rcases hx with rfl | rfl <;> simp [lexStep, isSymChar, ← hs, String.ofList_toList])
+        (by simp [lexFrom, ← hs, String.ofList_toList]) rest hg]
+    simp [Option.map_map, Function.comp_def]
   | num n =>
     have hlt := Tazuna.Ir.Literal.decimalDigits_lt n
     have hfold := Tazuna.Ir.Literal.foldl_decimalDigits n
@@ -405,28 +421,59 @@ theorem lex_token (t : Token) (ht : t.wf) (rest : List Char) :
     | nil => rw [Tazuna.Ir.Literal.decimalDigits] at hds; split at hds <;> simp at hds
     | cons d ds =>
       rw [hds] at hlt hfold
-      simp only [Token.chars, hds, List.map_cons, List.cons_append, lexFrom, lexStep,
-        idle_digit d (hlt d (by simp)), Option.bind_eq_bind, Option.bind_some, List.nil_append]
-      rw [lex_num_body d ds rest (fun x hx => hlt x (by simp [hx]))]
       simp only [List.foldl_cons, Nat.zero_mul, Nat.zero_add] at hfold
-      rw [hfold]
-      cases lexFrom .idle rest <;> rfl
+      rw [Token.chars, hds, List.map_cons, List.cons_append, lexFrom_idle _ (idle_digit d (hlt d (by simp))),
+        lex_num_chars d ds rest (fun x hx => hlt x (by simp [hx])), hfold,
+        lex_pending _ (.num n) (fun x hx => by rcases hx with rfl | rfl <;> simp [lexStep, isDigit])
+          (by simp [lexFrom]) rest hg]
+      simp [Option.map_map, Function.comp_def]
   | str s =>
-    simp only [Token.chars, List.cons_append, List.append_assoc, lexFrom, lexStep,
-      idle_quote, Option.bind_eq_bind, Option.bind_some, List.nil_append]
-    rw [lex_str_body [] s.toList _]
-    simp only [List.nil_append, lexFrom, lexStep, ite_true, Option.bind_eq_bind, Option.bind_some, space_ne_quote,
-      ite_false, strToken, decode_unquoteds s.toList ht, String.ofList_toList, idle_space,
-      Option.pure_def]
-    cases lexFrom .idle rest <;> rfl
+    rw [Token.chars, List.append_assoc, List.cons_append, lexFrom_idle _ idle_quote, lex_str_body [] s.toList _,
+      List.singleton_append,
+      lexFrom_cons (st' := .quote ([] ++ s.toList.flatMap unquoted)) (ts := []) _ (by simp [lexStep]),
+      lex_pending _ (.str s) (fun x hx => by
+        rcases hx with rfl | rfl <;> simp [lexStep, strToken, decode_unquoteds s.toList ht, idle_space, idle_rp])
+        (by simp [lexFrom, strToken, decode_unquoteds s.toList ht]) rest hg]
+    simp [Option.map_map, Function.comp_def]
 
-theorem lex_render (ts : List Token) (h : ∀ t ∈ ts, t.wf) : lexFrom .idle (render ts) = some ts := by
-  induction ts with
-  | nil => rfl
-  | cons t ts ih =>
-    simp only [render, List.flatMap_cons, List.append_assoc, List.singleton_append] at *
-    rw [lex_token t (h t (by simp)), ih (fun x hx => h x (by simp [hx]))]
-    rfl
+theorem gap_layoutRest (xs : List SExp) (rest : List Char) (hg : Gap rest) : Gap (SExp.layoutRest xs ++ rest) := by
+  cases xs with
+  | nil => simpa [SExp.layoutRest] using hg
+  | cons y ys => intro c r e; simp only [SExp.layoutRest, List.cons_append, List.cons.injEq] at e; exact .inl e.1.symm
+
+mutual
+theorem lex_layout : (e : SExp) → (∀ t ∈ e.tokens, t.wf) → (rest : List Char) → Gap rest →
+    lexFrom .idle (e.layout ++ rest) = (lexFrom .idle rest).map (e.tokens ++ ·)
+  | .sym s, h, rest, hg => by
+    simpa [SExp.layout, SExp.tokens] using lex_atom (.sym s) (h _ (by simp [SExp.tokens])) nofun nofun rest hg
+  | .num n, h, rest, hg => by
+    simpa [SExp.layout, SExp.tokens] using lex_atom (.num n) (h _ (by simp [SExp.tokens])) nofun nofun rest hg
+  | .str s, h, rest, hg => by
+    simpa [SExp.layout, SExp.tokens] using lex_atom (.str s) (h _ (by simp [SExp.tokens])) nofun nofun rest hg
+  | .list xs, h, rest, hg => by
+    have hxs : ∀ t ∈ SExp.tokensList xs, t.wf := fun t ht => h t (by simp [SExp.tokens, ht])
+    rw [SExp.layout, List.append_assoc, List.cons_append, List.singleton_append, lexFrom_idle _ idle_lp,
+      lex_layoutList xs hxs (')' :: rest) (fun c r e => by cases e; exact .inr rfl), lexFrom_idle _ idle_rp]
+    simp [SExp.tokens, Option.map_map, Function.comp_def]
+theorem lex_layoutList : (xs : List SExp) → (∀ t ∈ SExp.tokensList xs, t.wf) → (rest : List Char) → Gap rest →
+    lexFrom .idle (SExp.layoutList xs ++ rest) = (lexFrom .idle rest).map (SExp.tokensList xs ++ ·)
+  | [], _, rest, _ => by simp [SExp.layoutList, SExp.tokensList]
+  | x :: xs, h, rest, hg => by
+    have hx : ∀ t ∈ x.tokens, t.wf := fun t ht => h t (by simp [SExp.tokensList, ht])
+    have hxs : ∀ t ∈ SExp.tokensList xs, t.wf := fun t ht => h t (by simp [SExp.tokensList, ht])
+    rw [SExp.layoutList, List.append_assoc, lex_layout x hx _ (gap_layoutRest xs rest hg),
+      lex_layoutRest xs hxs rest hg]
+    simp [SExp.tokensList, Option.map_map, Function.comp_def]
+theorem lex_layoutRest : (xs : List SExp) → (∀ t ∈ SExp.tokensList xs, t.wf) → (rest : List Char) → Gap rest →
+    lexFrom .idle (SExp.layoutRest xs ++ rest) = (lexFrom .idle rest).map (SExp.tokensList xs ++ ·)
+  | [], _, rest, _ => by simp [SExp.layoutRest, SExp.tokensList]
+  | x :: xs, h, rest, hg => by
+    have hx : ∀ t ∈ x.tokens, t.wf := fun t ht => h t (by simp [SExp.tokensList, ht])
+    have hxs : ∀ t ∈ SExp.tokensList xs, t.wf := fun t ht => h t (by simp [SExp.tokensList, ht])
+    rw [SExp.layoutRest, List.append_assoc, List.cons_append, lexFrom_idle _ idle_space,
+      lex_layout x hx _ (gap_layoutRest xs rest hg), lex_layoutRest xs hxs rest hg]
+    simp [SExp.tokensList, Option.map_map, Function.comp_def]
+end
 
 mutual
 theorem SExp.tokens_ne : (e : SExp) → ∃ t ts, e.tokens = t :: ts ∧ t ≠ .rp
@@ -479,8 +526,9 @@ def SExp.wf (e : SExp) : Prop := ∀ t ∈ e.tokens, t.wf
 
 /-- Reading back a printed S-expression gives it. -/
 theorem SExp.parse_print (e : SExp) (h : e.wf) : SExp.parse e.print = some e := by
-  simp only [SExp.parse, SExp.print, lex, String.toList_ofList, lex_render e.tokens h, Option.bind_eq_bind,
-    Option.bind_some, SExp.take]
+  have hl : lex e.print = some e.tokens := by
+    simpa [lex, SExp.print, lexFrom] using lex_layout e h [] (fun _ _ e => nomatch e)
+  simp only [SExp.parse, hl, Option.bind_eq_bind, Option.bind_some, SExp.take]
   have := parseExp_tokens e (e.tokens.length + 1) (by omega) []
   rw [List.append_nil] at this
   rw [this]

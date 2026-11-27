@@ -3467,6 +3467,21 @@ def refCheck (solver : Solver) : IO Bool := do
   | .ok (a, _) => IO.println s!"smt-check: the script without the reference: {repr a}"; pure false
   | .error m => IO.println s!"smt-check: the script without the reference: {m}"; pure false
 
+/-- A script prints a list's items one space apart inside its parentheses, as solvers print, and a shared term once
+as a definition; the solver answers the printed script. -/
+def layoutCheck (solver : Solver) : IO Bool := do
+  let x := (Term.add (.var 0) (.int 1)).share
+  let s : Script := { vars := [.int, .bool], asserts := [.and (.lt x (.int 5)) (.lt (.int 2) x), .not (.var 1)] }
+  let want := "(set-option :produce-models true)\n(set-logic ALL)\n(declare-const v0 Int)\n(declare-const v1 Bool)\n" ++
+    "(define-fun s0 () Int (+ v0 1))\n(assert (and (< s0 5) (< 2 s0)))\n(assert (not v1))\n(check-sat)\n"
+  let mut ok := true
+  if s.text [] != some want then
+    IO.println s!"smt-check: layout: printed {repr (s.text [])}, want {repr want}"; ok := false
+  match ← solver.run s with
+  | .sat _ => pure ()
+  | a => IO.println s!"smt-check: layout: {repr a}, want sat"; ok := false
+  return ok
+
 /-- prove's direct keys (`Solver.ask`, `directKey`). The second ask has the first one's key and another script, and
 no solver: it reads the first answer, as a direct key answers without building the script, which is why the key must
 name every input. With the engine's digest or the IR's changed, the key is another one, so the new script is asked. -/
@@ -4079,6 +4094,7 @@ def check (z3 : String) : IO Bool := do
   unless ← answerMCheck solver do ok := false
   unless ← reshareCheck 40 do ok := false
   unless ← refCheck solver do ok := false
+  unless ← layoutCheck solver do ok := false
   unless ← directCheck solver do ok := false
   unless ← mixCheck solver do ok := false
   unless ← internalCheck solver do ok := false
