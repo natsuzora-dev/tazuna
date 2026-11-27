@@ -99,12 +99,12 @@ inductive Item where
   /-- A question `--only` leaves out: it prints nothing, and its target is not proved. -/
   | skipped (service : String) (target : Target)
 
-/-- A dead-target question family: one of generate's targets and, per input kind whose terms do not rule it out, the
-question whether the kind's step shows a class the target aims at (`showsAsk`), with the kind's place
-(`SymInput.place`). -/
+/-- A dead-target question family: one of generate's targets and, per input kind, its place (`SymInput.place`) and the
+question whether its step shows a class the target aims at (`showsAsk`), none where the code or the kind's terms rule
+it out. The question is built only when its family's job needs it, so a cached answer builds none. -/
 structure ShowsItem where
   target : GenTarget
-  asks : List (String × TypedScript)
+  asks : List (String × Thunk (Option TypedScript))
 
 structure ServiceItems where
   items : List Item := []
@@ -385,14 +385,14 @@ def serviceItems (sv : CheckedService c) (only : String → Bool) : ServiceItems
   let mut targets : List Target := []
   let rules := ruleNamesOf v
   let goals := (Tazuna.Ir.targets c.T v rules).filter fun g => !g.byQuery v && only (v.name ++ "/" ++ g.text)
-  let mut shows : Option (List (GenTarget × List (String × TypedScript))) :=
+  let mut shows : Option (List (GenTarget × List (String × Thunk (Option TypedScript)))) :=
     if (Step.invariants (Step.State.init v)).isEmpty then some (goals.map (·, [])) else none
   for ⟨inp, hinp⟩ in (stepInputs v (shapes v) senv.nT b).attach do
     let step := inp.text
     let asked := Sound.get (stepAsk L c.T c.P v senv inp) (stepAsk_ofService sv.mem c.T senv inp hinp)
     shows := match shows, asked with
       | some acc, .ok ⟨a, _⟩ =>
-        some (acc.map fun (g, qs) => (g, qs ++ (showsAsk L c.T rules g c.P a inp).toList.map (inp.place, ·)))
+        some (acc.map fun (g, qs) => (g, qs ++ [(inp.place, Thunk.mk fun _ => showsAsk L c.T rules g c.P a inp)]))
       | _, _ => none
     -- Each response's question about the kind (`respStep`); where the kind's questions are refused, its line is.
     if let .ok ⟨a, _⟩ := asked then
@@ -530,15 +530,22 @@ inductive Placed where
 
 /-- Whether every question of a dead-target family reads unsat, asked in order: the first answer that is not unsat
 settles that the target is not dead, so the rest are not asked. One job asks them all, so which run is a function of
-the spec and the solver, not of the schedule. -/
+the spec and the solver, not of the schedule. A question's script is built only where its direct key has no answer:
+an entry is written only for a question asked from the same inputs, so the kind has that question. -/
 def allUnsat (solver : Solver) (cache : System.FilePath) (inputs : List String) (ids : Option Nat) :
-    List (List String × Script) → IO (Except String Bool)
+    List (List String × Thunk (Option TypedScript)) → IO (Except String Bool)
   | [] => pure (.ok true)
   | (name, q) :: rest => do
-    match ← solver.ask cache (directKey inputs name) ids q with
-    | .ok .unsat => allUnsat solver cache inputs ids rest
-    | .ok _ => pure (.ok false)
-    | .error m => pure (.error m)
+    let key := directKey inputs name
+    let answer ← match ← Solver.cached cache key ids with
+      | some a => pure (some (.ok a))
+      | none => match q.get with
+        | some q => some <$> solver.ask cache key ids q.script
+        | none => pure none
+    match answer with
+    | none | some (.ok .unsat) => allUnsat solver cache inputs ids rest
+    | some (.ok _) => pure (.ok false)
+    | some (.error m) => pure (.error m)
 
 -- Every service a report names has a scope, so the empty list is never read.
 set_option linter.tazuna.silentDefault false in
@@ -573,7 +580,7 @@ def prove (root path : String) (opts : Options) : Cmd Unit := do
           let name := ["shows", s, it.target.text, step]
           if names.contains name then return ← internal s!"two questions are named {name}"
           names := names.insert name
-          asks := asks ++ [(name, q.script)]
+          asks := asks ++ [(name, q)]
         let (j, r) ← Job.of (allUnsat solver cache inputs ids asks)
         questions := questions.push j
         deads := deads.push (s, it.target, r)

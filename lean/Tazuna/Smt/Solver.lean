@@ -168,6 +168,15 @@ SHA-256 of `inputs`, everything the engine reads to build the question's script,
 questions it is. -/
 def directKey (inputs name : List String) : String := Sha256.hex (frame [frame inputs, frame name]).toUTF8
 
+/-- The answer the direct key `direct` names in the cache directory `dir`, where the entry and its answer are kept. -/
+def Solver.cached (dir : System.FilePath) (direct : String) (ids : Option Nat) : IO (Option Answer) := do
+  let entry := dir / "direct" / direct
+  if ← entry.pathExists then
+    let answerFile := dir / ((← IO.FS.readFile entry) ++ ".answer")
+    if ← answerFile.pathExists then
+      return some ((Answer.parse (← IO.FS.readFile answerFile)).uncode ids)
+  return none
+
 /-- Asks a script as `Solver.runCached` does, first reading the answer its direct key `direct` (`directKey`) names in
 the cache directory `dir`, without building the script: the key's entry holds the text key of the script whose answer
 decided. That trusts the engine to build the same script from the same inputs, as it is deterministic. Where the entry
@@ -175,11 +184,8 @@ or its answer is missing (another spec, another engine), the script's text keys 
 entry is written for a decided answer (`Answer.decided`), as `Solver.runKeyed` keeps one. -/
 def Solver.ask (s : Solver) (dir : System.FilePath) (direct : String) (ids : Option Nat) (script : Script) :
     IO (Except String Answer) := do
+  if let some a ← Solver.cached dir direct ids then return .ok a
   let entry := dir / "direct" / direct
-  if ← entry.pathExists then
-    let answerFile := dir / ((← IO.FS.readFile entry) ++ ".answer")
-    if ← answerFile.pathExists then
-      return .ok ((Answer.parse (← IO.FS.readFile answerFile)).uncode ids)
   match ← s.runCached dir ids script with
   | .error m => return .error m
   | .ok (a, key) =>
