@@ -56,6 +56,7 @@ theorem begins_keeps (c : CheckedSpec) (hv : v ∈ c.spec.services) {s : State v
     | event i value a h => exact Step.applyEvents_keys c.T _ _ hk h
     | clock time s' effs a _ hf h =>
       exact (Step.fire_keys c.T { s with now := time } hk _ hf).congr c.T (Step.start_machines { state := s' } effs h)
+        (Step.start_records { state := s' } effs h)
 
 /-- The state a run on valid inputs reaches from the initial state keeps the run's invariants. -/
 theorem run_keeps (c : CheckedSpec) (hv : v ∈ c.spec.services) {xs : List (Input v)}
@@ -66,7 +67,7 @@ theorem run_keeps (c : CheckedSpec) (hv : v ∈ c.spec.services) {xs : List (Inp
   have hr := (c.checked v hv).reach
   exact ⟨run_inv c.T hr _ Step.init_inv xs,
     Step.run_supp c.T he hr _ Step.init_inv (Step.init_supp he) xs hxs,
-    run_keys c.T _ (Step.init_keys c.T fun m hm => ((c.checked v hv).keys m hm).2) xs⟩
+    run_keys c.T _ (Step.init_keys c.T (fun m hm => ((c.checked v hv).keys m hm).2) (c.checked v hv).idle) xs⟩
 
 /-- What a step line's answers say, whichever verdict it reads: the input kind's questions are built, and its bound
 question is unsat (`Prove.proved`) or `F` holds, the fit of the step the line's scope names (`Prove.withinBounds`). -/
@@ -91,7 +92,7 @@ theorem begins_coded {P : List AnySite} {E : List AnyEffectSite} {T : List TypeD
   rcases covered chk senv hkeys hW x hivs with ⟨inp, hmem, _, M, hM, hsel, hS, hxd, hcase⟩ | h
   · obtain ⟨gs, qs, hqs, hor⟩ := hq inp hmem
     rcases hor with hun | hfit
-    · obtain ⟨t, ht, hcodes, hsites, hcond⟩ := bound_cond chk senv inp hqs hS hinv hsupp hheld hxd hcase
+    · obtain ⟨t, ht, hcodes, hsites, hcond⟩ := bound_cond chk senv inp hqs hS hinv hsupp hkeys hheld hxd hcase
         fun q hq' hn => (hun q hq' hn).noModel_at (questions_tys L T P v senv hqs q hq') (questions_dts L T P v senv hqs q hq')
           (questions_vars L T P v senv hqs q hq') M
           (fun n h => varSorted_of_sorted (hM n h)) hsel

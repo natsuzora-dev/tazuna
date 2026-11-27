@@ -305,7 +305,7 @@ theorem covered {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv
     coverModel_vars (by rw [← hlen, List.getElem?_append_right (by omega), Nat.add_sub_cancel_left,
       List.getElem?_eq_getElem hj])
   have hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some s :=
-    decode_embedState 0 T s pv hpv (fun sm h => (hkeys sm h).2) vals hvals hst
+    decode_embedState 0 T s pv hpv (fun sm h => (hkeys sm h).2.1) vals hvals hst
   have hsorted := embedState_sorted hvals
   have hsrt := embedState_srtVal hvals
   have hc := chk.callerData
@@ -415,16 +415,17 @@ theorem fault_sound {E : List AnyEffectSite} (chk : Checked P E T v) (he : v.Equ
   obtain ⟨ivs, hivs⟩ := Option.isSome_iff_exists.1 hx
   have hord : ∀ m ∈ v.machines, m.key.ordered T = true := fun m hm => (chk.keys m hm).2
   have hsupp := Step.run_supp T he chk.reach _ Step.init_inv (Step.init_supp he) is hvalid
-  rcases covered chk senv (run_keys T _ (Step.init_keys T hord) is) hs x hivs
+  have hkeys := run_keys T _ (Step.init_keys T hord chk.idle) is
+  rcases covered chk senv hkeys hs x hivs
     with ⟨inp, hmem, hcov⟩ | h
   · obtain ⟨gs, qs, hqs, htg, hor⟩ := hq inp hmem
     rcases hor with hb | hfit
-    · refine verdict_covered chk senv f hf hinit inp hqs (fun q hq' h => ?_) is hsupp x hcov
+    · refine verdict_covered chk senv f hf hinit inp hqs (fun q hq' h => ?_) is hsupp hkeys x hcov
       rcases h with h | h
       · exact hb q hq' h
       · exact htg q hq' h
     · obtain ⟨hc, M, hM, hsel, hS, hxd, hcase⟩ := hcov
-      exact question_fault chk senv inp hqs hS (run_inv T chk.reach _ Step.init_inv is) hsupp
+      exact question_fault chk senv inp hqs hS (run_inv T chk.reach _ Step.init_inv is) hsupp hkeys
         (Tazuna.Ir.run_invariants T _ is hinit) hxd hcase (.inr hfit) f hf fun q hq' hg =>
           (htg q hq' hg).noModel_at (questions_tys L T P v senv hqs q hq') (questions_dts L T P v senv hqs q hq')
             (questions_vars L T P v senv hqs q hq') M (fun n h => varSorted_of_sorted (hM n h)) hsel

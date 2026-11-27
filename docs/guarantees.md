@@ -50,6 +50,8 @@ For each target it prints one line per input kind: each command, each answer to 
 A step line asks the solver for a state of the right shape where every invariant holds, and an input, whose step breaks the target.
 The right shape includes that every id the service made in the state is below its counter, so an id the step makes is new.
 `run_supp` proves every state a run reaches on inputs that satisfy `validInputs` has that shape, which is why step lines print it in `assumes`.
+The right shape also includes that each machine has an instance for exactly the keys its `instances` gives at the records.
+`run_keys` proves every state a run reaches has it with no assumption on the inputs, because check requires that `instances` gives no key at the initial records (`Illegal.initialInstances`).
 With no such model, the line reads `Prove.proved` or `Prove.withinBounds`.
 
 `proved_sound` (T4): where every input kind's lines about a fault read proved, no step of any run from the initial state on inputs that satisfy `validInputs` faults with it.

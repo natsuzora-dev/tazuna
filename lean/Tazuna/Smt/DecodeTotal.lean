@@ -166,13 +166,14 @@ theorem questions_decode (senv : StepEnv L (shapes v)) {inp : SymInput v (shapes
   obtain ⟨iwf, hiwf, ha⟩ := bind_ok.1 ha
   obtain ⟨below, -, ha⟩ := bind_ok.1 ha
   obtain ⟨names, -, ha⟩ := bind_ok.1 ha
+  obtain ⟨shape, -, ha⟩ := bind_ok.1 ha
   obtain ⟨_, -, ha⟩ := bind_ok.1 ha
   obtain ⟨_, -, ha⟩ := bind_ok.1 ha
   obtain ⟨_, -, ha⟩ := bind_ok.1 ha
   obtain ⟨_, -, ha⟩ := bind_ok.1 ha
   obtain ⟨_, -, ha⟩ := bind_ok.1 ha
   cases pure_ok.1 ha
-  have hcx : q.ask.context = [wf, iwf, below, names, t.out.case] := by
+  have hcx : q.ask.context = [wf, iwf, below, names, t.out.case, shape] := by
     rcases List.mem_cons.1 hqm with rfl | hqm
     · rfl
     · obtain ⟨g, -, rfl⟩ := List.mem_map.1 hqm; rfl

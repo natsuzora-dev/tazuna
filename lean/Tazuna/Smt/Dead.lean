@@ -70,13 +70,13 @@ theorem step_unshown (chk : Checked P E T v) (senv : StepEnv L (shapes v)) {rule
     {inp : SymInput v (shapes v) senv.nT} {a : StepAsk v} (ha : stepAsk L T P v senv inp = .ok a)
     (hshow : ∀ q, showsAsk L T rules g a inp = some q → ∃ c ∈ q.script.asserts, ¬ Holds M c)
     {s : State v} (hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some s)
-    (hinv : Step.Inv P s) (hsupp : Step.StateSupp s) (hheld : Step.invariants s = [])
+    (hinv : Step.Inv P s) (hsupp : Step.StateSupp s) (hkeys : Step.KeysOk T s) (hheld : Step.invariants s = [])
     {hc : v.caller.isData = true} {x : Input v} (hx : inp.decode M L hc = some x)
     (hcase : ∀ t, encodeStep L T P v senv (SymState.vars 0) inp = .ok t → Holds M t.out.case)
     (hb : (∃ c ∈ a.bound.script.asserts, ¬ Holds M c) ∨ StepFits L T P v s x)
     (hno : ∀ f, (step T v s x).outcome ≠ .fault f) : ¬ Hits T v rules g x (step T v s x) := by
   intro hhit
-  obtain ⟨hside, hheldH, hcond, hrel⟩ := stepAsk_step chk senv ha hS hinv hsupp hheld hx hcase hb
+  obtain ⟨hside, hheldH, hcond, hrel⟩ := stepAsk_step chk senv ha hS hinv hsupp hkeys hheld hx hcase hb
   have hh := kindHitT_holds hx hrel hno hhit
   simp only [showsAsk] at hshow
   split at hshow
@@ -87,7 +87,7 @@ theorem step_unshown (chk : Checked P E T v) (senv : StepEnv L (shapes v)) {rule
       simp only [hw, Option.map_some, beq_iff_eq, Option.some.injEq] at hk
       simp only [Holds, Term.const?_denote M _ hw, hk] at hh
       cases hh
-  · exact stepAsk_goal chk senv ha hS hinv hsupp hx hcase hside hheldH hcond (hshow _ rfl) hh
+  · exact stepAsk_goal chk senv ha hS hinv hsupp hkeys hx hcase hside hheldH hcond (hshow _ rfl) hh
 
 theorem boundUnsat_of_ask {senv : StepEnv L (shapes v)} {inp : SymInput v (shapes v) senv.nT} {a : StepAsk v}
     (ha : stepAsk L T P v senv inp = .ok a) (hb : Unsat L a.bound) : BoundUnsat L T P v senv inp := by
@@ -110,14 +110,15 @@ theorem unshown_at (chk : Checked P E T v) (he : v.Equivariant) (senv : StepEnv 
   obtain ⟨ivs, hivs⟩ := Option.isSome_iff_exists.1 hx
   have hord : ∀ m ∈ v.machines, m.key.ordered T = true := fun m hm => (chk.keys m hm).2
   have hsupp := Step.run_supp T he chk.reach _ Step.init_inv (Step.init_supp he) is hvalid
-  rcases covered chk senv (run_keys T _ (Step.init_keys T hord) is) hs x hivs with
+  have hkeys := run_keys T _ (Step.init_keys T hord chk.idle) is
+  rcases covered chk senv hkeys hs x hivs with
     ⟨inp, hmem, hc, M, hM, hsel, hS, hxd, hcase⟩ | ⟨-, -, -, hq | hf⟩
   · obtain ⟨a, ha, hshow, hor⟩ := hl inp hmem
     have hun : ∀ q : TypedScript, q.tys = stateTys v (shapes v) ++ inp.tys → L.datatypes? = some q.datatypes →
         q.tys.mapM L.srt? = some q.vars → Unsat L q → ∃ c ∈ q.script.asserts, ¬ Holds M c := fun q ht hd hv hu =>
       hu.noModel_at ht hd hv M (fun n h => varSorted_of_sorted (hM n h)) hsel
     refine step_unshown chk senv ha (fun q hq => hun q ?_ ?_ ?_ (hshow q hq)) hS (run_inv T chk.reach _ Step.init_inv is)
-      hsupp (Tazuna.Ir.run_invariants T _ is hinit) hxd hcase
+      hsupp hkeys (Tazuna.Ir.run_invariants T _ is hinit) hxd hcase
       (hor.imp (fun hu => hun _ (stepAsk_tys L T P v senv ha _) (stepAsk_dts L T P v senv ha _)
         (stepAsk_vars L T P v senv ha _) hu) hF) hno
     all_goals

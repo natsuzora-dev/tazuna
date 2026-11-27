@@ -890,6 +890,7 @@ theorem stepAsk_ofService (inp : SymInput v (shapes v) senv.nT)
       (fun m hm => ⟨hs _ (by simp only [stepTys]; exact List.mem_append_left _ (List.mem_append_right _ (List.mem_map_of_mem hm))),
         (hms m hm).1⟩) (SymState.vars 0 : SymState v).machines)
     simp [namesStateT, h1, h2] at hn) fun _ _ => ?_
+  refine sound_bind (shapesT_sound h.sorted v.machines (fun m hm => (h.machines m hm).1) _ _) fun _ _ => ?_
   refine sound_bind h.invariants fun ⟨inv, ci0⟩ hinv => ?_
   refine sound_bind (encodeInvariants_sound h.sorted hinv (avail_of_got h.records) h.rules _) fun ⟨rules, ci⟩ _ => ?_
   refine sound_bind (encodeInstChecks_sound h.sorted T v.machines (fun m hm => (h.machines m hm).1) _ _ _)

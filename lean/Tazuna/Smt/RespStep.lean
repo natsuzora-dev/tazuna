@@ -57,17 +57,17 @@ theorem step_answers (chk : Checked P E T v) (senv : StepEnv L (shapes v)) {resp
     (hq : respStep L resp a = .ok q) (hun : ∃ c ∈ q.script.asserts, ¬ Holds M c)
     (hb : ∃ c ∈ a.bound.script.asserts, ¬ Holds M c)
     {s : State v} (hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some s)
-    (hinv : Step.Inv P s) (hsupp : Step.StateSupp s) (hheld : Step.invariants s = [])
+    (hinv : Step.Inv P s) (hsupp : Step.StateSupp s) (hkeys : Step.KeysOk T s) (hheld : Step.invariants s = [])
     {hc : v.caller.isData = true} {x : Input v} (hx : inp.decode M L hc = some x)
     (hcase : ∀ t, encodeStep L T P v senv (SymState.vars 0) inp = .ok t → Holds M t.out.case)
     (hno : ∀ f, (step T v s x).outcome ≠ .fault f) :
     ∀ tv ∈ (step T v s x).events, resp.opens tv = true → resp.answers tv (step T v s x).moment = true := by
-  obtain ⟨hside, hheldH, hcond, hrel⟩ := stepAsk_step chk senv ha hS hinv hsupp hheld hx hcase (.inl hb)
+  obtain ⟨hside, hheldH, hcond, hrel⟩ := stepAsk_step chk senv ha hS hinv hsupp hkeys hheld hx hcase (.inl hb)
   obtain ⟨⟨fa, ca⟩, hfa, hq⟩ := bind_ok.1 hq
   obtain ⟨⟨fq, cq⟩, hfq, hq⟩ := bind_ok.1 hq
   obtain ⟨⟨h, c⟩, hh, hq⟩ := bind_ok.1 hq
   cases pure_ok.1 hq
-  have hgoal := stepAsk_goal chk senv ha hS hinv hsupp hx hcase hside hheldH hcond hun
+  have hgoal := stepAsk_goal chk senv ha hS hinv hsupp hkeys hx hcase hside hheldH hcond hun
   simp only [holds_or, holds_not, not_or, Classical.not_not, holds_andT] at hgoal
   obtain ⟨⟨⟨hca, hcq⟩, hc⟩, hnh⟩ := hgoal
   have hp : PredExact M L v (unansweredAt fa fq a.t.out)
@@ -116,7 +116,7 @@ theorem state_answers (chk : Checked P E T v) (senv : StepEnv L (shapes v)) {res
           exact ⟨stepAsk_tys L T P v senv ha _, stepAsk_dts L T P v senv ha _, stepAsk_vars L T P v senv ha _⟩
         exact step_answers chk senv ha hq (hun q hqt.1 hqt.2.1 hqt.2.2 hu)
           (hun _ (stepAsk_tys L T P v senv ha _) (stepAsk_dts L T P v senv ha _) (stepAsk_vars L T P v senv ha _) hb)
-          hS hinv hsupp hheld hxd hcase hno
+          hS hinv hsupp hkeys hheld hxd hcase hno
       · obtain ⟨i, c, y, rfl⟩ := hq
         exact absurd hacc (by simp only [step]; split <;> simp)
       · exact absurd hf (hno _)
@@ -148,7 +148,7 @@ theorem response_proved (chk : Checked P E T v) (he : v.Equivariant) (senv : Ste
       ∀ r ∈ (run T v s ys).2, ∀ tv ∈ r.events, resp.opens tv = true → resp.answers tv r.moment = true by
     rintro ⟨i, j, tv, hij, hj, htv, hop, -, hm⟩
     have hi : i < ((run T v (Step.State.init v) xs).2.map Result.moment).length := by omega
-    have hr := h xs _ Step.init_inv (Step.init_supp he) hinit (Step.init_keys T hord) hvalid (within_init h0)
+    have hr := h xs _ Step.init_inv (Step.init_supp he) hinit (Step.init_keys T hord chk.idle) hvalid (within_init h0)
       _ (List.getElem_mem (l := (run T v (Step.State.init v) xs).2) (by simpa using hi))
     simp only [List.getElem_map] at htv hm
     have := hm i (Nat.le_refl _) hij

@@ -366,7 +366,7 @@ theorem within_step {E : List AnyEffectSite} (chk : Checked P E T v) (senv : Ste
   · obtain ⟨ivs, hivs⟩ := Option.isSome_iff_exists.1 hx
     rcases covered chk senv hkeys hW x hivs with ⟨inp, hmem, _, M, hM, hsel, hS, hxd, hcase⟩ | h
     · obtain ⟨gs, qs, hqs, hun⟩ := hb inp hmem
-      obtain ⟨t, ht, hcodes, hsites, hcond⟩ := bound_cond chk senv inp hqs hS hinv hsupp hheld hxd hcase
+      obtain ⟨t, ht, hcodes, hsites, hcond⟩ := bound_cond chk senv inp hqs hS hinv hsupp hkeys hheld hxd hcase
         fun q hq' hn => (hun q hq' hn).noModel_at (questions_tys L T P v senv hqs q hq') (questions_dts L T P v senv hqs q hq')
           (questions_vars L T P v senv hqs q hq') M
           (fun n h => varSorted_of_sorted (hM n h)) hsel
@@ -386,7 +386,7 @@ theorem run_within {E : List AnyEffectSite} (chk : Checked P E T v) (he : v.Equi
   have hord : ∀ m ∈ v.machines, m.key.ordered T = true := fun m hm => (chk.keys m hm).2
   suffices h : ∀ (xs : List (Input v)) (s : State v), Step.Inv P s → Step.StateSupp s → Step.invariants s = [] →
       Step.KeysOk T s → Step.ValidRun T s xs → Within L (shapes v) s → Within L (shapes v) (run T v s xs).1 from
-    h is _ Step.init_inv (Step.init_supp he) hinit (Step.init_keys T hord) hvalid (within_init h0)
+    h is _ Step.init_inv (Step.init_supp he) hinit (Step.init_keys T hord chk.idle) hvalid (within_init h0)
   intro xs
   induction xs with
   | nil => intro s _ _ _ _ _ hW; exact hW
@@ -413,9 +413,10 @@ theorem proved_sound {E : List AnyEffectSite} (chk : Checked P E T v) (he : v.Eq
   have hsupp := Step.run_supp T he chk.reach _ Step.init_inv (Step.init_supp he) is hvalid
   rcases inputs_fit chk hin hW x with hx | ⟨hu, -⟩
   · obtain ⟨ivs, hivs⟩ := Option.isSome_iff_exists.1 hx
-    rcases covered chk senv (run_keys T _ (Step.init_keys T hord) is) hW x hivs with ⟨inp, hmem, hcov⟩ | h
+    have hkeys := run_keys T _ (Step.init_keys T hord chk.idle) is
+    rcases covered chk senv hkeys hW x hivs with ⟨inp, hmem, hcov⟩ | h
     · obtain ⟨gs, qs, hqs, htg, hor⟩ := hq inp hmem
-      refine verdict_covered chk senv f hf hinit inp hqs (fun q hq' h => ?_) is hsupp x hcov
+      refine verdict_covered chk senv f hf hinit inp hqs (fun q hq' h => ?_) is hsupp hkeys x hcov
       rcases h with h | h
       · exact hor.resolve_right id q hq' h
       · exact htg q hq' h

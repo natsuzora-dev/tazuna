@@ -204,7 +204,7 @@ theorem pair_model (hL : SortedLayout L) {s : State v} (hkeys : Step.KeysOk T s)
       · have hn : n = pairVar v + 1 := by unfold pairVar stateWidth; omega
         rw [hn, hv2]; exact hi2 dts σ hD hs
   refine ⟨coverModel L (vals ++ [z1, z2]), fun n hn => ?_, hLS,
-    decode_embedState 0 T s pv hpv (fun sm h => (hkeys sm h).2) vals hvals hst, by rw [hv1]; exact hz1, by rw [hv2]; exact hz2⟩
+    decode_embedState 0 T s pv hpv (fun sm h => (hkeys sm h).2.1) vals hvals hst, by rw [hv1]; exact hz1, by rw [hv2]; exact hz2⟩
   by_cases hlt : n < (stateTys v (shapes v)).length
   · have hget : (pairTys v)[n] = (stateTys v (shapes v))[n] := List.getElem_append_left hlt
     obtain ⟨w, hw, hsw⟩ := forall2_getElem? hsorted (List.getElem?_eq_getElem hlt)

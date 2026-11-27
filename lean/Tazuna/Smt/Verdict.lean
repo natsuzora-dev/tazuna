@@ -690,7 +690,7 @@ theorem stepAsk_context {P : List AnySite} {E : List AnyEffectSite} (chk : Check
     (senv : StepEnv L (shapes v)) {inp : SymInput v (shapes v) senv.nT} {a : StepAsk v}
     (ha : stepAsk L T P v senv inp = .ok a)
     {s : State v} (hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some s)
-    (hinv : Step.Inv P s) (hsupp : Step.StateSupp s)
+    (hinv : Step.Inv P s) (hsupp : Step.StateSupp s) (hkeys : Step.KeysOk T s)
     {hc : v.caller.isData = true} {x : Input v} (hx : inp.decode M L hc = some x)
     (hcase : ∀ t, encodeStep L T P v senv (SymState.vars 0) inp = .ok t → Holds M t.out.case) (X : List Term) :
     ∀ c ∈ (a.script X).context, Holds M c := by
@@ -700,6 +700,7 @@ theorem stepAsk_context {P : List AnySite} {E : List AnyEffectSite} (chk : Check
   obtain ⟨iwf, hiwf, ha⟩ := bind_ok.1 ha
   obtain ⟨below, hbelow, ha⟩ := bind_ok.1 ha
   obtain ⟨names, hnames, ha⟩ := bind_ok.1 ha
+  obtain ⟨shape, hshape, ha⟩ := bind_ok.1 ha
   obtain ⟨_, -, ha⟩ := bind_ok.1 ha
   obtain ⟨_, -, ha⟩ := bind_ok.1 ha
   obtain ⟨_, -, ha⟩ := bind_ok.1 ha
@@ -709,12 +710,14 @@ theorem stepAsk_context {P : List AnySite} {E : List AnyEffectSite} (chk : Check
   have hR := decode_state hS
   intro c hc'
   simp only [List.mem_cons, List.not_mem_nil, or_false] at hc'
-  rcases hc' with rfl | rfl | rfl | rfl | rfl
+  rcases hc' with rfl | rfl | rfl | rfl | rfl | rfl
   · exact wf_of_decodeState (need_ok.1 hwf) hS
   · exact SymInput.wf_of_decode (need_ok.1 hiwf) hx
   · exact (pendingBelow_iff hR.pending hR.nextId hbelow).2 hinv.below
   · exact stateSupp_names hR hsupp chk.recordsComparable chk.machinesComparable (need_ok.1 hnames)
   · exact hcase t ht
+  · exact shapes_holds s.records hR.records v.machines _ s.machines hR.machines chk.keys
+      (fun sm h => (hkeys sm h).2.2) hshape
 
 /-- A model satisfying none of a script's assertions somewhere, where its context holds, fails one of its own. -/
 theorem stepAsk_own {P : List AnySite} {senv : StepEnv L (shapes v)} {inp : SymInput v (shapes v) senv.nT}
@@ -743,12 +746,12 @@ theorem stepAsk_step {P : List AnySite} {E : List AnyEffectSite} (chk : Checked 
     (senv : StepEnv L (shapes v)) {inp : SymInput v (shapes v) senv.nT} {a : StepAsk v}
     (ha : stepAsk L T P v senv inp = .ok a)
     {s : State v} (hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some s)
-    (hinv : Step.Inv P s) (hsupp : Step.StateSupp s) (hheld : Step.invariants s = [])
+    (hinv : Step.Inv P s) (hsupp : Step.StateSupp s) (hkeys : Step.KeysOk T s) (hheld : Step.invariants s = [])
     {hc : v.caller.isData = true} {x : Input v} (hx : inp.decode M L hc = some x)
     (hcase : ∀ t, encodeStep L T P v senv (SymState.vars 0) inp = .ok t → Holds M t.out.case)
     (hb : (∃ c ∈ a.bound.script.asserts, ¬ Holds M c) ∨ StepFits L T P v s x) :
     Holds M a.side ∧ Holds M a.held ∧ Holds M a.t.cond ∧ a.t.out.Rel M L T (shapes v) s x (step T v s x) := by
-  have hctx := stepAsk_context chk senv ha hS hinv hsupp hx hcase [.or (.not a.side) (andT a.held (.not a.t.cond))]
+  have hctx := stepAsk_context chk senv ha hS hinv hsupp hkeys hx hcase [.or (.not a.side) (andT a.held (.not a.t.cond))]
   have hhit := hcase _ (stepAsk_t ha)
   have ha0 := ha
   simp only [StepAsk.bound] at hb
@@ -758,6 +761,7 @@ theorem stepAsk_step {P : List AnySite} {E : List AnyEffectSite} (chk : Checked 
   obtain ⟨iwf, hiwf, ha⟩ := bind_ok.1 ha
   obtain ⟨below, hbelow, ha⟩ := bind_ok.1 ha
   obtain ⟨names, hnames, ha⟩ := bind_ok.1 ha
+  obtain ⟨_, -, ha⟩ := bind_ok.1 ha
   obtain ⟨⟨inv, ci0⟩, hinvc, ha⟩ := bind_ok.1 ha
   obtain ⟨⟨rules, ci⟩, hrules, ha⟩ := bind_ok.1 ha
   obtain ⟨⟨checks, ck⟩, hchecks, ha⟩ := bind_ok.1 ha
@@ -804,13 +808,13 @@ theorem stepAsk_goal {P : List AnySite} {E : List AnyEffectSite} (chk : Checked 
     (senv : StepEnv L (shapes v)) {inp : SymInput v (shapes v) senv.nT} {a : StepAsk v}
     (ha : stepAsk L T P v senv inp = .ok a)
     {s : State v} (hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some s)
-    (hinv : Step.Inv P s) (hsupp : Step.StateSupp s)
+    (hinv : Step.Inv P s) (hsupp : Step.StateSupp s) (hkeys : Step.KeysOk T s)
     {hc : v.caller.isData = true} {x : Input v} (hx : inp.decode M L hc = some x)
     (hcase : ∀ t, encodeStep L T P v senv (SymState.vars 0) inp = .ok t → Holds M t.out.case)
     (hside : Holds M a.side) (hheld : Holds M a.held) (hcond : Holds M a.t.cond) {goal : Term}
     (hun : ∃ c ∈ (a.script [a.side, a.held, a.t.cond, goal]).script.asserts, ¬ Holds M c) : ¬ Holds M goal := by
   intro hg
-  obtain ⟨c, hc', hna⟩ := stepAsk_own ha (stepAsk_context chk senv ha hS hinv hsupp hx hcase _) hun
+  obtain ⟨c, hc', hna⟩ := stepAsk_own ha (stepAsk_context chk senv ha hS hinv hsupp hkeys hx hcase _) hun
   simp only [List.mem_cons, List.not_mem_nil, or_false] at hc'
   rcases hc' with rfl | rfl | rfl | rfl
   · exact hna hside
@@ -826,7 +830,7 @@ theorem question_fault {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
     (senv : StepEnv L (shapes v)) (inp : SymInput v (shapes v) senv.nT)
     {gs : List Target} {qs : List (Question v (shapes v) senv.nT)} (hq : questions L T P v senv inp = .ok (gs, qs))
     {s : State v} (hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some s)
-    (hinv : Step.Inv P s) (hsupp : Step.StateSupp s) (hheld : Step.invariants s = [])
+    (hinv : Step.Inv P s) (hsupp : Step.StateSupp s) (hkeys : Step.KeysOk T s) (hheld : Step.invariants s = [])
     {hc : v.caller.isData = true} {x : Input v} (hx : inp.decode M L hc = some x)
     (hcase : ∀ t, encodeStep L T P v senv (SymState.vars 0) inp = .ok t → Holds M t.out.case)
     (hb : (∀ q ∈ qs, q.target = none → ∃ a ∈ q.script.asserts, ¬ Holds M a) ∨ StepFits L T P v s x)
@@ -837,7 +841,7 @@ theorem question_fault {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
   simp only [questions] at hq
   obtain ⟨a, ha, hq⟩ := bind_ok.1 hq
   cases pure_ok.1 hq
-  obtain ⟨hside, hheldH, hcond, hrel⟩ := stepAsk_step chk senv ha hS hinv hsupp hheld hx hcase
+  obtain ⟨hside, hheldH, hcond, hrel⟩ := stepAsk_step chk senv ha hS hinv hsupp hkeys hheld hx hcase
     (hb.imp (fun h => h _ (List.mem_cons_self ..) rfl) id)
   obtain ⟨g, hg, hn, hbr⟩ := rel_faults (command?_of_decode hx) hrel hfault hf
   have hkeep : ((a.t.out.breaks inp.command? g).const?.map Val.toBool != some false) = true := by
@@ -847,7 +851,7 @@ theorem question_fault {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
       have hw := Term.const?_denote M _ hk
       simp only [Holds, hw] at hbr
       simp [hbr]
-  exact stepAsk_goal chk senv ha hS hinv hsupp hx hcase hside hheldH hcond (hun ⟨inp, some g, _⟩
+  exact stepAsk_goal chk senv ha hS hinv hsupp hkeys hx hcase hside hheldH hcond (hun ⟨inp, some g, _⟩
     (List.mem_cons_of_mem _ (List.mem_map.2 ⟨g, List.mem_filter.2 ⟨mem_dedup hg, hkeep⟩, rfl⟩)) ⟨g, rfl, hn⟩) hbr
 
 /-- What an input kind's bound question says where it has no model: wherever the symbolic state decodes to a state of
@@ -858,7 +862,7 @@ theorem bound_cond {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P 
     (senv : StepEnv L (shapes v)) (inp : SymInput v (shapes v) senv.nT)
     {gs : List Target} {qs : List (Question v (shapes v) senv.nT)} (hq : questions L T P v senv inp = .ok (gs, qs))
     {s : State v} (hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some s)
-    (hinv : Step.Inv P s) (hsupp : Step.StateSupp s) (hheld : Step.invariants s = [])
+    (hinv : Step.Inv P s) (hsupp : Step.StateSupp s) (hkeys : Step.KeysOk T s) (hheld : Step.invariants s = [])
     {hc : v.caller.isData = true} {x : Input v} (hx : inp.decode M L hc = some x)
     (hcase : ∀ t, encodeStep L T P v senv (SymState.vars 0) inp = .ok t → Holds M t.out.case)
     (hun : ∀ q ∈ qs, q.target = none → ∃ a ∈ q.script.asserts, ¬ Holds M a) :
@@ -867,7 +871,7 @@ theorem bound_cond {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P 
   simp only [questions] at hq
   obtain ⟨a, ha, hq⟩ := bind_ok.1 hq
   cases pure_ok.1 hq
-  obtain ⟨hside, -, hcond, -⟩ := stepAsk_step chk senv ha hS hinv hsupp hheld hx hcase
+  obtain ⟨hside, -, hcond, -⟩ := stepAsk_step chk senv ha hS hinv hsupp hkeys hheld hx hcase
     (.inl (hun _ (List.mem_cons_self ..) rfl))
   have hparts : Holds M a.t.codes ∧ Holds M a.t.sites := by
     simp only [stepAsk] at ha
@@ -901,14 +905,15 @@ theorem verdict_covered {P : List AnySite} {E : List AnyEffectSite} (chk : Check
     (hq : questions L T P v senv inp = .ok (gs, qs))
     (hun : ∀ q ∈ qs, (q.target = none ∨ ∃ g, q.target = some g ∧ g.covers f = true) →
       Unsat L q.ask)
-    (is : List (Input v)) (hsupp : Step.StateSupp (run T v (Step.State.init v) is).1) (x : Input v)
+    (is : List (Input v)) (hsupp : Step.StateSupp (run T v (Step.State.init v) is).1)
+    (hkeys : Step.KeysOk T (run T v (Step.State.init v) is).1) (x : Input v)
     (hcov : Covered L T P v senv inp (run T v (Step.State.init v) is).1 x) :
     (step T v (run T v (Step.State.init v) is).1 x).outcome ≠ .fault f := by
   obtain ⟨hc, M, hM, hsel, hS, hx, hcase⟩ := hcov
   have hno : ∀ q ∈ qs, Unsat L q.ask → ∃ a ∈ q.script.asserts, ¬ Holds M a := fun q hq' hu =>
     hu.noModel_at (questions_tys L T P v senv hq q hq') (questions_dts L T P v senv hq q hq')
       (questions_vars L T P v senv hq q hq') M (fun n h => varSorted_of_sorted (hM n h)) hsel
-  exact question_fault chk senv inp hq hS (run_inv T chk.reach _ Step.init_inv is) hsupp
+  exact question_fault chk senv inp hq hS (run_inv T chk.reach _ Step.init_inv is) hsupp hkeys
     (Tazuna.Ir.run_invariants T _ is hinit) hx hcase (.inl fun q hq' h => hno q hq' (hun q hq' (.inl h))) f hf
     fun q hq' h => hno q hq' (hun q hq' (.inr h))
 

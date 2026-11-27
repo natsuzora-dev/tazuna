@@ -335,17 +335,18 @@ theorem decode_reachable (b : Nat) (T : List TypeDecl) {P : List AnySite} (s : S
         (SymState.vars (v := v) b).decode M L T (shapes v) = some s := by
   obtain ⟨pv, hpv⟩ := exists_pendingVal (shapes v) s.pending hinv.shaped hinv.nodup
   exact ⟨pv, hpv, fun vals h M hM =>
-    decode_embedState b T s pv hpv (fun sm h => (hkeys sm h).2) vals h hM⟩
+    decode_embedState b T s pv hpv (fun sm h => (hkeys sm h).2.1) vals h hM⟩
 
 /-- T3 for every state a run reaches from the initial state of a service whose program reaches only `P` and whose
 machine keys are ordered (what check requires): no assumption about the state is left. -/
 theorem decode_run (b : Nat) (T : List TypeDecl) {P : List AnySite} {E : List AnyEffectSite} (hv : v.Reach P E)
-    (hord : ∀ m ∈ v.machines, m.key.ordered T = true) (is : List (Input v)) :
+    (hord : ∀ m ∈ v.machines, m.key.ordered T = true)
+    (hidle : ∀ m ∈ v.machines, m.instances.fn (v.init, ()) = []) (is : List (Input v)) :
     ∃ pv : PendingVal (shapes v), pv.list = (run T v (Step.State.init v) is).1.pending ∧
       ∀ vals, embedState L (run T v (Step.State.init v) is).1 pv = some vals →
       ∀ M : Model, (∀ j (hj : j < vals.length), M.vars (b + j) = vals[j]) →
         (SymState.vars (v := v) b).decode M L T (shapes v) = some (run T v (Step.State.init v) is).1 :=
-  decode_reachable b T _ (run_inv T hv _ Step.init_inv is) (run_keys T _ (Step.init_keys T hord) is)
+  decode_reachable b T _ (run_inv T hv _ Step.init_inv is) (run_keys T _ (Step.init_keys T hord hidle) is)
 
 /-- The instance tables' well-formedness holds exactly when they decode. -/
 theorem wfMachines_iff (T : List TypeDecl) : (ms : List (MachineV v.records v.event)) → (xs : PerMachine (fun _ => Term) ms) →

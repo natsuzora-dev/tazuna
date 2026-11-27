@@ -1,6 +1,7 @@
 import Tazuna.Smt.Step
 import Tazuna.Smt.Solver
 import Tazuna.Smt.Names
+import Tazuna.Smt.Shape
 
 /-! The questions `prove` asks the solver. A target is one named rule: a service invariant, a machine's instance
 invariant, or a command's `ensures`. For each kind of input that can break it, one question asks for a state of the
@@ -431,8 +432,9 @@ variable (L : Layout) (T : List TypeDecl) (P : List AnySite) (v : ServiceV) (sen
 step's terms, the side conditions (the codes and sites fit, the invariants' codes and instance checks run), the
 invariants holding on the state, and the script around a question's own assertions. Its context asserts the state's
 and the input's shape (well-formed slots, wire ids below the next, names below the counter as every state on valid
-inputs keeps them, `Step.run_supp`), so each model decodes and no fresh name meets one the state holds, and the case
-the questions are about. -/
+inputs keeps them, `Step.run_supp`), so each model decodes and no fresh name meets one the state holds, an instance
+for exactly the keys `instances` gives at the records (`shapesT`, as every state a run reaches has, `Step.KeysOk`),
+and the case the questions are about. -/
 structure StepAsk (v : ServiceV) where
   t : EncodedStep v
   side : Term
@@ -446,6 +448,7 @@ def stepAsk (inp : SymInput v (shapes v) senv.nT) : Except Refusal (StepAsk v) :
   let iwf ← need (lacksDatas inp.dataTys) (inp.wf L)
   let below ← pendingBelowT L (shapes v) S.pending S.nextId
   let names ← need (.layout (.type v.records)) (namesStateT L S)
+  let shape ← shapesT L v.machines S.machines S.records
   let (inv, ci0) ← v.invariants.code L
   let (rules, ci) ← encodeInvariants L inv S.records
   let (checks, ck) ← encodeInstChecks L T v.machines S.machines S.records S.now
@@ -454,7 +457,7 @@ def stepAsk (inp : SymInput v (shapes v) senv.nT) : Except Refusal (StepAsk v) :
   let tys := stateTys v (shapes v) ++ inp.tys
   let vars ← tys.mapM fun ty => need (lacks ty) (L.srt? ty)
   let dts ← need (.layout (.type v.records)) L.datatypes?
-  pure ⟨t, side, held, fun asserts => ⟨dts, tys, vars, [wf, iwf, below, names, t.out.case], asserts⟩⟩
+  pure ⟨t, side, held, fun asserts => ⟨dts, tys, vars, [wf, iwf, below, names, t.out.case, shape], asserts⟩⟩
 
 /-- The bound question of an input kind: the side conditions fail or, with the invariants, the step's condition. -/
 def StepAsk.bound {w : ServiceV} (a : StepAsk w) : TypedScript := a.script [.or (.not a.side) (andT a.held (.not a.t.cond))]
@@ -496,7 +499,7 @@ theorem stepAsk_tys {inp : SymInput v (shapes v) senv.nT} {a : StepAsk v} (ha : 
 theorem stepAsk_dts {inp : SymInput v (shapes v) senv.nT} {a : StepAsk v} (ha : stepAsk L T P v senv inp = .ok a)
     (X : List Term) : L.datatypes? = some (a.script X).datatypes := by
   simp only [stepAsk] at ha
-  iterate 9 obtain ⟨_, -, ha⟩ := bind_ok.1 ha
+  iterate 10 obtain ⟨_, -, ha⟩ := bind_ok.1 ha
   obtain ⟨dts, hdts, ha⟩ := bind_ok.1 ha
   cases pure_ok.1 ha
   exact need_ok.1 hdts
@@ -516,7 +519,7 @@ theorem questions_dts {inp : SymInput v (shapes v) senv.nT} {gs : List Target} {
 theorem stepAsk_vars {inp : SymInput v (shapes v) senv.nT} {a : StepAsk v} (ha : stepAsk L T P v senv inp = .ok a)
     (X : List Term) : (a.script X).tys.mapM L.srt? = some (a.script X).vars := by
   simp only [stepAsk] at ha
-  iterate 8 obtain ⟨_, -, ha⟩ := bind_ok.1 ha
+  iterate 9 obtain ⟨_, -, ha⟩ := bind_ok.1 ha
   obtain ⟨vars, hvars, ha⟩ := bind_ok.1 ha
   obtain ⟨_, -, ha⟩ := bind_ok.1 ha
   cases pure_ok.1 ha

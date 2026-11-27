@@ -200,6 +200,7 @@ theorem questions_sorts (hL : SortedLayout L) {T : List TypeDecl} {P : List AnyS
   obtain ⟨_, -, ha⟩ := bind_ok.1 ha
   obtain ⟨_, -, ha⟩ := bind_ok.1 ha
   obtain ⟨_, -, ha⟩ := bind_ok.1 ha
+  obtain ⟨_, -, ha⟩ := bind_ok.1 ha
   obtain ⟨vars, hvars, ha⟩ := bind_ok.1 ha
   obtain ⟨dts, hdts, -⟩ := bind_ok.1 ha
   refine sorts_inhabited hL (need_ok.1 hdts) (mapM_need hvars) fun t ht => .inl ?_

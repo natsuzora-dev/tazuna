@@ -3,7 +3,11 @@ import Tazuna.Semantics.PendingInv
 
 /-! Every step keeps each machine's instances in the step's form (`InstancesOk`: in the canonical order of their keys,
 no key twice) when the keys' type is ordered, which check requires (`Illegal.machineKey`). So the symbolic state's
-completeness (T3) needs no assumption about instances for any state a run reaches. -/
+completeness (T3) needs no assumption about instances for any state a run reaches. Every step also keeps the
+instances' keys the keys `instances` gives at the records (`MachineV.keysAt`): only `react` writes the records, and it
+rebuilds every machine's instances from them; a timer keeps its instance's key. The initial state holds no instance,
+and check requires that `instances` gives no key at the initial records (`Illegal.initialInstances`). So a step
+question may assume an instance for exactly those keys. -/
 
 namespace Tazuna.Ir
 
@@ -34,6 +38,16 @@ theorem instancesOk_of_lt (m : MachineV r e) (ho : m.key.ordered T = true) {inst
     · rw [Std.OrientedCmp.eq_swap (cmp := Ty.cmp T m.key), (Ty.cmp_eq_iff T ho _ _).2 hq] at hab
       simp [Ordering.swap] at hab
 
+/-- The keys `instances` gives at `records`, each once, in the canonical order: the keys of the machine's instances
+after an event (`Step.machineStep`). -/
+def MachineV.keysAt (m : MachineV r e) (records : r.den0) : List m.key.den0 :=
+  Ty.sortBy T m.key (dedupBy (Ty.semWith Dsl.base m.key).2 (m.instances.fn (records, ())))
+
+theorem erls_of_keys (m : MachineV r e) {l l' : List (Step.Instance m)} (h : l'.map (·.key) = l.map (·.key)) :
+    l'.map (fun i => Ty.erl T m.key i.key) = l.map (fun i => Ty.erl T m.key i.key) := by
+  have := congrArg (List.map (Ty.erl T m.key)) h
+  simpa [List.map_map, Function.comp_def] using this
+
 theorem reactKey_erl (m : MachineV r e) (ho : m.key.ordered T = true) (insts : List (Step.Instance m))
     (records : r.den0) (now : Int) (ev : e.den0) (k : m.key.den0) :
     Ty.erl T m.key (Step.reactKey m insts records now ev k).1.key = Ty.erl T m.key k := by
@@ -54,50 +68,70 @@ theorem machineStep_ok (records : r.den0) (now : Int) (ev : e.den0) (m : Machine
   simp only [Function.comp_def, Ty.cmp] at hab ⊢
   rw [reactKey_erl T m ho, reactKey_erl T m ho]; exact hab
 
+theorem machineStep_erls (records : r.den0) (now : Int) (ev : e.den0) (m : MachineV r e) (ho : m.key.ordered T = true)
+    (insts : List (Step.Instance m)) :
+    (Step.machineStep T records now ev m insts).1.map (fun i => Ty.erl T m.key i.key) =
+      (m.keysAt T records).map (Ty.erl T m.key) := by
+  simp only [Step.machineStep, List.map_map, MachineV.keysAt]
+  exact List.map_congr_left fun k _ => reactKey_erl T m ho insts records now ev k
+
 end
 
 namespace Step
 
 variable (T : List TypeDecl) {v : ServiceV}
 
-/-- Every machine's key type is ordered and its instances are in the step's form. -/
-def KeysOk (s : State v) : Prop := ∀ sm ∈ s.machines.toSigma, sm.1.key.ordered T = true ∧ InstancesOk T sm.1 sm.2
+/-- Every machine's key type is ordered, its instances are in the step's form, and their keys are the keys
+`instances` gives at the records, compared as Erlang terms, which are equal exactly where `==` holds (`Ty.erl_iff`). -/
+def KeysOk (s : State v) : Prop := ∀ sm ∈ s.machines.toSigma, sm.1.key.ordered T = true ∧ InstancesOk T sm.1 sm.2 ∧
+  sm.2.map (fun i => Ty.erl T sm.1.key i.key) = (sm.1.keysAt T s.records).map (Ty.erl T sm.1.key)
 
-theorem KeysOk.congr {s s' : State v} (h : KeysOk T s) (hm : s'.machines = s.machines) : KeysOk T s' :=
-  fun sm hsm => h sm (hm ▸ hsm)
+theorem KeysOk.congr {s s' : State v} (h : KeysOk T s) (hm : s'.machines = s.machines) (hr : s'.records = s.records) :
+    KeysOk T s' :=
+  fun sm hsm => hr ▸ h sm (hm ▸ hsm)
 
-theorem init_keys (hord : ∀ m ∈ v.machines, m.key.ordered T = true) : KeysOk T (State.init v) := by
+theorem init_keys (hord : ∀ m ∈ v.machines, m.key.ordered T = true)
+    (hidle : ∀ m ∈ v.machines, m.instances.fn (v.init, ()) = []) : KeysOk T (State.init v) := by
   intro sm h
   simp only [State.init, PerMachine.toSigma_ofFn, List.mem_map] at h
   obtain ⟨m, hm, rfl⟩ := h
-  exact ⟨hord m hm, .nil, .nil⟩
+  refine ⟨hord m hm, ⟨.nil, .nil⟩, ?_⟩
+  simp [State.init, MachineV.keysAt, hidle m hm, dedupBy, Ty.sortBy]
 
-theorem start_machines (a : Acc v) (effs : List (Sender × EffectV v.event)) {a' : Acc v} (h : start a effs = .ok a') :
-    a'.state.machines = a.state.machines := by
+/-- Starting effects changes neither the records nor the instances. -/
+theorem start_keeps (a : Acc v) (effs : List (Sender × EffectV v.event)) {a' : Acc v} (h : start a effs = .ok a') :
+    a'.state.records = a.state.records ∧ a'.state.machines = a.state.machines := by
   induction effs generalizing a with
-  | nil => simp only [start, List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at h; rw [h]
+  | nil => simp only [start, List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at h; rw [h]; exact ⟨rfl, rfl⟩
   | cons x effs ih =>
     obtain ⟨snd, eff⟩ := x
     simp only [start, List.foldlM_cons, bind, Except.bind] at h
     split at h
     · cases h
     · rename_i a1 h1
-      rw [ih a1 h]
+      rw [(ih a1 h).1, (ih a1 h).2]
       revert h1
       cases eff with
       | request r =>
         simp only
         split
         · intro h1; cases h1
-        · intro h1; cases h1; rfl
-      | command => intro h1; cases h1; rfl
-      | query => intro h1; cases h1; rfl
+        · intro h1; cases h1; exact ⟨rfl, rfl⟩
+      | command => intro h1; cases h1; exact ⟨rfl, rfl⟩
+      | query => intro h1; cases h1; exact ⟨rfl, rfl⟩
+
+theorem start_records (a : Acc v) (effs : List (Sender × EffectV v.event)) {a' : Acc v} (h : start a effs = .ok a') :
+    a'.state.records = a.state.records := (start_keeps a effs h).1
+
+theorem start_machines (a : Acc v) (effs : List (Sender × EffectV v.event)) {a' : Acc v} (h : start a effs = .ok a') :
+    a'.state.machines = a.state.machines := (start_keeps a effs h).2
 
 theorem react_keys (s : State v) (ev : v.event.den0) (hs : KeysOk T s) : KeysOk T (react T s ev).1 := by
   intro sm' hsm'
   simp only [react, (reactMachines_toSigma T _ s.now ev s.machines).1, List.mem_map] at hsm'
   obtain ⟨sm, hsm, rfl⟩ := hsm'
-  exact ⟨(hs sm hsm).1, machineStep_ok T _ s.now ev sm.1 (hs sm hsm).1 sm.2⟩
+  exact ⟨(hs sm hsm).1, machineStep_ok T _ s.now ev sm.1 (hs sm hsm).1 sm.2,
+    machineStep_erls T _ s.now ev sm.1 (hs sm hsm).1 sm.2⟩
 
 theorem applyEvents_keys (events : List v.event.den0) :
     (a : Acc v) → KeysOk T a.state → {a' : Acc v} → applyEvents T a events = .ok a' → KeysOk T a'.state := by
@@ -109,7 +143,7 @@ theorem applyEvents_keys (events : List v.event.den0) :
     split at h
     · cases h
     · rename_i a1 h1
-      exact ih a1 ((react_keys T a.state ev ha).congr T (start_machines _ _ h1)) h
+      exact ih a1 ((react_keys T a.state ev ha).congr T (start_machines _ _ h1) (start_records _ _ h1)) h
 
 theorem execCommand_keys (a : Acc v) (ha : KeysOk T a.state) (x : CommandV v.records v.event v.caller)
     (caller : (Ty.origin v.caller).den0) (input : x.input.den0) {r : Ran v x.rejection} (h : execCommand T a x caller input = .ok r)
@@ -209,7 +243,8 @@ theorem fire_keys (s : State v) (hs : KeysOk T s) : (fuel : Nat) → {r : State 
       intro sm' hsm'
       obtain ⟨sm, hsm, he | rfl⟩ := mem_fireMachines s.records s.now d false s.machines sm' hsm'
       · exact he ▸ hs sm hsm
-      · exact ⟨(hs sm hsm).1, instancesOk_keys T sm.1 (fireFirst_keys sm.1 _ _ _ sm.2) (hs sm hsm).2⟩
+      · exact ⟨(hs sm hsm).1, instancesOk_keys T sm.1 (fireFirst_keys sm.1 _ _ _ sm.2) (hs sm hsm).2.1,
+          (erls_of_keys T sm.1 (fireFirst_keys sm.1 _ _ _ sm.2)).trans (hs sm hsm).2.2⟩
 
 end Step
 
@@ -250,7 +285,8 @@ theorem step_keys (T : List TypeDecl) {v : ServiceV} (s : State v) (hs : KeysOk 
       · exact hs
       · rename_i s' effs hr
         exact finish_keys T _ hs _ (fun a h =>
-          (fire_keys T { s with now := time } hs _ hr).congr T (start_machines { state := s' } effs h)) _
+          (fire_keys T { s with now := time } hs _ hr).congr T (start_machines { state := s' } effs h)
+            (start_records { state := s' } effs h)) _
 
 /-- Every state a run reaches from a state whose instances are in the step's form keeps them so. -/
 theorem run_keys (T : List TypeDecl) {v : ServiceV} :

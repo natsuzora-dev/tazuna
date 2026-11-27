@@ -130,7 +130,8 @@ elab "#check_tazuna_reach" : command => do
     -- T4: where every input kind's questions about the rules named n are unsat, and its bound question is unsat or
     -- the step fits the slots (Prove.withinBounds), no step within the slots of a run on valid inputs from an initial
     -- state whose invariants hold faults naming n. Valid inputs keep every name below the counter (`Step.run_supp`),
-    -- as the questions assume of their state.
+    -- and every step keeps each machine's instances at the keys `instances` gives at the records (`Step.KeysOk`), as
+    -- the questions assume of their state.
     ``Tazuna.Smt.fault_sound,
     -- T4 for every run (Prove.proved): where every input kind's lines about the rules named n read proved, the
     -- initial state fits the slots and every value an input carries does, no step of any run on valid inputs from an

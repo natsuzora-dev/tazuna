@@ -90,13 +90,14 @@ theorem cti_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E
   obtain ⟨iwf, -, ha⟩ := bind_ok.1 ha
   obtain ⟨below, hbelow, ha⟩ := bind_ok.1 ha
   obtain ⟨names, -, ha⟩ := bind_ok.1 ha
+  obtain ⟨shape, -, ha⟩ := bind_ok.1 ha
   obtain ⟨⟨inv, ci0⟩, hinvc, ha⟩ := bind_ok.1 ha
   obtain ⟨⟨rules, ci⟩, hrules, ha⟩ := bind_ok.1 ha
   obtain ⟨⟨checks, ck⟩, hchecks, ha⟩ := bind_ok.1 ha
   obtain ⟨vars, -, ha⟩ := bind_ok.1 ha
   obtain ⟨dts, -, ha⟩ := bind_ok.1 ha
   cases pure_ok.1 ha
-  have hA := fun a (h : a ∈ [wf, iwf, below, names, t.out.case, andT t.codes (andT t.sites (andT ci0 (andT ci ck))),
+  have hA := fun a (h : a ∈ [wf, iwf, below, names, t.out.case, shape, andT t.codes (andT t.sites (andT ci0 (andT ci ck))),
     andT (allT (rules.map (·.2))) (allT (checks.toList.map instHoldT)), t.cond, t.out.breaks inp.command? g']) =>
     hM a (by simpa [Question.script, TypedScript.script, StepAsk.ask] using h)
   have hbelowH := hA below (by simp)
