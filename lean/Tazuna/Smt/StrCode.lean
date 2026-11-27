@@ -11,8 +11,9 @@ strings a model compares by their rank, so an unsat answer to it says the script
 come from a model no strings realize, so it is never read as the script's: the engine first asks the exact script
 again with the variant's model fixed (over-approximate, confirm, fall back; no refinement loop, so not CEGAR).
 
-The coding of values follows the sorts the script declares (`scodeV`), so a value that sits where another sort belongs,
-which a Lean model may hold in a collection's free slot, reads in the variant as it reads in the script. -/
+The coding of values follows the sorts the script declares (`scodeV`), so it is injective at each sort for every
+value, a string and an Int alike: the variant reads as the script does in any model (`scode_denote`), with no proof
+that each subterm's value has its sort. -/
 
 namespace Tazuna.Smt
 
