@@ -41,33 +41,36 @@ def moduleHead (m : DslModule) : String :=
 
 open Tazuna Tazuna.Ir
 
-/-- A type as Gleam writes it inside the `tazuna` module, with `tvars` naming the type variables. -/
-partial def gleamTy (tvars : List String) : Ty → String
+/-- A type as Gleam writes it inside the `tazuna` module, with `tvars` naming the type variables and `int` the name
+written for `Int`, so a time alias reaches an Int inside an `Option` or a function's result. -/
+partial def gleamTy (tvars : List String) (int : String) : Ty → String
   | .list (.tuple [.str, .adt 0 [] _]) => "Rules"
-  | .int => "Int"
+  | .int => int
   | .str => "String"
-  | .list t => s!"List({gleamTy tvars t})"
-  | .tuple ts => "#(" ++ ", ".intercalate (ts.map (gleamTy tvars)) ++ ")"
-  | .fn ps r => "fn(" ++ ", ".intercalate (ps.map (gleamTy tvars)) ++ ") -> " ++ gleamTy tvars r
+  | .list t => s!"List({gleamTy tvars int t})"
+  | .tuple ts => "#(" ++ ", ".intercalate (ts.map (gleamTy tvars int)) ++ ")"
+  | .fn ps r => "fn(" ++ ", ".intercalate (ps.map (gleamTy tvars int)) ++ ") -> " ++ gleamTy tvars int r
   | .adt i args _ =>
     let full := (prelude[i]?.map (·.name)).getD s!"type{i}"
     let n := (full.splitOn ".").getLast!
-    if args.isEmpty then n else n ++ "(" ++ ", ".intercalate (args.map (gleamTy tvars)) ++ ")"
+    if args.isEmpty then n else n ++ "(" ++ ", ".intercalate (args.map (gleamTy tvars int)) ++ ")"
   | .param k => tvars[k]?.getD s!"t{k}"
-  | .bag t => s!"Bag({gleamTy tvars t})"
-  | .table k v => s!"Table({gleamTy tvars k}, {gleamTy tvars v})"
+  | .bag t => s!"Bag({gleamTy tvars int t})"
+  | .table k v => s!"Table({gleamTy tvars int k}, {gleamTy tvars int v})"
   | .date => "Date"
   | .id => "Id"
-  | .dsl .closure [t] | .dsl .effectClosure [t] => gleamTy tvars t
+  | .dsl .closure [t] | .dsl .effectClosure [t] => gleamTy tvars int t
   | .dsl k args =>
     let n := k.name
-    if args.isEmpty then n else n ++ "(" ++ ", ".intercalate (args.map (gleamTy tvars)) ++ ")"
+    if args.isEmpty then n else n ++ "(" ++ ", ".intercalate (args.map (gleamTy tvars int)) ++ ")"
 
-/-- The type of the field or parameter `label` of `owner`: a time alias when `timeAliases` names one. -/
+/-- The time alias `timeAliases` names for the field or parameter `label` of `owner`, else `Int`. -/
+def intName (owner : String) (label : Option String) : String :=
+  ((label.bind fun l => timeAliases.find? fun (o, l', _) => o == owner && l' == l).map (·.2.2)).getD "Int"
+
+/-- The type of the field or parameter `label` of `owner`, with its Ints written as the time alias it has. -/
 def labelledTy (owner : String) (tvars : List String) (label : Option String) (t : Ty) : String :=
-  match label.bind fun l => (timeAliases.find? fun (o, l', _) => o == owner && l' == l).map (·.2.2) with
-  | some alias => alias
-  | none => gleamTy tvars t
+  gleamTy tvars (intName owner label) t
 
 /-- A type as an alias's body writes it. -/
 partial def surfaceTy : Surface.STy → String
@@ -86,7 +89,7 @@ def gleamFn (p : Prim) : String :=
   let s := p.sig
   let params := s.params.map fun q =>
     (q.label.map (· ++ " ")).getD "" ++ "_" ++ q.name ++ ": " ++ labelledTy s.name s.tvars q.label q.ty
-  let ret := gleamTy s.tvars s.ret
+  let ret := gleamTy s.tvars "Int" s.ret
   let oneLine := s!"pub fn {s.name}(" ++ ", ".intercalate params ++ s!") -> {ret} \{"
   let head := if oneLine.length ≤ 80 then oneLine
     else
@@ -96,7 +99,9 @@ def gleamFn (p : Prim) : String :=
         match q.ty with
         | .fn ps r | .dsl .closure [.fn ps r] | .dsl .effectClosure [.fn ps r] =>
           if whole.length ≤ 81 then whole
-          else s!"  {pre}fn(" ++ ", ".intercalate (ps.map (gleamTy s.tvars)) ++ s!") ->\n    {gleamTy s.tvars r},\n"
+          else
+            let int := intName s.name q.label
+            s!"  {pre}fn(" ++ ", ".intercalate (ps.map (gleamTy s.tvars int)) ++ s!") ->\n    {gleamTy s.tvars int r},\n"
         | _ => whole
       s!"pub fn {s.name}(\n" ++ String.join (s.params.map line) ++ s!") -> {ret} \{"
   docLines s.doc ++ head ++ "\n  panic as \"tazuna's built-ins run only in the engine\"\n}\n"

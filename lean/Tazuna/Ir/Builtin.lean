@@ -48,13 +48,15 @@ def builtinAliases : List (Surface.AliasDef × String) :=
     (⟨"tazuna.Rules", [], .con "List" [.tuple [.con "String" [], .con "Bool" []]], ⟨0, 0⟩⟩,
       "Named rules, as `invariants`, `accepts` and `ensures` return them: each holds or not.") ]
 
-/-- The Ints the DSL writes as a time alias, so a signature says which Int is a time: (the declaring type or built-in,
-the field or parameter label, the alias). -/
+/-- The fields and parameters whose Ints the DSL writes as a time alias, so a signature says which Int is a time:
+(the declaring type or built-in, the field or parameter label, the alias). The alias names every Int in that type,
+such as the result of a `deadline` function. -/
 def timeAliases : List (String × String × String) :=
   [ ("tazuna.Ctx", "now", "Instant"), ("tazuna.MachineCtx", "now", "Instant"), ("tazuna.ReactionCtx", "now", "Instant"),
     ("tazuna.ApplyCtx", "now", "Instant"),
     ("tazuna.QueryCtx", "now", "Instant"),
-    ("tazuna.Timer", "at", "Instant"), ("response", "within", "Duration"), ("step_wait", "for", "Duration") ]
+    ("tazuna.Timer", "at", "Instant"), ("response", "within", "Duration"),
+    ("response", "deadline", "Instant"), ("step_wait", "for", "Duration") ]
 
 /-- The built-in functions. -/
 inductive Prim where

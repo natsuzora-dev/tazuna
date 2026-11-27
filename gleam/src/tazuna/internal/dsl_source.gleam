@@ -364,7 +364,7 @@ pub fn response(
   after _after: fn(event) -> Bool,
   then _then: fn(event, event) -> Bool,
   within _within: Duration,
-  deadline _deadline: fn(records, event) -> Option(Int),
+  deadline _deadline: fn(records, event) -> Option(Instant),
 ) -> Response(records, event) {
   panic as \"tazuna's built-ins run only in the engine\"
 }
