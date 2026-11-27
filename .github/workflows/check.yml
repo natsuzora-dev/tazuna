@@ -34,10 +34,14 @@ jobs:
           "$bin/z3" --version | grep -qF "$Z3_VERSION"
           echo "$bin" >> "$GITHUB_PATH"
       - run: scripts/check
-      # The sample is user documentation, not a test of tazuna: converting and checking it only catches a DSL change
-      # that leaves the README's spec behind. It stays out of scripts/check so the commit hook does not pay for it.
-      - name: Check the sample still converts
+      # The sample is user documentation, not a test of tazuna: converting it and regenerating its inputs only catch a
+      # change to the DSL or to generate that leaves the README's spec or its inputs/ behind. It stays out of
+      # scripts/check so the commit hook does not pay for it.
+      - name: Check the sample still converts and its inputs are current
         working-directory: samples/todo/spec
         env:
           TAZUNA_ENGINE: ${{ github.workspace }}/lean/.lake/build/bin/tazuna-engine
-        run: gleam run -m tazuna -- check todo_spec
+        run: |
+          gleam run -m tazuna -- generate todo_spec "$RUNNER_TEMP/inputs" >/dev/null
+          diff -r inputs "$RUNNER_TEMP/inputs" ||
+            { echo "samples/todo/spec/inputs is stale. Run: rm -r inputs && gleam run -m tazuna -- generate todo_spec inputs"; exit 1; }
