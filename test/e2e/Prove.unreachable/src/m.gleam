@@ -6,6 +6,7 @@ pub type Records {
 
 pub type Event {
   Added(amount: Int)
+  Reset
 }
 
 pub type Caller {
@@ -20,6 +21,7 @@ fn apply(ctx: tazuna.ApplyCtx(Records), e: Event) -> Records {
   let r = ctx.records
   case e {
     Added(n) -> Records(total: r.total + n)
+    Reset -> Records(total: 0)
   }
 }
 

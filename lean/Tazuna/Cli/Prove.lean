@@ -392,7 +392,7 @@ def serviceItems (sv : CheckedService c) (only : String → Bool) : ServiceItems
     let asked := Sound.get (stepAsk L c.T c.P v senv inp) (stepAsk_ofService sv.mem c.T senv inp hinp)
     shows := match shows, asked with
       | some acc, .ok ⟨a, _⟩ =>
-        some (acc.map fun (g, qs) => (g, qs ++ (showsAsk L c.T rules g a inp).toList.map (inp.place, ·)))
+        some (acc.map fun (g, qs) => (g, qs ++ (showsAsk L c.T rules g c.P a inp).toList.map (inp.place, ·)))
       | _, _ => none
     -- Each response's question about the kind (`respStep`); where the kind's questions are refused, its line is.
     if let .ok ⟨a, _⟩ := asked then

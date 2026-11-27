@@ -69,6 +69,13 @@ A step line's `assumes` lists `validInputs` and the invariants the induction too
 
 For each of `generate`'s targets, `prove` asks per input kind whether a step from a state of the right shape where every invariant holds shows the target's class, the same question as a T4 step line with that goal in place of a broken rule.
 It prints `Prove.unreachable` only where every input kind's question is unsat, and nothing otherwise: a model's state may be one no run reaches.
+Before asking, `prove` reads the code, and a kind whose step cannot show the class gets no question (`Step.step_events`).
+A step applies only events built by a constructor written in a function it runs: the input's own (`decide`, `wrap`, an `on_answer` of the answer's type) and the cascade's (every machine's `effect`, every reaction, every command the service runs as `Own`).
+A request's `on_answer` runs when its answer comes, so its constructors count for that answer, not for the step that sends the request.
+So a kind whose functions write no constructor of the target's event cannot show it, and a kind that applies no event and is no clock line sends no request.
+A query, and a command that no outside caller may send, applies no event and sends nothing.
+This reading holds only where no value a step starts from can hold an event: the records, the callers, the machines' keys and states, the commands' inputs and rejections, the queries' outputs, the subscriptions' events and the values the kept functions captured.
+Where one can, every kind is asked.
 A target that only a query's answer shows gets no question, since no step question is about a query.
 Nor does any target of a service whose initial state breaks an invariant or one of whose input kinds is refused.
 
