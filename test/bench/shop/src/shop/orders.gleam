@@ -327,7 +327,9 @@ fn payment_deadline() -> tazuna.Machine(Records, Event) {
           )
       }
     },
-    invariants: fn(_ctx: MachineCtx(Id, Deadline, Records)) { [] },
+    invariants: fn(ctx: MachineCtx(Id, Deadline, Records)) {
+      [#("an expired order is already cancelled", ctx.state == Open)]
+    },
   )
 }
 
@@ -464,6 +466,19 @@ pub fn service() -> tazuna.Service {
           }
         },
         within: 30 * shared.minute,
+        deadline: fn(records: Records, trigger: Event) {
+          case trigger {
+            Placed(order:, ..) ->
+              case table.get(records.orders, order) {
+                Some(found) if found.status == AwaitingStock ->
+                  Some(found.pay_by)
+                Some(found) if found.status == AwaitingPayment ->
+                  Some(found.pay_by)
+                _ -> None
+              }
+            _ -> None
+          }
+        },
       ),
     ],
     bounds: tazuna.bounds(

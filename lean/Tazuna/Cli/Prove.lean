@@ -7,15 +7,13 @@ import Tazuna.Smt.Timer
 import Tazuna.Semantics.NoTimer
 import Tazuna.Smt.PairOrders
 import Tazuna.Smt.Pair
-import Tazuna.Smt.RespGoal
 import Tazuna.Smt.Dead
 import Tazuna.Smt.RespStep
 import Tazuna.Cli.Generate
 
 /-! The `prove` command: for each target of each service, the base case by evaluating the initial state and one
-question per input kind for the step, one line per question; then each bounded response, searched for a violation by
-deepening an unrolled run from the initial state (`unrollBase` with `respGoalE`) up to the spec's `steps` bound, one line
-per response. -/
+question per input kind for the step, one line per question. A response is a target too: its question per input kind
+(`respStep`) asks whether the step breaks one of the three facts the induction over steps rests on. -/
 
 namespace Tazuna.Cli
 
@@ -30,6 +28,7 @@ def _root_.Tazuna.Smt.Target.text : Target → String
   | .effect c => "effect " ++ c ++ " accepted"
   | .timer m => "timers of " ++ m ++ " fire forward"
   | .pair a b _ => a ++ " and " ++ b ++ " commute"
+  | .response n => "response " ++ n
 where
   ruleText : Option String → String
     | some r => r
@@ -190,6 +189,72 @@ def boundReport (service step : String) : Smt.Answer → Except String Report
   | .unknown why => .ok (.undecided (.undecided .unknown) service step none [("why", Json.str why)])
   | .timeout ms => .ok (.undecided (.undecided .timeout) service step none [("why", Json.str (timeoutWhy ms))])
 
+/-- The first part a response's question asks about, as its line names it. -/
+def respOpens : String := "a trigger has no deadline within its time"
+
+/-- What the step from `s` on `x` breaks of the response for the trigger `tr`, recomputed in Lean: the names of the
+three parts its question asks about. -/
+def respBroken (resp : ResponseV v.records v.event) (s : State v) (x : Input v) (tr : v.event.den0) : List String :=
+  let r := step c.T v s x
+  let late := r.events.any fun ev => resp.opens ev && !resp.answers ev r.moment &&
+    match resp.deadlineAt r.state.records ev with
+    | some d => decide (d > r.state.now + (resp.withinNat : Int))
+    | none => true
+  let moved := match resp.deadlineAt s.records tr with
+    | some d => !resp.answers tr r.moment && match resp.deadlineAt r.state.records tr with
+      | some d' => decide (d' > d)
+      | none => true
+    | none => false
+  let past := match x, resp.deadlineAt s.records tr with
+    | .clock time, some d => decide (d < time)
+    | _, _ => false
+  (if late then [respOpens] else []) ++
+    (if moved then ["an open deadline goes or moves later without its answer"] else []) ++
+    (if past then ["a clock line passes an open deadline"] else [])
+
+-- A step that does not reach its end shows no state after it; out lines without a wire form show as none.
+set_option linter.tazuna.silentDefault false in
+/-- The report of a response's step question (`respStep`): a model is a state, an input and a trigger whose step
+breaks the response, recomputed in Lean (`respBroken`). A model where Lean finds nothing broken has the response's
+functions outside their slots. -/
+def respReport (L : Layout) (senv : StepEnv L (shapes v)) (hc : v.caller.isData = true)
+    (resp : ResponseV v.records v.event) (inp : SymInput v (shapes v) senv.nT) (a : Smt.Answer) : Except String Report :=
+  let name := inp.text
+  let g := Target.response resp.name
+  match a with
+  | .unsat => .ok (.unsat v.name name (some g))
+  | .unknown why => .ok (.undecided (.undecided .unknown) v.name name (some g) [("why", Json.str why)])
+  | .timeout ms => .ok (.undecided (.undecided .timeout) v.name name (some g) [("why", Json.str (timeoutWhy ms))])
+  | .sat vs =>
+    let M := modelOf vs
+    match (SymState.vars (v := v) 0).decode M L c.T (shapes v), inp.decode M L hc,
+        decodeV L v.event (M.vars (trigVar inp)) with
+    | some s, some x, some tr =>
+      let tr := Ty.down _ v.event_data tr
+      let r := step c.T v s x
+      let after := Step.settled c.T s x
+      let shown : Show (List (String × Json) × (String × Json)) := do
+        let st ← stateWire c.T s
+        let inp ← inputWire c.T x
+        let aft ← match after with
+          | some a => do pure (← stateWire c.T a.state).toJson
+          | none => pure Json.null
+        let (ns, outs) := outLines c.T v (← get) none r
+        set ns
+        let trw ← wireOf c.T v.event tr
+        pure ([("from", Json.str "validState"), ("state", st.toJson), ("input", inp.toJson), ("after", aft),
+          ("outcome", Json.str r.outcome.summary),
+          ("out", Json.arr ((outs.getD []).map (·.toWire.toJson)).toArray)], ("trigger", trw.toJson))
+      let (fields, trigger) : List (String × Json) × (String × Json) := shown.run' {}
+      match respBroken c v resp s x tr with
+      | [] => .ok (.undecided (.undecided .limit) v.name name (some g)
+          (fields ++ [trigger, ("limit", Json.str "a function of the response reads past its slots")]))
+      | bs =>
+        -- The trigger is the waiting one the second and third parts read; the first part's trigger is in `out`.
+        let shownTrigger := if bs == [respOpens] then [] else [trigger]
+        .ok (.violated v.name name g (fields ++ shownTrigger ++ [("violated", Json.arr (bs.map Json.str).toArray)]))
+    | _, _, _ => .error s!"a model of {name} does not decode"
+
 /-- The report of a timer machine's target question (`timerQuestions`): a model is an instance whose timer enters a
 state that waits for an earlier timer, recomputed in Lean from the model's values. -/
 def timerReport (L : Layout) (m : MachineV v.records v.event) (step : String) (a : Smt.Answer) :
@@ -321,9 +386,23 @@ def serviceItems (sv : CheckedService c) (only : String → Bool) : ServiceItems
     if (Step.invariants (Step.State.init v)).isEmpty then some (goals.map (·, [])) else none
   for ⟨inp, hinp⟩ in (stepInputs v (shapes v) senv.nT b).attach do
     let step := inp.text
-    shows := match shows, Sound.get (stepAsk L c.T c.P v senv inp) (stepAsk_ofService sv.mem c.T senv inp hinp) with
+    let asked := Sound.get (stepAsk L c.T c.P v senv inp) (stepAsk_ofService sv.mem c.T senv inp hinp)
+    shows := match shows, asked with
       | some acc, .ok ⟨a, _⟩ => some (acc.map fun (g, qs) => (g, qs ++ (showsAsk L c.T rules g a inp).toList))
       | _, _ => none
+    -- Each response's question about the kind (`respStep`); where the kind's questions are refused, its line is.
+    if let .ok ⟨a, _⟩ := asked then
+      for ⟨resp, hr⟩ in v.responses.attach do
+        let g := Target.response resp.name
+        unless targets.contains g do targets := targets ++ [g]
+        if only (v.name ++ "/" ++ g.text ++ "/" ++ step) then
+          match Sound.get (respStep L resp inp a) (respStep_ofService c sv.mem hr inp a) with
+          | .ok ⟨q, _⟩ => items := items ++ [.ask ⟨q.script, L.ids, respReport c v L senv sv.callerData resp inp⟩]
+          | .error r =>
+            match refusedItems c v step (some g) r with
+            | .ok more => items := items ++ more
+            | .error why => return { internal := some why }
+        else items := items ++ [.skipped v.name g]
     match Sound.get (questions L c.T c.P v senv inp) (questions_ofService sv.mem c.T senv inp hinp) with
     | .error r =>
       match refusedItems c v step none r with
@@ -380,27 +459,6 @@ def serviceItems (sv : CheckedService c) (only : String → Bool) : ServiceItems
 end
 
 
-def _root_.Tazuna.Ir.ResponseV.text {e : Ty} (resp : ResponseV e) : String := "response " ++ resp.name
-
-/-- A response's model played back in Lean: its run must have timely clock lines and violate the response, which
-`response_sound` proves of every model, so this check never fails; its trace is `foundTrace`'s. -/
-def responsePlay {P : List AnySite} {E : List AnyEffectSite} {T : List TypeDecl} {v : ServiceV}
-    (chk : Checked P E T v) (resp : ResponseV v.event) (xs : List (Input v)) : Except String TraceFile :=
-  if resp.violatedBy T (State.init v) xs && decide (Step.TimelyRun T (State.init v) xs) then foundTrace chk xs
-  else .error "does not violate it"
-
-/-- The line of a response's search. -/
-def responseLine (service name : String) (scope : List Json) : SearchResult TraceFile → Kind × List (String × Json)
-  | .found d tr => (.prove .violated, common ++ [("from", Json.str "init"), ("steps", Lean.toJson d),
-      ("run", Json.arr (tr.lines.map (·.toWire.toJson)).toArray), ("violated", Json.arr #[Json.str name]), assumes])
-  -- T7 (`response_within`) at each depth up to `k`: no run of at most `k` inputs, within the bounds, violates it.
-  | .noModel k => (.prove .withinBounds, common ++ [assumes,
-      ("bounds", Json.arr (scope ++ [Json.mkObj [("bound", Json.str "steps"), ("size", Lean.toJson k)]]).toArray)])
-  | .undecided kind fields => (kind, common ++ fields)
-where
-  common : List (String × Json) := [("service", Json.str service), ("target", Json.str ("response " ++ name))]
-  assumes : String × Json := ("assumes", Json.arr (Step.Assumption.ofResponses.map (Json.str ·.text)).toArray)
-
 def Report.service : Report → String
   | .unsat s .. | .violated s .. | .boundReached s .. | .undecided _ s .. => s
 
@@ -449,6 +507,8 @@ where
     let held : List String := match g with
       | .timer _ => []
       | .pair .. => [Step.Assumption.validInputs.text]
+      | .response _ => [Step.Assumption.validInputs.text, Step.Assumption.timelyClock.text] ++
+        ((unproved s).filter fun g' => g'.isInvariant).map (·.text)
       | _ => (if step == "init" then [] else [Step.Assumption.validInputs.text]) ++
         ((unproved s).filter fun g' => g'.isInvariant && g' != g).map (·.text)
     ("assumes", Json.arr (held.map Json.str).toArray)
@@ -475,60 +535,6 @@ def prove (root path : String) (opts : Options) : Cmd Unit := do
       items := items ++ r.items
       scopes := scopes ++ [(sv.v.name, { r with items := [] })]
     let cache := opts.cache / Sha256.hex (← solver.version).toUTF8
-    -- A `within 0` response is first asked in one step from every state of the right shape (`response_proved`): where
-    -- every kind's response and bound questions are unsat and every input and the initial state fit, it is proved and
-    -- needs no search. Those few questions run before the rest, so a proved response starts no search.
-    let mut proved : List (String × String) := []
-    for sv in c.services do
-      let v := sv.v
-      if !(inputsFit sv.L v && initFits sv.L v && (Step.invariants (Step.State.init v)).isEmpty) then continue
-      for ⟨resp, hr⟩ in v.responses.attach.filter fun r => r.1.withinNat == 0 && opts.keeps (v.name ++ "/" ++ r.1.text) do
-        let mut asks : Array Job := #[]
-        let mut refs : List (IO.Ref (Option (Except String Smt.Answer))) := []
-        let mut built := true
-        for ⟨inp, hinp⟩ in (stepInputs v (shapes v) sv.senv.nT (stateWidth v)).attach do
-          match Sound.get (stepAsk sv.L c.T c.P v sv.senv inp) (stepAsk_ofService sv.mem c.T sv.senv inp hinp) with
-          | .error _ => built := false
-          | .ok ⟨a, _⟩ =>
-            match Sound.get (respStep sv.L resp a) (respStep_ofService c sv.mem hr a) with
-            | .error _ => built := false
-            | .ok ⟨q, _⟩ =>
-              for script in [a.bound.script, q.script] do
-                let (j, r) ← Job.of (solver.runCached cache sv.L.ids script)
-                asks := asks.push j
-                refs := refs ++ [r]
-        if !built then continue
-        runAll opts.jobs asks
-        let mut all := true
-        for r in refs do
-          match ← r.get with
-          | some (.ok .unsat) => pure ()
-          | some (.ok _) => all := false
-          | some (.error m) => return ← internal m
-          | none => return ← internal "a question's job never ran"
-        if all then proved := proved ++ [(v.name, resp.name)]
-    -- Each response's search is one job; a service's depths are built once for all its responses (`depthJobs`).
-    let mut builds : Array Job := #[]
-    let mut searches : Array Job := #[]
-    let mut responses : Array (String × String × List Json ×
-      Option (IO.Ref (Option (Except String (SearchResult TraceFile))))) := #[]
-    for sv in c.services do
-      let v := sv.v
-      let resps := v.responses.attach.filter fun r => opts.keeps (v.name ++ "/" ++ r.1.text)
-      if resps.isEmpty then continue
-      let L := sv.L
-      let searched := resps.filter fun r => !proved.contains (v.name, r.1.name)
-      let (bs, ds) ← if searched.isEmpty then pure (#[], #[]) else depthJobs solver sv v.bounds.stepsNat
-      builds := builds ++ bs
-      for ⟨resp, hr⟩ in resps do
-        if proved.contains (v.name, resp.name) then
-          responses := responses.push (v.name, resp.name, [], none)
-          continue
-        let (j, r) ← Job.of (searchDepths solver cache sv resp.text ds
-          (fun sts => (Sound.get (respGoalE L v resp sts) (respGoalE_ofService c sv.mem hr sts)).map (·.1))
-          (responsePlay (c.checked v sv.mem) resp))
-        searches := searches.push j
-        responses := responses.push (v.name, resp.name, scopeBounds c.T L v, some r)
     let mut questions : Array Job := #[]
     let mut placed : Array Placed := #[]
     let mut deads : Array (String × GenTarget × List (IO.Ref (Option (Except String Smt.Answer)))) := #[]
@@ -549,9 +555,7 @@ def prove (root path : String) (opts : Options) : Cmd Unit := do
         let (j, r) ← Job.of do pure ((← solver.runCached cache o.ids o.script) >>= o.read)
         questions := questions.push j
         placed := placed.push (.asked r)
-    -- One pool for all: the builds first, so a search waits only on a build some worker runs, then the searches,
-    -- the longest jobs, then the step questions, which fill the workers while the searches deepen.
-    runAll opts.jobs (builds ++ searches ++ questions)
+    runAll opts.jobs questions
     let mut reports : List Report := []
     let mut skipped : List (String × Target) := []
     for p in placed do
@@ -591,20 +595,8 @@ def prove (root path : String) (opts : Options) : Cmd Unit := do
       else if (inputScope s).isEmpty then some (scope s) else some (inputScope s)
     let past (s step : String) : Option (List Json) :=
       if step == "init" then none else reach s (left s (· == step))
-    let mut rlines : List (Kind × List (String × Json)) := []
-    for (service, name, scope, r?) in responses do
-      match r? with
-      | none => rlines := rlines ++ [(.prove .proved, [("service", Json.str service),
-          ("target", Json.str ("response " ++ name)),
-          ("assumes", Json.arr #[Json.str Step.Assumption.validInputs.text])])]
-      | some r =>
-        match ← r.get with
-        | some (.ok res) => rlines := rlines ++ [responseLine service name scope res]
-        | some (.error m) => return ← internal m
-        | none => return ← internal s!"service {service}, response {name}: its search never ran"
     for r in reports do
       if let some (kind, fields) := lineOf unproved past r then printLine kind fields
-    for (kind, fields) in rlines do printLine kind fields
     -- A dead target is a fact, not a verdict: only where every kind's question is unsat (`unshown_within`, at any
     -- depth `unshown_sound`); a model or no answer says nothing.
     for (s, g, refs) in deads do

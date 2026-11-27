@@ -1,3 +1,4 @@
+import gleam/option.{None}
 import tazuna.{type Ctx}
 
 pub type Records {
@@ -55,6 +56,7 @@ fn counter() -> tazuna.Service {
           }
         },
         within: 5,
+        deadline: fn(_r: Records, _trigger: Event) { None },
       ),
     ],
     bounds: tazuna.bounds(creates: [], items: 1, cascade: 1, steps: 5),

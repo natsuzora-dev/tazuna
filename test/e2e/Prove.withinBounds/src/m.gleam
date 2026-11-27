@@ -1,3 +1,4 @@
+import gleam/option.{None}
 import tazuna.{type Ctx}
 import tazuna/table.{type Table}
 
@@ -50,6 +51,7 @@ fn tasks() -> tazuna.Service {
           }
         },
         within: 0,
+        deadline: fn(_r: Records, _trigger: Event) { None },
       ),
     ],
     bounds: tazuna.bounds(

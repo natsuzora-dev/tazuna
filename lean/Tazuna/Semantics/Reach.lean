@@ -89,7 +89,7 @@ structure ServiceV.Reach (v : ServiceV) : Prop where
   commands : ∀ x ∈ v.commands, x.Reach P
   queries : ∀ x ∈ v.queries, x.Reach P
   subscribes : ∀ x ∈ v.subscribes, x.wrap.asSite ∈ P
-  responses : ∀ r ∈ v.responses, r.after.asSite ∈ P ∧ r.then_.asSite ∈ P
+  responses : ∀ r ∈ v.responses, r.after.asSite ∈ P ∧ r.then_.asSite ∈ P ∧ r.deadline.asSite ∈ P
   creates : ∀ x ∈ v.bounds.creates, x.table.asSite ∈ P
 
 def Ty.listItems {t : Ty} (xs : (Ty.list t).den) : List t.den := xs
@@ -116,7 +116,7 @@ def Reach : (t : Ty) → t.den → Prop
   | .dsl .query [_, _, _, _], x => QueryV.Reach P x.1
   | .dsl .declared _, d => DeclaredV.Reach P d
   | .dsl .subscription [_], x => (x : SubscriptionV _).wrap.asSite ∈ P
-  | .dsl .response [_], r => (r : ResponseV _).after.asSite ∈ P ∧ r.then_.asSite ∈ P
+  | .dsl .response [_, _], r => (r : ResponseV _ _).after.asSite ∈ P ∧ r.then_.asSite ∈ P ∧ r.deadline.asSite ∈ P
   | .dsl .create [_], x => (x : CreateV _).table.asSite ∈ P
   | .dsl .bounds [_], b => ∀ x ∈ (b : BoundsV _).creates, x.table.asSite ∈ P
   | .dsl .machine [_, _], m => MachineV.Reach P E m
@@ -364,8 +364,8 @@ theorem Prim.reach (p : Prim) (args : List Ty) (h : p.ok args = true) : Reach P 
     rintro ⟨name, react, ⟨⟩⟩ ⟨-, hr, -⟩
     exact hr
   case response =>
-    rintro ⟨name, after, then_, within, ⟨⟩⟩ ⟨-, ha, ht, -⟩
-    exact ⟨ha, ht⟩
+    rintro ⟨name, after, then_, within, deadline, ⟨⟩⟩ ⟨-, ha, ht, -, hd, -⟩
+    exact ⟨ha, ht, hd⟩
   case create =>
     rintro ⟨table, atMost, ⟨⟩⟩ ⟨ht, -⟩
     exact ht

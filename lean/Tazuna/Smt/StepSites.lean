@@ -115,6 +115,7 @@ theorem finish_codes {inv : Code (Ty.fn [v.records] Ty.rules)} {now fresh pendin
   obtain ⟨_, -, h⟩ := bind_ok.1 h
   obtain ⟨_, -, h⟩ := bind_ok.1 h
   obtain ⟨_, -, h⟩ := bind_ok.1 h
+  obtain ⟨_, -, h⟩ := bind_ok.1 h
   cases pure_ok.1 h
   exact settle_codes _ _ _ _ h1
 

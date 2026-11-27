@@ -32,6 +32,7 @@ pub type Shipment {
     state: ShipState,
     tracking: Option(String),
     late_at: Instant,
+    reported_late: Bool,
   )
 }
 
@@ -152,6 +153,7 @@ fn apply(ctx: tazuna.ApplyCtx(Records), event: Event) -> Records {
               state: Pending,
               tracking: None,
               late_at: ctx.now,
+              reported_late: False,
             ),
           ))
       }
@@ -188,7 +190,10 @@ fn apply(ctx: tazuna.ApplyCtx(Records), event: Event) -> Records {
       })
     Rebooked(order) ->
       change(records, order, fn(state) { state == Stuck }, into(Booking))
-    ParcelLate(_) -> records
+    ParcelLate(order) ->
+      change(records, order, travelling, fn(shipment: Shipment) {
+        Shipment(..shipment, reported_late: True)
+      })
   }
 }
 
@@ -382,6 +387,13 @@ fn delivery_watch() -> tazuna.Machine(Records, Event) {
             None -> False
           },
         ),
+        #(
+          "a late parcel is reported",
+          case ctx.state, table.get(ctx.records.shipments, ctx.key) {
+            Late, Some(shipment) -> shipment.reported_late
+            _, _ -> True
+          },
+        ),
       ]
     },
   )
@@ -500,6 +512,24 @@ pub fn service() -> tazuna.Service {
           }
         },
         within: 5 * shared.day,
+        deadline: fn(records: Records, trigger: Event) {
+          case trigger {
+            LabelIssued(order:, tracking:) ->
+              case table.get(records.shipments, order) {
+                Some(shipment) ->
+                  case
+                    travelling(shipment.state)
+                    && shipment.tracking == Some(tracking)
+                    && !shipment.reported_late
+                  {
+                    True -> Some(shipment.late_at)
+                    False -> None
+                  }
+                None -> None
+              }
+            _ -> None
+          }
+        },
       ),
     ],
     bounds: tazuna.bounds(

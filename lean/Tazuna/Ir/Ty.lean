@@ -44,7 +44,7 @@ def decl : Dsl → String × List String × String
   | .subscription => ("Subscription", ["event"], "Another service's event, received as one of this service's.")
   | .bounds => ("Bounds", ["records"], "How far checking goes.")
   | .create => ("Create", ["records"], "At most how many records one table of the records holds at any time.")
-  | .response => ("Response", ["event"], "After one event, another within a time.")
+  | .response => ("Response", ["records", "event"], "After one event, another within a time, by a deadline the records keep.")
   | .scenario => ("Scenario", ["records", "event", "caller"],
       "Steps a service takes from its initial records, compared with a snapshot.")
   | .step => ("Step", ["records", "event", "caller"], "One step of a scenario.")

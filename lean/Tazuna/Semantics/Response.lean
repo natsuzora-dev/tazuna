@@ -1,14 +1,18 @@
-import Tazuna.Semantics.Step
+import Tazuna.Semantics.Valid
 
-/-! What a bounded response means: "after each event `trigger` satisfying `after`, an event satisfying
+/-! What a response means: "after each event `trigger` satisfying `after`, an event satisfying
 `then(trigger, event)` within `within` ms". A run violates it when some step applies an `after` event and a later step
 comes past the deadline with no step from the first one up to it applying an event that `then` ties to that trigger.
 Each trigger is judged on its own, so two `after` events in one step make two deadlines. A response is judged per
 step: a `then` event in the same step as its trigger counts, whatever their order inside the step, since that order is
 the semantics' canonical one and a verdict resting on it would rest on an order the spec does not write. A run that
-ends before the deadline does not violate, so every violation has a finite witness and a bounded search over runs
-finds every one within its bound. Time is the state's after each step: a clock line's events carry the clock line's
-time. -/
+ends before the deadline does not violate. Time is the state's after each step: a clock line's events carry the clock
+line's time.
+
+A response is proved by induction over steps (Lamport, "Real Time is Really Simple", sec 3.3): the records keep a
+deadline for each trigger that waits (`deadlineAt`). Where every step of a run opens each trigger it does not answer
+with a deadline in time, keeps the deadline of each waiting trigger it does not answer no later, and moves time past
+no waiting deadline, the run does not violate the response (`not_violated`). -/
 
 namespace Tazuna.Ir
 
@@ -20,9 +24,14 @@ structure Moment (e : Ty) where
 /-- A step's moment: the time after it and the events it applied. -/
 def Result.moment {v : ServiceV} (r : Result v) : Moment v.event := ⟨r.state.now, r.events⟩
 
+/-- An `Option(Int)` value as a Lean option. -/
+def Step.optionInt : (Ty.option Ty.int).den0 → Option Int
+  | .inl (d, ()) => some (show Int from d)
+  | .inr _ => none
+
 namespace ResponseV
 
-variable {e : Ty} (resp : ResponseV e)
+variable {r e : Ty} (resp : ResponseV r e)
 
 /-- Whether the event satisfies `after`. -/
 def opens (ev : e.den0) : Bool := Step.toB (resp.after.fn (ev, ()))
@@ -89,10 +98,74 @@ theorem violated_iff : (ms : List (Moment e)) → (resp.violated ms = true ↔ r
         obtain ⟨j, rfl⟩ : ∃ j', j = j' + 1 := ⟨j - 1, by omega⟩
         exact .inr ⟨i, j, ev, by omega, by simpa using hj, hev, hp, ht, fun k hk hkj => hm (k + 1) (by omega) (by omega)⟩
 
+/-- The deadline the records keep for the trigger, as `deadline` gives it: none once the trigger waits no more. -/
+def deadlineAt (records : r.den0) (tr : e.den0) : Option Int := Step.optionInt (resp.deadline.fn (records, tr, ()))
+
 end ResponseV
 
+section
+variable {v : ServiceV} (T : List TypeDecl) (resp : ResponseV v.records v.event) (F : v.records.den0 → Prop)
+  (G : v.event.den0 → Prop)
+
+/-- What the induction reads of one step from `s` on `x`, with `F` the records where the waiting parts are known and
+`G` the triggers they are known of: each event the step applies is in `G`, and each trigger it applies and does not
+answer has a deadline in time after it (`opens`); where `F` holds before it, each waiting trigger in `G` it does not
+answer still waits with a deadline no later (`waits`), and the step leaves time as it was or at most at each waiting
+deadline (`clock`); and `F` holds after it where it held before or the step applied an event (`fits`). -/
+structure ResponseV.Keeps (s : State v) (x : Input v) : Prop where
+  opens : ∀ ev ∈ (step T v s x).events, G ev ∧ (resp.opens ev = true → resp.answers ev (step T v s x).moment = false →
+    ∃ d, resp.deadlineAt (step T v s x).state.records ev = some d ∧
+      d ≤ (step T v s x).state.now + (resp.withinNat : Int))
+  waits : F s.records → ∀ tr d, G tr → resp.deadlineAt s.records tr = some d →
+    resp.answers tr (step T v s x).moment = false →
+    ∃ d', resp.deadlineAt (step T v s x).state.records tr = some d' ∧ d' ≤ d
+  clock : F s.records → ∀ tr d, G tr → resp.deadlineAt s.records tr = some d →
+    (step T v s x).state.now ≤ d ∨ (step T v s x).state.now = s.now
+  fits : F s.records ∨ (step T v s x).events ≠ [] → F (step T v s x).state.records
+
+theorem moments_cons (s : State v) (x : Input v) (xs : List (Input v)) :
+    (run T v s (x :: xs)).2.map Result.moment =
+      (step T v s x).moment :: (run T v (step T v s x).state xs).2.map Result.moment := rfl
+
+/-- From a state where the trigger waits with a deadline at most `t0 + within` and the time is at most that, no step of a
+run whose steps keep the response comes past `t0 + within` before one answers the trigger. -/
+theorem late_false (tr : v.event.den0) (hG : G tr) (t0 : Int) : (xs : List (Input v)) → (s : State v) →
+    Step.EachStep T (resp.Keeps T F G) s xs → F s.records → ∀ d, resp.deadlineAt s.records tr = some d →
+    d ≤ t0 + (resp.withinNat : Int) → s.now ≤ t0 + (resp.withinNat : Int) →
+    resp.late tr t0 ((run T v s xs).2.map Result.moment) = false
+  | [], _, _, _, _, _, _, _ => rfl
+  | x :: xs, s, ⟨hk, hks⟩, hF, d, hd, hdt, hst => by
+    rw [moments_cons]
+    have htime : (step T v s x).state.now ≤ t0 + (resp.withinNat : Int) := by
+      rcases hk.clock hF tr d hG hd with h | h <;> omega
+    simp only [ResponseV.late, Result.moment, Bool.or_eq_false_iff]
+    refine ⟨by simp; omega, ?_⟩
+    cases ha : resp.answers tr (step T v s x).moment with
+    | true => simp [Result.moment] at ha ⊢; simp [ha]
+    | false =>
+      obtain ⟨d', hd', hle⟩ := hk.waits hF tr d hG hd ha
+      have := late_false tr hG t0 xs _ hks (hk.fits (.inl hF)) d' hd' (by omega) htime
+      simp [Result.moment] at ha ⊢; simp [this]
+
+/-- A run whose every step keeps the response does not violate it. -/
+theorem not_violated : (xs : List (Input v)) → (s : State v) → Step.EachStep T (resp.Keeps T F G) s xs →
+    ¬ resp.Violated ((run T v s xs).2.map Result.moment)
+  | [], _, _ => by rw [← resp.violated_iff]; simp [run, ResponseV.violated]
+  | x :: xs, s, ⟨hk, hks⟩ => by
+    rw [← resp.violated_iff, moments_cons]
+    simp only [ResponseV.violated, Bool.or_eq_true, List.any_eq_true, Bool.and_eq_true, Bool.not_eq_true',
+      not_or, not_exists, not_and]
+    refine ⟨fun ev hev ⟨hop, han⟩ => ?_, by rw [resp.violated_iff]; exact not_violated xs _ hks⟩
+    obtain ⟨hG, hop'⟩ := hk.opens ev hev
+    obtain ⟨d, hd, hle⟩ := hop' hop han
+    have hF := hk.fits (.inr (List.ne_nil_of_mem hev))
+    have := late_false T resp F G ev hG (step T v s x).state.now xs _ hks hF d hd hle (by omega)
+    simp [Result.moment, this]
+
+end
+
 /-- Whether the run of `xs` from `s` violates the response. -/
-def ResponseV.violatedBy {v : ServiceV} (T : List TypeDecl) (resp : ResponseV v.event) (s : State v)
+def ResponseV.violatedBy {v : ServiceV} (T : List TypeDecl) (resp : ResponseV v.records v.event) (s : State v)
     (xs : List (Input v)) : Bool :=
   resp.violated ((run T v s xs).2.map Result.moment)
 

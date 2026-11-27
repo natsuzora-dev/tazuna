@@ -28,7 +28,6 @@ import Tazuna.Smt.Runs
 import Tazuna.Smt.Sorts
 import Tazuna.Smt.DecodeTotal
 import Tazuna.Smt.GenGoal
-import Tazuna.Smt.RespGoal
 import Tazuna.Semantics.Fire
 import Tazuna.Smt.Step
 import Tazuna.Smt.Bounds
@@ -122,7 +121,7 @@ elab "#check_tazuna_reach" : command => do
     ``Tazuna.Smt.Defs.add_eq_addFast,
     -- The service's layout, derived from its program: every create fits its table's slots. (The commands read every
     -- script builder through `Sound.get` with its no-gap theorem, so those are the commands' own: `unrollBase_ofService`,
-    -- `questions_ofService`, `timerQuestions_ofService`, `pairQuestions_ofService`, `respGoalE_ofService`.)
+    -- `questions_ofService`, `timerQuestions_ofService`, `pairQuestions_ofService`, `respStep_ofService`.)
     ``Tazuna.Smt.atMost_le_count,
     -- In a checked service's layout, a state within the slots embeds, so a script without a model has no state within
     -- the bounds.
@@ -165,7 +164,7 @@ elab "#check_tazuna_reach" : command => do
     -- Every model a question family's report reads decodes: a model of the family's context whose variables hold values
     -- of their sorts decodes to the state, input, effects or instance context the report shows, so prove's "does not
     -- decode" lines are unreachable.
-    ``Tazuna.Smt.questions_decode, ``Tazuna.Smt.pair_decode, ``Tazuna.Smt.timer_decode,
+    ``Tazuna.Smt.questions_decode, ``Tazuna.Smt.pair_decode, ``Tazuna.Smt.timer_decode, ``Tazuna.Smt.resp_decode,
     -- A model generate finds is a run to its target: every model's steps decode to inputs whose run from the
     -- initial state takes the kinds the model picks and faults nowhere, each input carrying only ids from outside or
     -- ones an earlier out line showed (`unroll_decode`, `Step.ShownRun`), and its last step answers in the target's
@@ -179,17 +178,13 @@ elab "#check_tazuna_reach" : command => do
     -- inputs within the slots that faults nowhere answers at its last step in the target's class (from
     -- `runs_covered`: every such run is a model of every assertion but the goal).
     ``Tazuna.Smt.generate_unreached,
-    -- T7: a bounded response "within the bounds": where prove's script for it at a depth has no model, no run of that
-    -- many valid inputs within the slots, faulting nowhere, with timely clock lines and the response's functions
-    -- fitting at its events, violates it (from `runs_covered`).
-    ``Tazuna.Smt.response_within,
-    -- A bounded response proved in one step (Prove.proved): where every input kind's question whether its step from a
-    -- state of the right shape applies a trigger it does not answer, and every bound question, is unsat, and every
-    -- input and the initial state fit, no run on valid inputs violates the response.
-    ``Tazuna.Smt.response_proved,
-    -- A response's model decodes to a run from the initial state on inputs `validInputs` allows, with timely clock
-    -- lines, that violates it.
-    ``Tazuna.Smt.response_sound,
+    -- T7, a response by induction over steps (Lamport sec 3.3): where every input kind's response question is unsat, no
+    -- run on valid inputs with timely clock lines whose steps stay within the slots violates it (Prove.withinBounds);
+    -- where every bound question is unsat too and every input and the initial state fit, no such run at all, at any
+    -- length (Prove.proved). The question asks whether a step opens a trigger with no deadline in time, lets a waiting
+    -- deadline go or move later without its answer, or is a timely clock line past one; `not_violated` turns
+    -- those one-step facts into the run's.
+    ``Tazuna.Smt.response_scoped, ``Tazuna.Smt.response_holds,
     -- Check's wireType rule reads every wire type, so a user's spec never fails `Checked.wire`: a function on the wire
     -- is Illegal.wireType, and only a loader bug is left to break it (exit 4).
     ``Tazuna.Smt.wireTys_wire]

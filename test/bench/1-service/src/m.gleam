@@ -165,6 +165,12 @@ fn s1() -> tazuna.Service {
           }
         },
         within: 20,
+        deadline: fn(r: R1, trigger: E1) {
+          case trigger {
+            Put1(k, _) -> table.get(r.items, k)
+            _ -> None
+          }
+        },
       ),
       tazuna.response(
         name: "a positive put is bumped",
@@ -181,6 +187,7 @@ fn s1() -> tazuna.Service {
           }
         },
         within: 0,
+        deadline: fn(_r: R1, _trigger: E1) { None },
       ),
     ],
     bounds: tazuna.bounds(

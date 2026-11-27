@@ -102,7 +102,7 @@ def Layout.exactOwns (p : ProgramParts) (v : ServiceV) : List OwnKey :=
 lists, answers, own commands' answers, and the inputs, whose terms a run's script declares. They are listed after the program's types, which already hold them where a
 function of the program has them, so the layout keeps its order. -/
 def useTys (v : ServiceV) (K : Layout) : List Ty :=
-  [Ty.rules, .list v.event, Ty.applyCtx v.records] ++
+  [Ty.rules, .list v.event, Ty.applyCtx v.records, Ty.option Ty.int] ++
     v.reactions.flatMap (fun _ => [Ty.reactionCtx v.records, .list (.dsl .effect [v.event])]) ++
     v.machines.flatMap (fun m => [Ty.machineCtx m.key m.state v.records, Ty.next m.state, Ty.option (Ty.timer m.state),
       .bag m.key, Ty.timerCtx m.key m.state v.records]) ++

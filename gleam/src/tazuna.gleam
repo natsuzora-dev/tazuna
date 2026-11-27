@@ -65,8 +65,8 @@ pub type Bounds(records)
 /// At most how many records one table of the records holds at any time.
 pub type Create(records)
 
-/// After one event, another within a time.
-pub type Response(event)
+/// After one event, another within a time, by a deadline the records keep.
+pub type Response(records, event)
 
 /// Steps a service takes from its initial records, compared with a snapshot.
 pub type Scenario(records, event, caller)
@@ -175,7 +175,7 @@ pub fn service(
   machines _machines: List(Machine(records, event)),
   reactions _reactions: List(Reaction(records, event)),
   invariants _invariants: fn(records) -> Rules,
-  responses _responses: List(Response(event)),
+  responses _responses: List(Response(records, event)),
   bounds _bounds: Bounds(records),
   scenarios _scenarios: List(Scenario(records, event, caller)),
 ) -> Service {
@@ -350,13 +350,14 @@ pub fn create(
   panic as "tazuna's built-ins run only in the engine"
 }
 
-/// After each event `trigger` satisfying `after`, an event satisfying `then(trigger, event)` within the duration `within`, the deadline included: an answer exactly `within` after the trigger is in time, one a millisecond later is not. A response that does not tie the two ignores `trigger`.
+/// After each event `trigger` satisfying `after`, an event satisfying `then(trigger, event)` within the duration `within`, the deadline included: an answer exactly `within` after the trigger is in time, one a millisecond later is not. A response that does not tie the two ignores `trigger`. `deadline` reads the deadline the records keep for a trigger while it waits for its answer, and none once it waits no more. prove checks each step against it: a trigger the step does not answer has a deadline within `within` after it, a waiting deadline ends or moves later only with its answer, and a clock line passes no waiting deadline. Together these hold the response on runs of any length.
 pub fn response(
   name _name: String,
   after _after: fn(event) -> Bool,
   then _then: fn(event, event) -> Bool,
   within _within: Duration,
-) -> Response(event) {
+  deadline _deadline: fn(records, event) -> Option(Int),
+) -> Response(records, event) {
   panic as "tazuna's built-ins run only in the engine"
 }
 

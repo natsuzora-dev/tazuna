@@ -57,24 +57,8 @@ def UnrollStep.pickedT (st : UnrollStep v n) (dflt : Term) :
 def UnrollStep.takenT (st : UnrollStep v n) (h : SymInput v (shapes v) n × EncodedStep v → Term) : Term :=
   st.pickedT ff (st.kinds.map fun k => (k, h k))
 
-/-- Each kind of the step with `h` at it, or `h`'s first refusal: what `pickedT` reads where `h` can refuse. -/
-def UnrollStep.kindTerms {α : Type} (st : UnrollStep v n) (h : SymInput v (shapes v) n × EncodedStep v → Except Refusal α) :
-    Except Refusal (List ((SymInput v (shapes v) n × EncodedStep v) × α)) :=
-  st.kinds.mapM fun k => do pure (k, ← h k)
-
 section
 variable {M : Model} (st : UnrollStep v n)
-
-theorem holds_pickedT (dflt : Term) : (ts : List ((SymInput v (shapes v) n × EncodedStep v) × Term)) →
-    {k : SymInput v (shapes v) n × EncodedStep v} → {t : Term} →
-    ts.find? (fun p => (st.picks p.1).denote M |>.toBool) = some (k, t) → (Holds M (st.pickedT dflt ts) ↔ Holds M t)
-  | [], _, _, h => by cases h
-  | (k', t') :: ts, k, t, h => by
-    simp only [List.find?_cons] at h
-    simp only [UnrollStep.pickedT, holds_ite]
-    cases hb : (st.picks k').denote M |>.toBool
-    · rw [hb] at h; simpa using holds_pickedT dflt ts h
-    · rw [hb] at h; cases h; simp
 
 theorem holds_takenT (h : SymInput v (shapes v) n × EncodedStep v → Term) :
     Holds M (st.takenT h) ↔ ∃ k, st.taken M = some k ∧ Holds M (h k) := by
@@ -84,35 +68,6 @@ theorem holds_takenT (h : SymInput v (shapes v) n × EncodedStep v → Term) :
   | cons k ks ih =>
     simp only [List.map_cons, UnrollStep.pickedT, List.find?_cons, holds_ite]
     cases (st.picks k).denote M |>.toBool <;> simp [ih]
-
-/-- At the kind the step takes, `h` gave a term, and `pickedT` of any term of the kind's reads that kind's. -/
-theorem kindTerms_taken {α : Type} {h : SymInput v (shapes v) n × EncodedStep v → Except Refusal α}
-    {ts : List ((SymInput v (shapes v) n × EncodedStep v) × α)} (hts : st.kindTerms h = .ok ts)
-    {k : SymInput v (shapes v) n × EncodedStep v} (hk : st.taken M = some k) (f : α → Term) (dflt : Term) :
-    ∃ a, h k = .ok a ∧ (Holds M (st.pickedT dflt (ts.map fun p => (p.1, f p.2))) ↔ Holds M (f a)) := by
-  simp only [UnrollStep.kindTerms, UnrollStep.taken] at hts hk
-  suffices ∀ (ks : List (SymInput v (shapes v) n × EncodedStep v)) ts,
-      ks.mapM (fun k => do pure (k, ← h k)) = .ok ts → ks.find? (fun k => (st.picks k).denote M |>.toBool) = some k →
-      ∃ a, h k = .ok a ∧ (ts.map fun p => (p.1, f p.2)).find? (fun p => (st.picks p.1).denote M |>.toBool) =
-        some (k, f a) by
-    obtain ⟨a, ha, hf⟩ := this _ ts hts hk
-    exact ⟨a, ha, holds_pickedT st dflt _ hf⟩
-  intro ks
-  induction ks with
-  | nil => intro _ _ h; cases h
-  | cons k' ks ih =>
-    intro ts hts hf
-    rw [List.mapM_cons] at hts
-    obtain ⟨⟨_, a'⟩, e1, hts⟩ := bind_ok.1 hts
-    obtain ⟨ts', e2, hts⟩ := bind_ok.1 hts
-    cases pure_ok.1 hts
-    obtain ⟨a'', ha'', he⟩ := bind_ok.1 e1
-    cases pure_ok.1 he
-    simp only [List.find?_cons] at hf
-    simp only [List.map_cons, List.find?_cons]
-    cases hb : (st.picks k').denote M |>.toBool
-    · rw [hb] at hf; exact ih ts' e2 hf
-    · rw [hb] at hf; cases hf; exact ⟨_, ha'', rfl⟩
 
 end
 

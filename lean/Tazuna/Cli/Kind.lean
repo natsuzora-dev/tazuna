@@ -22,17 +22,18 @@ deriving DecidableEq
 inductive Tazuna.ProveKind : Type
   /-- No step of the input kind from a state of the right shape breaks the target, and no step of any kind goes past
   the slots the bounds give, while every input and the initial state fit them; so every state a run reaches is within
-  the slots, and the line speaks of every run. For a bounded response: every step of any kind from such a state
-  answers each trigger it applies in that step, so no run violates it. -/
+  the slots, and the line speaks of every run. For a response: the line's step opens each trigger it does not answer
+  with a deadline in time, keeps each waiting deadline no later until its answer, and as a clock line passes no
+  waiting deadline; where every kind's line reads so, no run on valid inputs with timely clock lines violates the
+  response, at any length. -/
   | proved
   /-- No step of the input kind from a state of the right shape breaks the target while it stays within the slots,
   but such a step can go past them: the line names every bound a step of the service can go past (its tables, bags
-  and list types, and its pending requests where it sends any), the same for every run. For a bounded response: no run from the
-  initial state of at most the spec's `steps` inputs within the slots, on which its `assumes` hold (valid inputs, no
-  step faults, timely clock lines), violates it; the line names those bounds and `steps`. -/
+  and list types, and its pending requests where it sends any), the same for every run. For a response, the same of
+  every run whose steps stay within the slots. -/
   | withinBounds
-  /-- A state and input whose step breaks the target, or for a bounded response a run from the initial state that
-  violates it. -/
+  /-- A state and input whose step breaks the target; for a response, also the trigger whose deadline the step breaks
+  and which part it breaks. -/
   | violated
   /-- No step from a state of the right shape whose invariants hold, of any input kind, shows the class of out line
   the generate target aims at unless it faults: no run on valid inputs that faults nowhere ever shows it, at any depth

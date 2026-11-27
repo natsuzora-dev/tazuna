@@ -431,9 +431,6 @@ def Assumption.Holds : Assumption → State v → List (Input v) → Prop
 /-- What a search over the runs from the initial state assumes of them: generate's unreached targets rest on it. -/
 def Assumption.ofRuns : List Assumption := [.validInputs, .noFault]
 
-/-- What a search for a response's violation assumes of the runs: a response within its bounds rests on it, and a
-violating run satisfies it. -/
-def Assumption.ofResponses : List Assumption := Assumption.ofRuns ++ [.timelyClock]
 
 theorem machines_empty (P : PBij) : (ms : List (MachineV v.records v.event)) →
     Machines.Rel P (PerMachine.ofFn (fun _ => ([] : List (Instance _))) ms : Machines ms)

@@ -175,6 +175,9 @@ inductive Target where
   `Step.PairCommutes`). `widened` names those of the two that only a send whose handle or `on_answer` is not written
   in place makes: such a send stands for every handle or site of its type, so no send may make the kind. -/
   | pair (first second : String) (widened : List String)
+  /-- The response `name`'s step question (`respStep`): the step opens a trigger with no deadline in time, lets an
+  open trigger's deadline go or move later without its answer, or is a timely clock line past an open deadline. -/
+  | response (name : String)
 deriving DecidableEq, Repr
 
 /-- Whether a step that faults with `f` breaks the target. -/

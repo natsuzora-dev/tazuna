@@ -384,6 +384,7 @@ pub fn service() -> tazuna.Service {
           }
         },
         within: 0,
+        deadline: fn(_records: Records, _trigger: Event) { None },
       ),
     ],
     bounds: tazuna.bounds(

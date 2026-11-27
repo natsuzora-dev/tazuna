@@ -55,7 +55,7 @@ def second : Field := ⟨"second", "a pair's second step"⟩
 def firstThenSecond : Field := ⟨"firstThenSecond", "how the first step then the second ends"⟩
 def secondThenFirst : Field := ⟨"secondThenFirst", "how the second step then the first ends"⟩
 def steps : Field := ⟨"steps", "the number of inputs of the run, or the most searched"⟩
-def run : Field := ⟨"run", "the run from the initial state, as trace lines"⟩
+def trigger : Field := ⟨"trigger", "for a response, the waiting trigger whose deadline the step lets go, moves later or passes"⟩
 def written : Field := ⟨"file", "the trace file written, under the directory given"⟩
 def why : Field := ⟨"why", "what the solver said"⟩
 def depth : Field := ⟨"depth", "the number of inputs of the run searched when the solver gave up"⟩
@@ -87,8 +87,8 @@ def InternalKind.explanation : InternalKind → Explanation
   | .invalidIr => ⟨docOf% InternalKind.invalidIr, [], [file, line, col, message]⟩
   | .convert => ⟨docOf% InternalKind.convert, [], [file, line, col, message]⟩
   | .engine => ⟨docOf% InternalKind.engine,
-    [`Tazuna.Smt.questions_decode, `Tazuna.Smt.pair_decode, `Tazuna.Smt.timer_decode, `Tazuna.Smt.generate_sound,
-      `Tazuna.Smt.response_sound], [message]⟩
+    [`Tazuna.Smt.questions_decode, `Tazuna.Smt.pair_decode, `Tazuna.Smt.timer_decode, `Tazuna.Smt.resp_decode,
+      `Tazuna.Smt.generate_sound], [message]⟩
 
 def UsageKind.explanation : UsageKind → Explanation
   | .arguments => ⟨docOf% UsageKind.arguments, [], [message]⟩
@@ -160,16 +160,15 @@ def TestKind.explanation : TestKind → Explanation
   | .badStep => ⟨docOf% TestKind.badStep, [], [service, scenario, step, message]⟩
 
 def ProveKind.explanation : ProveKind → Explanation
-  | .proved => ⟨docOf% ProveKind.proved, [`Tazuna.Smt.proved_sound, `Tazuna.Smt.run_lines, `Tazuna.Smt.response_proved],
+  | .proved => ⟨docOf% ProveKind.proved, [`Tazuna.Smt.proved_sound, `Tazuna.Smt.run_lines, `Tazuna.Smt.response_holds],
     questionFields ++ [assumes, widened]⟩
   | .withinBounds => ⟨docOf% ProveKind.withinBounds,
-    [`Tazuna.Smt.fault_sound, `Tazuna.Smt.run_lines, `Tazuna.Smt.response_within, `Tazuna.Smt.boundReached_iff],
+    [`Tazuna.Smt.fault_sound, `Tazuna.Smt.run_lines, `Tazuna.Smt.response_scoped, `Tazuna.Smt.boundReached_iff],
     questionFields ++ [assumes, bounds, widened]⟩
   | .violated => ⟨docOf% ProveKind.violated,
-    [`Tazuna.Smt.cti_sound, `Tazuna.Ir.step_settled, `Tazuna.Smt.timer_violates, `Tazuna.Smt.pair_violates,
-      `Tazuna.Smt.response_sound],
+    [`Tazuna.Smt.cti_sound, `Tazuna.Ir.step_settled, `Tazuna.Smt.timer_violates, `Tazuna.Smt.pair_violates],
     questionFields ++ [fromField, state, input, after, outcome, out, inst, records, timer, next, first, second,
-      firstThenSecond, secondThenFirst, steps, run, Field.violated, assumes, widened]⟩
+      firstThenSecond, secondThenFirst, trigger, Field.violated, assumes, widened]⟩
   | .unreachable => ⟨docOf% ProveKind.unreachable, [`Tazuna.Smt.unshown_sound, `Tazuna.Smt.unshown_within],
     [service, target, assumes, bounds]⟩
 
@@ -184,7 +183,7 @@ def UndecidedKind.explanation : UndecidedKind → Explanation
   | .unknown => ⟨docOf% UndecidedKind.unknown, [], questionFields ++ [depth, why]⟩
   | .timeout => ⟨docOf% UndecidedKind.timeout, [], questionFields ++ [depth, why]⟩
   | .limit => ⟨docOf% UndecidedKind.limit, [`Tazuna.Trace.replay_iff],
-    questionFields ++ [scenario, trace, line, Field.limit] ++ pairFields⟩
+    questionFields ++ [scenario, trace, line, Field.limit] ++ pairFields ++ [input, after, outcome, out, trigger]⟩
   | .upToRenaming => ⟨docOf% UndecidedKind.upToRenaming, [`Tazuna.Smt.run_lines], questionFields ++ pairFields⟩
 
 namespace Kind

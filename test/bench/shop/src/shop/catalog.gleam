@@ -329,6 +329,7 @@ fn sale_clock() -> tazuna.Machine(Records, Event) {
     },
     invariants: fn(ctx: MachineCtx(String, SalePhase, Records)) {
       [
+        #("an ended sale is already gone", ctx.state == Running),
         #(
           "a running sale's product is sold",
           case table.get(ctx.records.products, ctx.key) {
@@ -406,6 +407,16 @@ pub fn service() -> tazuna.Service {
           }
         },
         within: shared.day,
+        deadline: fn(records: Records, trigger: Event) {
+          case trigger {
+            SaleStarted(sku:, ..) ->
+              case table.get(records.sales, sku) {
+                Some(sale) -> Some(sale.ends)
+                None -> None
+              }
+            _ -> None
+          }
+        },
       ),
     ],
     bounds: tazuna.bounds(

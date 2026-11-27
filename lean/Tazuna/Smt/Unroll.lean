@@ -10,8 +10,8 @@ which the next step reads as its state. A script stays linear in `d` because eac
 often later steps read it, and its only constants are the selectors and the inputs, whose values a run fixes one by
 one: so every run is a model without any argument about which constants a term reads (`runs_covered`). An answer's
 kinds (one per pending shape and slot) share one selector value and are told apart by the case each asks about, so
-the selector's value is the input's kind, whichever slot holds the request. A goal on the steps (what generate or a
-response asks) is the only part callers add, as the last assertion (`UnrollBase.withGoal`). -/
+the selector's value is the input's kind, whichever slot holds the request. A goal on the steps (what generate
+asks) is the only part callers add, as the last assertion (`UnrollBase.withGoal`). -/
 
 namespace Tazuna.Smt
 

@@ -2,7 +2,7 @@
 # Times `prove` on a spec as a user runs it: once with an empty cache, then again from the cache. The N-service
 # directories here are each one spec of N alike services (a create-bounded table, three commands with accepts and
 # ensures, a keyed machine with a timer and an external request, a reaction sending an own command, a source
-# subscription, two bounded responses); shop is a realistic spec with budgets, which test/bench/budget checks.
+# subscription, two responses); shop is a realistic spec with budgets, which test/bench/budget checks.
 # Prints the wall times, how many questions the solver answered (the answers the cache keeps), the cache's size and
 # the kinds of the lines printed.
 # Usage: test/bench/time <spec directory, e.g. 3-services> [jobs, default 4]

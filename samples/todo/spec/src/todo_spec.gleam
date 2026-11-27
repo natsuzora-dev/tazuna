@@ -7,9 +7,10 @@ import tazuna.{
 }
 import tazuna/table.{type Table}
 
-/// An open task: its title, and when it is due for a reminder.
+/// An open task: its title, when it is due for a reminder, and whether the
+/// reminder went out.
 pub type Task {
-  Task(title: String, remind_at: Instant)
+  Task(title: String, remind_at: Instant, reminded: Bool)
 }
 
 /// The open tasks. Completing a task removes it.
@@ -56,10 +57,19 @@ fn apply(ctx: tazuna.ApplyCtx(Records), event: Event) -> Records {
       Records(tasks: table.insert(
         records.tasks,
         id,
-        Task(title: title, remind_at: ctx.now + hour),
+        Task(title: title, remind_at: ctx.now + hour, reminded: False),
       ))
     Completed(id) -> Records(tasks: table.remove(records.tasks, id))
-    ReminderDue(..) -> records
+    ReminderDue(id, _title) ->
+      case table.get(records.tasks, id) {
+        Some(task) ->
+          Records(tasks: table.insert(
+            records.tasks,
+            id,
+            Task(..task, reminded: True),
+          ))
+        None -> records
+      }
   }
 }
 
@@ -76,7 +86,11 @@ fn add() -> tazuna.Command(Records, Event, Caller, String, tazuna.Never) {
         #(
           "the new task is open",
           table.get(after.tasks, tazuna.fresh(ctx.fresh, 0))
-            == Some(Task(title: ctx.input, remind_at: ctx.now + hour)),
+            == Some(Task(
+            title: ctx.input,
+            remind_at: ctx.now + hour,
+            reminded: False,
+          )),
         ),
       ]
     },
@@ -156,7 +170,17 @@ fn reminder() -> tazuna.Machine(Records, Event) {
           )
       }
     },
-    invariants: fn(_ctx) { [] },
+    invariants: fn(ctx: MachineCtx(Id, Phase, Records)) {
+      [
+        #(
+          "a due reminder went out",
+          case ctx.state, table.get(ctx.records.tasks, ctx.key) {
+            Due, Some(task) -> task.reminded
+            _, _ -> True
+          },
+        ),
+      ]
+    },
   )
 }
 
@@ -218,6 +242,20 @@ fn todo_service() -> tazuna.Service {
           }
         },
         within: hour,
+        deadline: fn(records: Records, trigger: Event) {
+          case trigger {
+            Added(task:, ..) ->
+              case table.get(records.tasks, task) {
+                Some(open) ->
+                  case open.reminded {
+                    True -> None
+                    False -> Some(open.remind_at)
+                  }
+                None -> None
+              }
+            _ -> None
+          }
+        },
       ),
     ],
     bounds: tazuna.bounds(

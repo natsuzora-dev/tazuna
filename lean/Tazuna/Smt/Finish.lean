@@ -2,8 +2,9 @@ import Tazuna.Smt.Cascade
 
 /-! How a step that applies events ends, as `Step.finish` says: the cascade runs the own commands and queries the
 events queued (`encodeSettle`), every request the events and the internal steps start is written into the pending table
-in one pass, and the service's and every machine's invariants are checked on the state the cascade leaves. The step
-kinds differ only in what comes before (`loop_acc` for a list of events). -/
+in one pass, and the service's and every machine's invariants are checked on the state the cascade leaves, where every
+machine's `instances` must fit the slots too. The step kinds differ only in what comes before (`loop_acc` for a list of
+events). -/
 
 namespace Tazuna.Smt
 
@@ -20,7 +21,19 @@ def encodeInvariants {r : Ty} (inv : Code (Ty.fn [r] Ty.rules)) (records : Term)
   let rules ← ruleTerms L invs
   pure (rules, c)
 
+/-- Whether every machine's `instances` fits at the records term: its code's condition and its application's. -/
+def instFitsT {r e : Ty} : (ms : List (MachineV r e)) → (records : Term) → Except Refusal Term
+  | [], _ => pure tt
+  | m :: ms, records => do
+    let (ic, c1) ← m.instances.code L
+    let (_, c0) ← ic (← Code.ofDataE r records, ())
+    pure (andT (andT c1 c0) (← instFitsT ms records))
+
 end
+
+/-- Every machine's `instances` fits at the records: its source and its application. -/
+def instFitsAt (S : Ty → Nat) {r e : Ty} (ms : List (MachineV r e)) (recs : r.den0) : Prop :=
+  ∀ m ∈ ms, (m.instances.fits S).1 ∧ m.instances.appFits S (recs, ())
 
 section
 variable {L : Layout} {M : Model}
@@ -40,6 +53,28 @@ theorem invariants_rel {r : Ty} (f : Fun (Ty.fn [r] Ty.rules)) (hr : r.isData = 
   have hiv := hinv _ _ (rels1 hr hargs hrc) invs c h2 hc
   erw [Ty.up_fn _ Ty.rules _ hargs rfl] at hiv
   exact rules_broken h3 _ hiv
+
+/-- The instances' condition is exact: it holds exactly when every machine's `instances` fits at the records. -/
+theorem instFitsT_exact {r e : Ty} (hr : r.isData = true) (recs : r.den0) {records : Term}
+    (hrec : RelV L r (Ty.up _ hr recs) (records.denote M)) :
+    (ms : List (MachineV r e)) → {c : Term} → instFitsT L ms records = .ok c → (Holds M c ↔ instFitsAt L.count ms recs)
+  | [], _, henc => by cases pure_ok.1 henc; simp [holds_tt, instFitsAt]
+  | m :: ms, _, henc => by
+    obtain ⟨⟨ic, c1⟩, h1, henc⟩ := bind_ok.1 henc
+    obtain ⟨rc, h2, henc⟩ := bind_ok.1 henc
+    obtain ⟨⟨o, c0⟩, h3, henc⟩ := bind_ok.1 henc
+    obtain ⟨rest, h4, henc⟩ := bind_ok.1 henc
+    cases pure_ok.1 henc
+    have hrc : Smt.Rel M L r (Ty.up _ hr recs) rc := (rel_ofTerm (need_ok.1 h2) _).2 hrec
+    have hargs : (Ty.tuple [r]).isData = true := by simp [Ty.isData, Ty.isDatas, hr]
+    have e1 := (m.instances.code_exact (M := M) h1).1
+    rw [holds_andT, holds_andT, instFitsT_exact hr recs hrec ms h4]
+    simp only [instFitsAt, List.mem_cons, forall_eq_or_imp]
+    refine and_congr_left fun _ => ⟨fun ⟨hc1, hc0⟩ => ⟨e1.1 hc1, ?_⟩, fun ⟨hf1, hf0⟩ => ⟨e1.2 hf1, ?_⟩⟩
+    · exact (m.instances.app_exact h1 hc1 (by simpa using ofTerm_notFn (need_ok.1 h2)) _ _
+        (rels1 hr hargs hrc) h3).1 hc0
+    · exact (m.instances.app_exact h1 (e1.2 hf1) (by simpa using ofTerm_notFn (need_ok.1 h2)) _ _
+        (rels1 hr hargs hrc) h3).2 hf0
 
 /-- The invariants' condition is exact: it holds exactly when they fit at the records. -/
 theorem invariants_exact {r : Ty} (f : Fun (Ty.fn [r] Ty.rules)) (hr : r.isData = true)
@@ -85,7 +120,9 @@ def encodeFinish (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.e
   let (pT, cp) ← encodePending L shs pending (o.news ++ so.terms.done.news)
   let (rules, ci) ← encodeInvariants L inv so.terms.done.records
   let (checks, ck) ← encodeInstChecks L T v.machines so.terms.done.tables so.terms.done.records now
-  pure ⟨⟨so, pT, o.events ++ so.terms.done.events, o.news ++ so.terms.done.news, rules, checks⟩, andT cs (.ite so.faultT tt (andT cp (andT ci ck))), cx⟩
+  let cf ← instFitsT L v.machines so.terms.done.records
+  pure ⟨⟨so, pT, o.events ++ so.terms.done.events, o.news ++ so.terms.done.news, rules, checks⟩,
+    andT cs (.ite so.faultT tt (andT cp (andT ci (andT ck cf)))), cx⟩
 
 end
 
@@ -122,6 +159,8 @@ structure Ended (M : Model) (L : Layout) (T : List TypeDecl) (shs : List (Pendin
   events : EventsRel M L fo.events e.events
   news : ∃ effs, NewsRel M L shs v.declared fo.news effs a.state.nextId ∧
     Forall2 (Step.Writes v.declared) (effs.zipIdx a.state.nextId) e.written
+  /-- Every machine's `instances` fits at the records the end leaves, as the end's condition asks. -/
+  fits : instFitsAt L.count v.machines e.records
 
 /-- What a step's end terms say of its result `r`: whether the cascade faults, as its term says; the cascade's fault,
 else the first broken invariant (the service's, then each machine's instances in key order), else what the step's end
@@ -137,14 +176,15 @@ def Finished (M : Model) (L : Layout) (T : List TypeDecl)
     | [] => ∃ e, Ended M L T shs fo a outcome r e
 
 /-- Whether a step's end fits, for the result `r` of its events: the internal steps the cascade runs
-(`settleFits`) and, where it does not fault, every pending request in the pending table and the service's and every
-machine's invariants on the state it leaves. -/
+(`settleFits`) and, where it does not fault, every pending request in the pending table, the service's and every
+machine's invariants on the state it leaves, and every machine's `instances` at the records it leaves, which the next
+step's questions read the instance shape by. -/
 def finishFits (S : Ty → Nat) (T : List TypeDecl) (shs : List (PendingShape v.event)) (r : Except Fault (Step.Acc v)) :
     Prop :=
   ∀ a1, r = .ok a1 → settleFits S T v.bounds.cascadeNat 0 a1 ∧
     ∀ a2, Step.settleFrom T v.bounds.cascadeNat 0 a1 = .ok a2 →
       a2.state.pending.length ≤ S (pendingTable shs) ∧ v.invariants.appFits S (a2.state.records, ()) ∧
-      instChecksFit S a2.state.records a2.state.now a2.state.machines
+      instChecksFit S a2.state.records a2.state.now a2.state.machines ∧ instFitsAt S v.machines a2.state.records
 
 /-- A step's end: its condition holds exactly when the step's end fits (`finishFits`), and wherever it holds the result
 `Step.finish` gives for the result `r` of the step's events is what the terms say (`Finished`). -/
@@ -172,6 +212,7 @@ theorem finish_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
   obtain ⟨⟨pT, cp⟩, hpe, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨rules, ci⟩, hi, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨checks, ck⟩, hck, henc⟩ := bind_ok.1 henc
+  obtain ⟨cf, hcf, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
   refine ⟨?_, fun hc => ?_⟩
   · revert hra
@@ -193,14 +234,16 @@ theorem finish_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
     have hfits : finishFits L.count T shs r ↔ settleFits L.count T v.bounds.cascadeNat 0 a1 ∧
         ∀ a2, Step.settleFrom T v.bounds.cascadeNat 0 a1 = .ok a2 →
           a2.state.pending.length ≤ L.count (pendingTable shs) ∧ v.invariants.appFits L.count (a2.state.records, ()) ∧
-          instChecksFit L.count a2.state.records a2.state.now a2.state.machines := by
+          instChecksFit L.count a2.state.records a2.state.now a2.state.machines ∧
+          instFitsAt L.count v.machines a2.state.records := by
       rw [hra]
       exact ⟨fun h => h _ rfl, fun h a1 e => by cases e; exact h⟩
     rw [hfits, holds_andT]
-    have key : ∀ hcs : Holds M cs, (Holds M (.ite so.faultT tt (andT cp (andT ci ck))) ↔
+    have key : ∀ hcs : Holds M cs, (Holds M (.ite so.faultT tt (andT cp (andT ci (andT ck cf)))) ↔
         ∀ a2, Step.settleFrom T v.bounds.cascadeNat 0 a1 = .ok a2 →
           a2.state.pending.length ≤ L.count (pendingTable shs) ∧ v.invariants.appFits L.count (a2.state.records, ()) ∧
-          instChecksFit L.count a2.state.records a2.state.now a2.state.machines) := by
+          instChecksFit L.count a2.state.records a2.state.now a2.state.machines ∧
+          instFitsAt L.count v.machines a2.state.records) := by
       intro hcs
       obtain ⟨hF, hm⟩ := hrel hcs
       revert hm
@@ -231,8 +274,9 @@ theorem finish_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
         have ek := (instChecks_encode recs2 _ f1 hnow v.machines _ _ f2 (fun m hm => (chk.keys m hm).2) hck).1
         have hall : ∀ a2, Step.settleFrom T v.bounds.cascadeNat 0 _ = .ok a2 ↔ a2 = _ := fun a2 => by
           rw [hr2 ps2 hps2]; exact ⟨fun h => by cases h; rfl, fun h => by rw [h]⟩
+        have ef := instFitsT_exact v.records_data recs2 f1 v.machines hcf
         simp only [hall, forall_eq]
-        rw [holds_andT, holds_andT, ep, ei, ek]
+        rw [holds_andT, holds_andT, holds_andT, ep, ei, ek, ef]
         simp [hl1, hl2]
     constructor
     · rintro ⟨hcs, hrest⟩
@@ -269,11 +313,11 @@ theorem finish_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
       rw [hr2 ps2 hps2]
       simp only [Except.map]
       have hFf : so.faultT.denote M = .bool false := by rw [hF, hfo]; rfl
-      obtain ⟨hcp, hci, hck'⟩ : Holds M cp ∧ Holds M ci ∧ Holds M ck := by
+      obtain ⟨hcp, hci, hck', hcf'⟩ : Holds M cp ∧ Holds M ci ∧ Holds M ck ∧ Holds M cf := by
         have := (holds_ite _ _ _).1 hrest
         rw [hFf] at this
         simp only [toBool_bool, Bool.false_eq_true, ite_false] at this
-        rw [holds_andT, holds_andT] at this
+        rw [holds_andT, holds_andT, holds_andT] at this
         exact this
       have hnews : NewsRel M L shs v.declared (o.news ++ so.terms.done.news) (effs1 ++ effs2) a.state.nextId :=
         newsRel_append e5 (by simpa [hl1] using f5)
@@ -301,7 +345,7 @@ theorem finish_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
       | cons n ns => rfl
       | nil =>
         refine ⟨⟨recs2, ms2, fr2, evs1 ++ evs2, ps1 ++ ps2⟩, ?_, f1, f2, f3, ?_, ⟨ps', by simpa using hperm, hrelP⟩,
-          eventsRel_append e8 f8, _, hnews', hps0⟩
+          eventsRel_append e8 f8, ⟨_, hnews', hps0⟩, (instFitsT_exact v.records_data recs2 f1 v.machines hcf).1 hcf'⟩
         · simp [EndVals.result, hl1, hl2]
         · rw [f4]; simp [hl1, hl2, Nat.add_assoc]
 

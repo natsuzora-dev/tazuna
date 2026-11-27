@@ -165,6 +165,12 @@ fn s1() -> tazuna.Service {
           }
         },
         within: 20,
+        deadline: fn(r: R1, trigger: E1) {
+          case trigger {
+            Put1(k, _) -> table.get(r.items, k)
+            _ -> None
+          }
+        },
       ),
       tazuna.response(
         name: "a positive put is bumped",
@@ -181,6 +187,7 @@ fn s1() -> tazuna.Service {
           }
         },
         within: 0,
+        deadline: fn(_r: R1, _trigger: E1) { None },
       ),
     ],
     bounds: tazuna.bounds(
@@ -337,6 +344,12 @@ fn s2() -> tazuna.Service {
           }
         },
         within: 20,
+        deadline: fn(r: R2, trigger: E2) {
+          case trigger {
+            Put2(k, _) -> table.get(r.items, k)
+            _ -> None
+          }
+        },
       ),
       tazuna.response(
         name: "a positive put is bumped",
@@ -353,6 +366,7 @@ fn s2() -> tazuna.Service {
           }
         },
         within: 0,
+        deadline: fn(_r: R2, _trigger: E2) { None },
       ),
     ],
     bounds: tazuna.bounds(
@@ -509,6 +523,12 @@ fn s3() -> tazuna.Service {
           }
         },
         within: 20,
+        deadline: fn(r: R3, trigger: E3) {
+          case trigger {
+            Put3(k, _) -> table.get(r.items, k)
+            _ -> None
+          }
+        },
       ),
       tazuna.response(
         name: "a positive put is bumped",
@@ -525,6 +545,7 @@ fn s3() -> tazuna.Service {
           }
         },
         within: 0,
+        deadline: fn(_r: R3, _trigger: E3) { None },
       ),
     ],
     bounds: tazuna.bounds(
@@ -681,6 +702,12 @@ fn s4() -> tazuna.Service {
           }
         },
         within: 20,
+        deadline: fn(r: R4, trigger: E4) {
+          case trigger {
+            Put4(k, _) -> table.get(r.items, k)
+            _ -> None
+          }
+        },
       ),
       tazuna.response(
         name: "a positive put is bumped",
@@ -697,6 +724,7 @@ fn s4() -> tazuna.Service {
           }
         },
         within: 0,
+        deadline: fn(_r: R4, _trigger: E4) { None },
       ),
     ],
     bounds: tazuna.bounds(
@@ -853,6 +881,12 @@ fn s5() -> tazuna.Service {
           }
         },
         within: 20,
+        deadline: fn(r: R5, trigger: E5) {
+          case trigger {
+            Put5(k, _) -> table.get(r.items, k)
+            _ -> None
+          }
+        },
       ),
       tazuna.response(
         name: "a positive put is bumped",
@@ -869,6 +903,7 @@ fn s5() -> tazuna.Service {
           }
         },
         within: 0,
+        deadline: fn(_r: R5, _trigger: E5) { None },
       ),
     ],
     bounds: tazuna.bounds(
@@ -1025,6 +1060,12 @@ fn s6() -> tazuna.Service {
           }
         },
         within: 20,
+        deadline: fn(r: R6, trigger: E6) {
+          case trigger {
+            Put6(k, _) -> table.get(r.items, k)
+            _ -> None
+          }
+        },
       ),
       tazuna.response(
         name: "a positive put is bumped",
@@ -1041,6 +1082,7 @@ fn s6() -> tazuna.Service {
           }
         },
         within: 0,
+        deadline: fn(_r: R6, _trigger: E6) { None },
       ),
     ],
     bounds: tazuna.bounds(

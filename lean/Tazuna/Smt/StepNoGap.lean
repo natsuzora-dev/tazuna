@@ -620,6 +620,17 @@ theorem encodeSettle_sound {shs : List (PendingShape v.event)} (h : ServiceGot L
     exact sound_bind (encodeOwnStep_sound h T senv happ _ _ _ _ _ _ _) fun _ _ =>
       sound_bind (encodeSettle_sound h T senv happ dflt now f (k + 1) _ _) fun _ _ => trivial
 
+theorem instFitsT_sound {r e : Ty} : (ms : List (MachineV r e)) → (∀ m ∈ ms, MachineGot L m ∧ MachineCodes L P ds H m) →
+    (records : Term) → Sound (fun _ => True) (instFitsT L ms records)
+  | [], _, _ => trivial
+  | m :: ms, h, records => by
+    have hm := h m (List.mem_cons_self ..)
+    simp only [instFitsT]
+    refine sound_bind hm.2.instances fun ⟨ic, _⟩ hin => ?_
+    refine sound_bind (ofDataE_sound (P := P) (ds := ds) (H := H) _ hm.1.records) fun rcd hrcd => ?_
+    refine sound_bind (apply_sound hin ⟨hrcd, trivial⟩ (avail_of_got hm.1.bag)) fun _ _ => ?_
+    exact sound_bind (instFitsT_sound ms (fun m' hm' => h m' (List.mem_cons_of_mem _ hm')) records) fun _ _ => trivial
+
 theorem encodeFinish_sound {shs : List (PendingShape v.event)} (h : ServiceGot L P ds H v shs) (T : List TypeDecl)
     (senv : StepEnv L shs) {apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)} (happ : CodeOk L P ds H _ apply)
     {inv : Code (Ty.fn [v.records] Ty.rules)} (hinv : CodeOk L P ds H _ inv) (now fresh pending : Term)
@@ -629,7 +640,8 @@ theorem encodeFinish_sound {shs : List (PendingShape v.event)} (h : ServiceGot L
   refine sound_bind (encodeSettle_sound h T senv happ _ _ _ _ _ _) fun _ _ => ?_
   refine sound_bind (encodePending_sound hL h.table _ _) fun _ _ => ?_
   refine sound_bind (encodeInvariants_sound hL hinv (avail_of_got h.records) h.rules _) fun _ _ => ?_
-  exact sound_bind (encodeInstChecks_sound hL T _ (fun m hm => (h.machines m hm).1) _ _ _) fun _ _ => trivial
+  exact sound_bind (encodeInstChecks_sound hL T _ (fun m hm => (h.machines m hm).1) _ _ _) fun _ _ =>
+    sound_bind (instFitsT_sound _ (fun m hm => (h.machines m hm).1) _) fun _ _ => trivial
 
 theorem encodeCommand_sound {shs : List (PendingShape v.event)} (h : ServiceGot L P ds H v shs) (T : List TypeDecl)
     (senv : StepEnv L shs) {x : CommandV v.records v.event v.caller} (hx : CommandOk L P ds H v x)
@@ -1171,7 +1183,7 @@ theorem rootUses_sub : ∀ r ∈ rootUses v, ∀ s ∈ r.1, s ∈ c.P := by
   simp only [rootUses, List.mem_append, List.mem_cons, List.mem_flatMap, List.mem_map, List.not_mem_nil, or_false,
     or_assoc] at hr
   rcases hr with rfl | rfl | ⟨x, hx, rfl | rfl | rfl⟩ | ⟨q, hq, rfl | rfl⟩ | ⟨m, hm, rfl | rfl | rfl | rfl | rfl⟩ |
-    ⟨x, hx, rfl⟩ | ⟨x, hx, rfl⟩ | ⟨x, hx, rfl | rfl⟩ | ⟨x, hx, rfl⟩
+    ⟨x, hx, rfl⟩ | ⟨x, hx, rfl⟩ | ⟨x, hx, rfl | rfl | rfl⟩ | ⟨x, hx, rfl⟩
   · exact Fun.uses_sub hv chk.reach.apply
   · exact Fun.uses_sub hv chk.reach.invariants
   · exact Fun.uses_sub hv (chk.reach.commands x hx).accepts
@@ -1187,7 +1199,8 @@ theorem rootUses_sub : ∀ r ∈ rootUses v, ∀ s ∈ r.1, s ∈ c.P := by
   · exact EffectFun.uses_sub hv (chk.reach.reactions x hx).site
   · exact Fun.uses_sub hv (chk.reach.subscribes x hx)
   · exact Fun.uses_sub hv (chk.reach.responses x hx).1
-  · exact Fun.uses_sub hv (chk.reach.responses x hx).2
+  · exact Fun.uses_sub hv (chk.reach.responses x hx).2.1
+  · exact Fun.uses_sub hv (chk.reach.responses x hx).2.2
   · exact Fun.uses_sub hv (chk.reach.creates x hx)
 
 /-- A site of the program at an own kind's `on_answer` is one a function of the step uses: the kind pairs a handle with

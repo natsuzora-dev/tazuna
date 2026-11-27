@@ -39,18 +39,19 @@ gleam run -m tazuna -- prove todo_spec
 ```
 
 `prove` prints one line per target and input kind.
-The targets here are the invariant `every title is not empty`, each `ensures` rule, the `cascade` bound, the effect `remind`, the order of two `remind` effects, the reminder's timers, and the response.
+The targets here are the invariant `every title is not empty`, the reminder's invariant `a due reminder went out`, each `ensures` rule, the `cascade` bound, the effect `remind`, the order of two `remind` effects, the reminder's timers, and the response.
 The first line says that the initial records keep the invariant:
 
 ```json
 {"assumes":[],"kind":"Prove.proved","service":"todo","step":"init","target":"invariant every title is not empty"}
 ```
 
-The other 18 lines read `Prove.withinBounds`, and the command exits 0.
+The other 27 lines read `Prove.withinBounds`, and the command exits 0.
 No step breaks its target while the state fits the spec's `bounds`, but a step can grow the task table past the two tasks that `creates` allows.
 Each line lists those bounds.
 
-The response `an added task is reminded or done within an hour` reads `Prove.withinBounds` as well.
+The response `an added task is reminded or done within an hour` reads `Prove.withinBounds` as well, at each input kind.
+Its `deadline` reads a task's `remind_at` until the reminder goes out, which `apply` writes down as `reminded`; `prove` checks each step against it, so the line holds for runs of any length within the bounds.
 
 ## Test the scenario
 

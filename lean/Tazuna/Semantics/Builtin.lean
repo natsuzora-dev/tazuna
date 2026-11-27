@@ -237,7 +237,7 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
   | .bounds, _, _ => fun (creates, items, cascade, steps, ()) => { creates, items, cascade, steps }
   | .create, args, _ => fun (table, atMost, ()) =>
     { key := (Ty.param 1).inst args, value := (Ty.param 2).inst args, table, atMost }
-  | .response, _, _ => fun (name, after, then_, within, ()) => { name := name.1, after, then_, within }
+  | .response, _, _ => fun (name, after, then_, within, deadline, ()) => { name := name.1, after, then_, within, deadline }
   | .scenario, _, _ => fun (name, steps, ()) => { name := name.1, steps }
   | .stepCommand, args, h => let d := Prim.dataOf h rfl
     fun (c, caller, input, ()) =>

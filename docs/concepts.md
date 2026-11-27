@@ -73,7 +73,7 @@ A service has:
 - commands. `callers` lists who may send one: `Outside(caller)` for a request line from that caller, and `Own` for the service's own machines and reactions. An origin outside `callers`, or input that breaks an `accepts` rule, makes the request invalid. `decide` accepts with events or rejects with a reason, and `ensures` states what must hold after the events.
 - queries, which answer from the records, write nothing, and make no ids.
 - machines and reactions, which react to each event.
-- invariants and responses, which `prove` checks.
+- invariants and responses, which `prove` checks. A response says "after each event `trigger`, an event that answers it within `within` ms". Its `deadline` reads the deadline the records keep for a trigger that waits for its answer, so `prove` checks the response step by step, as it checks an invariant. Whatever answers a trigger must change what `deadline` reads.
 - bounds and scenarios.
 
 A step takes one input and gives one outcome: accepted, answered, rejected, invalid, or fault.
@@ -127,6 +127,7 @@ The `out` lines after an `in` line, up to the next one, form its window.
 
 `prove` checks an invariant by induction.
 It holds in the initial state, and each step from any state within the bounds where every invariant holds keeps it.
+A response is checked the same way, one step at a time against the deadlines the records keep.
 That second part also starts from states no run reaches, so a counterexample with `"from":"validState"` is one of two things:
 
 - A real bug. Fix the behavior.

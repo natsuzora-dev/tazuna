@@ -175,7 +175,7 @@ def sig : Prim → PrimSig :=
         l "subscribes" (.list (.dsl .subscription [b])), l "declares" (.list (.dsl .declared [a, b, param 2])),
         l "machines" (.list (.dsl .machine [a, b])),
         l "reactions" (.list (.dsl .reaction [a, b])), l "invariants" (kept (.fn [a] Ty.rules)),
-        l "responses" (.list (.dsl .response [b])), l "bounds" (.dsl .bounds [a]),
+        l "responses" (.list (.dsl .response [a, b])), l "bounds" (.dsl .bounds [a]),
         l "scenarios" (.list (.dsl .scenario [a, b, param 2]))],
       ret := .dsl .service [] }
   | .command =>
@@ -294,10 +294,11 @@ def sig : Prim → PrimSig :=
       params := [l "table" (kept (.fn [a] (.table b (param 2)))), l "at_most" .int], ret := .dsl .create [a] }
   | .response =>
     { name := "response",
-      doc := "After each event `trigger` satisfying `after`, an event satisfying `then(trigger, event)` within the duration `within`, the deadline included: an answer exactly `within` after the trigger is in time, one a millisecond later is not. A response that does not tie the two ignores `trigger`.",
-      tvars := ["event"], dataArgs := true,
-      params := [l "name" .str, l "after" (kept (.fn [a] .bool)), l "then" (kept (.fn [a, a] .bool)), l "within" .int],
-      ret := .dsl .response [a] }
+      doc := "After each event `trigger` satisfying `after`, an event satisfying `then(trigger, event)` within the duration `within`, the deadline included: an answer exactly `within` after the trigger is in time, one a millisecond later is not. A response that does not tie the two ignores `trigger`. `deadline` reads the deadline the records keep for a trigger while it waits for its answer, and none once it waits no more. prove checks each step against it: a trigger the step does not answer has a deadline within `within` after it, a waiting deadline ends or moves later only with its answer, and a clock line passes no waiting deadline. Together these hold the response on runs of any length.",
+      tvars := ["records", "event"], dataArgs := true,
+      params := [l "name" .str, l "after" (kept (.fn [b] .bool)), l "then" (kept (.fn [b, b] .bool)), l "within" .int,
+        l "deadline" (kept (.fn [a, b] (.option .int)))],
+      ret := .dsl .response [a, b] }
   | .scenario =>
     { name := "scenario",
       doc := "A scenario of the service that lists it: its steps run from the initial records at time 0, and `test` compares the trace with snapshots/<service>/<name>.jsonl.",

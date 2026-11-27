@@ -17,7 +17,7 @@ For what one kind of line means, run `gleam run -m tazuna -- explain <kind>`; th
 - `items` gives the slots of each bag and of the pending requests.
 - A list type gets as many slots as its longest literal in the spec.
 - `cascade` limits the internal steps of one input.
-- `steps` limits the inputs of a run that `generate` and a response's search unroll.
+- `steps` limits the inputs of a run that `generate` unrolls.
 
 A verdict speaks only of states and inputs that fit the slots.
 `Prove.withinBounds` and `Generate.unreached` list in `bounds` every bound a step of the service can go past.
@@ -101,16 +101,26 @@ A violated pair or timer line rests on these theorems:
 ## prove: responses (T7)
 
 A response states "after each event `trigger` satisfying `after`, an event satisfying `then(trigger, event)` within `within` ms".
-A `within 0` response is first asked in one step: whether a step of each input kind, from a state of the right shape where every invariant holds, applies a trigger that no event of the same step answers.
+Its `deadline` reads the deadline the records keep for a trigger while it waits for its answer, and none once it waits no more.
+`prove` proves a response by induction over steps, as Lamport's "Real Time is Really Simple" (2005, sec 3.3) proves a bounded response from an invariant on a deadline variable.
 
-- `Prove.proved`: `response_proved`: where every kind's question and bound question is unsat and every input and the initial state fit the slots, no run from the initial state on inputs that satisfy `validInputs` violates the response, at any depth. Each trigger is answered in its own step. A model says nothing, since a later step at the same time may answer.
+A response is a target, with one line per input kind.
+The line asks the solver for a state of the right shape where every invariant holds, an input, and a trigger value, whose step does one of three things:
 
-Otherwise `prove` searches the runs from the initial state of 1 to `steps` inputs for one that violates the response, and the line reads:
-
-- `Prove.violated`: `response_sound`: the run's inputs satisfy `validInputs`, its clock lines are timely, and it violates the response.
-- `Prove.withinBounds`: `response_within` (T7), at each depth up to `steps`: no run of that many inputs within the slots, on which the line's `assumes` hold, at whose events the response's functions fit the slots and at whose clock lines every `timer` fits them, violates it.
+1. The step applies a trigger, no event of the same step answers it, and after the step its deadline is missing or later than the step's time plus `within`.
+2. The trigger had the deadline `d` before the step, no event of the step answers it, and after the step its deadline is missing or later than `d`. This part is asked only where every machine's `instances` fits the slots at the records, so the instance shape holds in full.
+3. The step is a timely clock line to a time past the trigger's deadline `d`. This part also needs `instances` to fit.
 
 A response is judged per step, so a `then` event in the same step as its trigger counts.
+
+- `Prove.proved`: `response_holds` (T7): where every kind's line and bound question is unsat, and every input and the initial state fit the slots, no run from the initial state on inputs that satisfy `validInputs`, with timely clock lines, violates the response, at any length.
+- `Prove.withinBounds`: `response_scoped` (T7): where every kind's line is unsat, the same of every run whose steps stay within the slots.
+- `Prove.violated`: the step breaks one of the three parts, recomputed in Lean from the model's state, input and trigger. Like a step line's counterexample, it comes from a state of the right shape: a real bug, or a state no run reaches, which another invariant can rule out (a machine invariant may read `now`).
+
+`not_violated` (`Semantics/Response.lean`) turns the three facts into the run's: after the trigger's step its deadline is at most its time plus `within`; each later step that does not answer keeps the deadline no later; and time moves only on clock lines, which pass no waiting deadline.
+A step within the slots ends with every machine's `instances` fitting at the records it leaves (the bound question asks it), so parts 2 and 3 hold at every step after the trigger's.
+
+The proof reads only the records, so whatever answers a trigger must change the records the deadline reads. An event that `apply` folds into nothing cannot close a trigger: write down in the records that it happened.
 
 ## generate (T6)
 
@@ -146,7 +156,7 @@ Three assumptions appear in `assumes`, in these words.
 | Text in `assumes` | Lines that print it |
 | --- | --- |
 | `ids the service made are used only after they appeared on an out line` | step lines, pair lines, responses, `Prove.unreachable`, `Generate.unreached` |
-| `no step of the run faults` | responses, `Prove.unreachable`, `Generate.unreached` |
+| `no step of the run faults` | `Prove.unreachable`, `Generate.unreached` |
 | `no clock line moves time past a timer that waits` | responses |
 
 The first leaves ids from outside the service unrestricted.

@@ -10,15 +10,21 @@ namespace Tazuna.Ir.RunExamples
 
 open StepExamples
 
+/-- No deadline: what a run violates reads none. -/
+def noDeadline : Fun (Ty.fn [Ty.int, Ty.int] (Ty.option Ty.int)) :=
+  .closed (.lam (.ctor (vs := [[Ty.int], []]) ⟨1, by simp⟩ .nil))
+
 /-- After an event `a`, an event `b` within 10 ms. -/
-def resp (a b : Int) : ResponseV .int :=
+def resp (a b : Int) : ResponseV .int .int :=
   { name := "r", after := .closed (.lam (.bin (.eq rfl) (.var .here) (.int a))),
-    then_ := .closed (.lam (.bin (.eq rfl) (.var (.there .here)) (.int b))), within := 10 }
+    then_ := .closed (.lam (.bin (.eq rfl) (.var (.there .here)) (.int b))), within := 10,
+    deadline := noDeadline }
 
 /-- After any event, the event one above it within 10 ms: `then` ties the answer to its trigger. -/
-def respNext : ResponseV .int :=
+def respNext : ResponseV .int .int :=
   { name := "r", after := .closed (.lam (.bin (.eq rfl) (.var .here) (.var .here))),
-    then_ := .closed (.lam (.bin (.eq rfl) (.var (.there .here)) (.bin .add (.var .here) (.int 1)))), within := 10 }
+    then_ := .closed (.lam (.bin (.eq rfl) (.var (.there .here)) (.bin .add (.var .here) (.int 1)))), within := 10,
+    deadline := noDeadline }
 
 def at_ (t : Int) (evs : List Int) : Moment .int := ⟨t, evs⟩
 

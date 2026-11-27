@@ -431,7 +431,18 @@ fn gateway_call() -> tazuna.Machine(Records, Event) {
         _, _ -> None
       }
     },
-    invariants: fn(_ctx: MachineCtx(Id, Call, Records)) { [] },
+    invariants: fn(ctx: MachineCtx(Id, Call, Records)) {
+      [
+        #("a timed-out call is already given up", ctx.state == Calling),
+        #(
+          "a call waits no longer than its time",
+          case table.get(ctx.records.payments, ctx.key) {
+            Some(payment) -> ctx.now <= payment.call_by
+            None -> True
+          },
+        ),
+      ]
+    },
   )
 }
 
@@ -503,6 +514,21 @@ pub fn service() -> tazuna.Service {
           }
         },
         within: 5 * shared.minute,
+        deadline: fn(records: Records, trigger: Event) {
+          case trigger {
+            ScreeningStarted(order:) ->
+              case table.get(records.payments, order) {
+                Some(payment) ->
+                  case payment.state {
+                    Screening -> Some(payment.call_by + 2 * shared.minute)
+                    Charging -> Some(payment.call_by)
+                    _ -> None
+                  }
+                None -> None
+              }
+            _ -> None
+          }
+        },
       ),
     ],
     bounds: tazuna.bounds(

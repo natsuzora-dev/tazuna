@@ -1,3 +1,4 @@
+import gleam/option.{None}
 import tazuna.{type Ctx}
 import tazuna/table.{type Table}
 
@@ -44,12 +45,14 @@ fn tasks(name: String) -> tazuna.Service {
         after: fn(_e: Event) { True },
         then: fn(_trigger: Event, _e: Event) { True },
         within: -1,
+        deadline: fn(_r: Records, _trigger: Event) { None },
       ),
       tazuna.response(
         name: "added",
         after: fn(_e: Event) { True },
         then: fn(_trigger: Event, _e: Event) { True },
         within: 5,
+        deadline: fn(_r: Records, _trigger: Event) { None },
       ),
     ],
     bounds: tazuna.bounds(

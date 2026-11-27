@@ -176,15 +176,17 @@ def BoundsV.itemsNat {r : Ty} (b : BoundsV r) : Nat := b.items.toNat
 def BoundsV.cascadeNat {r : Ty} (b : BoundsV r) : Nat := b.cascade.toNat
 def BoundsV.stepsNat {r : Ty} (b : BoundsV r) : Nat := b.steps.toNat
 
-structure ResponseV (e : Ty) where
+structure ResponseV (r e : Ty) where
   name : String
   after : Fun (Ty.fn [e] Ty.bool)
   then_ : Fun (Ty.fn [e, e] Ty.bool)
   within : Int
+  /-- The deadline the records keep for a trigger, while it waits for its answer; none once it waits no more. -/
+  deadline : Fun (Ty.fn [r, e] (Ty.option Ty.int))
 
 /-- A response's time limit as a count, for everything after check, which rejects a negative one
 (`Illegal.response`); the only place that converts. -/
-def ResponseV.withinNat {e : Ty} (r : ResponseV e) : Nat := r.within.toNat
+def ResponseV.withinNat {r e : Ty} (resp : ResponseV r e) : Nat := resp.within.toNat
 
 /-- One step of a scenario, typed by its service's records, event and caller. -/
 inductive StepV (r e c : Ty) where
@@ -222,7 +224,7 @@ structure ServiceV where
   machines : List (MachineV records event)
   reactions : List (ReactionV records event)
   invariants : Fun (Ty.fn [records] Ty.rules)
-  responses : List (ResponseV event)
+  responses : List (ResponseV records event)
   bounds : BoundsV records
   scenarios : List (ScenarioV records event caller)
   /-- The commands and queries the spec's externals list, each with its external, which `spec` fills in: an effect
@@ -253,7 +255,7 @@ def Dsl.val : Dsl → List Ty → Sem
       | .subscription, [e] => SubscriptionV e
       | .bounds, [r] => BoundsV r
       | .create, [r] => CreateV r
-      | .response, [e] => ResponseV e
+      | .response, [r, e] => ResponseV r e
       | .scenario, [r, e, c] => ScenarioV r e c
       | .step, [r, e, c] => StepV r e c
       | .sender, _ => Sender

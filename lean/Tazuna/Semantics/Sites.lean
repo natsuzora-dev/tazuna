@@ -421,7 +421,7 @@ def rootUses (v : ServiceV) : List Uses :=
     v.queries.flatMap (fun q => [q.accepts.uses, q.resolve.uses]) ++
     v.machines.flatMap (fun m => [m.instances.uses, m.on.uses, m.timer.uses, m.invariants.uses, m.effect.uses]) ++
     v.reactions.map (·.react.uses) ++ v.subscribes.map (·.wrap.uses) ++
-    v.responses.flatMap (fun r => [r.after.uses, r.then_.uses]) ++ v.bounds.creates.map (·.table.uses)
+    v.responses.flatMap (fun r => [r.after.uses, r.then_.uses, r.deadline.uses]) ++ v.bounds.creates.map (·.table.uses)
 
 /-- Every kept function of a service, by field. Each structure is matched whole, so a field added to one of them stops
 this from compiling until it is listed or matched as `_`; `rootUses_eq` then holds only once `rootUses` reads it too.
@@ -441,7 +441,8 @@ def keptUses : ServiceV → List Uses
         [instances.uses, on.uses, timer.uses, invariants.uses, effect.uses]) ++
       reactions.map (fun (⟨_name, react⟩ : ReactionV _records _event) => react.uses) ++
       subscribes.map (fun (⟨_source, _name, _sourceEvent, wrap⟩ : SubscriptionV _event) => wrap.uses) ++
-      responses.flatMap (fun (⟨_name, after, then_, _within⟩ : ResponseV _event) => [after.uses, then_.uses]) ++
+      responses.flatMap (fun (⟨_name, after, then_, _within, deadline⟩ : ResponseV _records _event) =>
+        [after.uses, then_.uses, deadline.uses]) ++
       creates.map (fun (⟨_key, _value, table, _atMost⟩ : CreateV _records) => table.uses)
 
 /-- `rootUses` reads every kept function of the service. -/

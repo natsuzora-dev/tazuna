@@ -2,7 +2,6 @@ import Tazuna.Smt.StepNoGap
 import Tazuna.Smt.Unroll
 import Tazuna.Smt.Timer
 import Tazuna.Smt.Pair
-import Tazuna.Smt.RespGoal
 
 /-! The layout boundary: every script builder prove and generate call, run in a checked service's layout, refuses only
 for the spec's reasons, never for a gap of the layout (`Sound`). One fact about the layout carries most of it: every
