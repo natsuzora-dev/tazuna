@@ -94,8 +94,7 @@ def verify (root dir path : String) : Cmd Unit := do
   match ← loadSpec root path with
   | none => pure ()
   | some c =>
-    let entries ← System.FilePath.readDir dir
-    let files := (entries.toList.map (·.path)).filter (·.extension == some "jsonl") |>.mergeSort
+    let files := (← System.FilePath.walkDir dir).toList.filter (·.extension == some "jsonl") |>.mergeSort
       fun a b => a.toString ≤ b.toString
     for file in files do
       let at_ := ("trace", Json.str file.toString)

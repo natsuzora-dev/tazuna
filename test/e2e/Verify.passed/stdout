@@ -1,2 +1,2 @@
-{"kind":"Verify.passed","trace":"traces/basic.jsonl"}
+{"kind":"Verify.passed","trace":"traces/nested/basic.jsonl"}
 {"kind":"Verify.passed","trace":"traces/swapped.jsonl"}

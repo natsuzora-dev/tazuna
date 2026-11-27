@@ -1,8 +1,9 @@
 import Tazuna.Semantics.GenTarget
 
 /-! The file generate writes a target's trace to: `<service>/<target words>.jsonl`, where the words read as the target's
-text (`place accepted`, `event Created`, `request mail.send`) and each name in them has every byte but an ASCII
-letter, digit, `_` or `-` percent-encoded, so a name holds no space, dot or slash. Distinct targets of distinct
+text (`place accepted`, `event Created`, `request mail.send`, `open+tasks answered`) and each name in them is
+form-encoded as HTML forms encode a URL's query: a space is `+`, and every other byte but an ASCII letter, digit, `_` or
+`-` is percent-encoded, so a name holds no space, dot or slash. Distinct targets of distinct
 services get distinct files (`targetFile_inj`), so no target's trace overwrites or removes another's. -/
 
 namespace Tazuna.Cli
@@ -17,9 +18,9 @@ def hexDigit (n : Nat) : Char := if n < 10 then Char.ofNat (48 + n) else Char.of
 
 def hexValue (c : Char) : Nat := if c.toNat < 58 then c.toNat - 48 else c.toNat - 55
 
-/-- A byte in a file name: itself where it is plain, else `%` and its two upper-case hex digits. -/
+/-- A byte in a file name: itself where it is plain, `+` for a space, else `%` and its two upper-case hex digits. -/
 def escByte (n : Nat) : List Char :=
-  if plainByte n then [Char.ofNat n] else ['%', hexDigit (n / 16), hexDigit (n % 16)]
+  if plainByte n then [Char.ofNat n] else if n = 32 then ['+'] else ['%', hexDigit (n / 16), hexDigit (n % 16)]
 
 /-- A name in a file name: each byte of its UTF-8 form escaped, so it holds no space, dot or slash. -/
 def escName (s : String) : List Char := s.toUTF8.data.toList.flatMap (escByte ·.toNat)
@@ -27,13 +28,14 @@ def escName (s : String) : List Char := s.toUTF8.data.toList.flatMap (escByte ·
 /-- The byte a file name's text starts with, and the text after it. -/
 def unescOne : List Char → Option (Nat × List Char)
   | '%' :: h :: l :: rest => some (hexValue h * 16 + hexValue l, rest)
+  | '+' :: rest => some (32, rest)
   | c :: rest => some (c.toNat, rest)
   | [] => none
 
 theorem escByte_facts : ∀ n < 256,
-    (plainByte n = true → Char.ofNat n ≠ '%' ∧ (Char.ofNat n).toNat = n ∧ Char.ofNat n ≠ ' ' ∧ Char.ofNat n ≠ '.' ∧
-      Char.ofNat n ≠ '/') ∧
-    (plainByte n = false → hexValue (hexDigit (n / 16)) * 16 + hexValue (hexDigit (n % 16)) = n ∧
+    (plainByte n = true → Char.ofNat n ≠ '%' ∧ Char.ofNat n ≠ '+' ∧ (Char.ofNat n).toNat = n ∧ Char.ofNat n ≠ ' ' ∧
+      Char.ofNat n ≠ '.' ∧ Char.ofNat n ≠ '/') ∧
+    (plainByte n = false ∧ n ≠ 32 → hexValue (hexDigit (n / 16)) * 16 + hexValue (hexDigit (n % 16)) = n ∧
       ∀ c ∈ [' ', '.', '/'], hexDigit (n / 16) ≠ c ∧ hexDigit (n % 16) ≠ c) := by
   decide +kernel
 
@@ -43,17 +45,20 @@ theorem unescOne_escByte {n : Nat} (hn : n < 256) (rest : List Char) :
   obtain ⟨hp, he⟩ := escByte_facts n hn
   unfold escByte
   cases h : plainByte n
-  · simp only [Bool.false_eq_true, ↓reduceIte, List.cons_append, List.nil_append, unescOne, (he h).1]
-  · obtain ⟨hpct, hval, -⟩ := hp h
+  · by_cases h32 : n = 32
+    · subst h32; simp [unescOne]
+    · simp only [Bool.false_eq_true, ↓reduceIte, h32, List.cons_append, List.nil_append, unescOne, (he ⟨h, h32⟩).1]
+  · obtain ⟨hpct, hplus, hval, -⟩ := hp h
     simp only [↓reduceIte, List.cons_append, List.nil_append]
     unfold unescOne
     split
     · rename_i heq; simp only [List.cons.injEq] at heq; exact absurd heq.1 hpct
+    · rename_i heq; simp only [List.cons.injEq] at heq; exact absurd heq.1 hplus
     · rename_i heq; simp only [List.cons.injEq] at heq; obtain ⟨rfl, rfl⟩ := heq; simp [hval]
     · rename_i heq; cases heq
 
 theorem escByte_ne_nil (n : Nat) : escByte n ≠ [] := by
-  unfold escByte; split <;> simp
+  unfold escByte; split <;> (try split) <;> simp
 
 /-- An escaped byte holds no space, dot or slash, the characters that part a target's file name. -/
 theorem not_mem_escByte {n : Nat} (hn : n < 256) : ∀ c ∈ [' ', '.', '/'], c ∉ escByte n := by
@@ -61,13 +66,17 @@ theorem not_mem_escByte {n : Nat} (hn : n < 256) : ∀ c ∈ [' ', '.', '/'], c 
   intro c hc
   unfold escByte
   cases h : plainByte n
-  · obtain ⟨-, hd⟩ := he h
+  · by_cases h32 : n = 32
+    · subst h32
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hc
+      rcases hc with rfl | rfl | rfl <;> decide
+    obtain ⟨-, hd⟩ := he ⟨h, h32⟩
     obtain ⟨a, b⟩ := hd c hc
-    simp only [Bool.false_eq_true, ↓reduceIte, List.mem_cons, List.not_mem_nil, or_false, not_or]
+    simp only [Bool.false_eq_true, ↓reduceIte, h32, List.mem_cons, List.not_mem_nil, or_false, not_or]
     refine ⟨?_, Ne.symm a, Ne.symm b⟩
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hc
     rcases hc with rfl | rfl | rfl <;> decide
-  · obtain ⟨-, -, a, b, d⟩ := hp h
+  · obtain ⟨-, -, -, a, b, d⟩ := hp h
     simp only [↓reduceIte, List.mem_cons, List.not_mem_nil, or_false]
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hc
     rcases hc with rfl | rfl | rfl
@@ -237,7 +246,9 @@ theorem targetFile_inj {s s' : String} {g g' : GenTarget} (h : targetFile s g = 
 -- Names that read like the words around them stay apart.
 #guard targetFile "counter" (.accepted "add") == "counter/add accepted.jsonl"
 #guard targetFile "s" (.invalid "q" none) == "s/q invalid %28a computed name%29.jsonl"
-#guard targetFile "s" (.invalid "q" (some "(a computed name)")) == "s/q invalid %28a%20computed%20name%29.jsonl"
+#guard targetFile "s" (.invalid "q" (some "(a computed name)")) == "s/q invalid %28a+computed+name%29.jsonl"
+#guard targetFile "s" (.answered "open tasks") == "s/open+tasks answered.jsonl"
+#guard targetFile "s" (.answered "a+b") == "s/a%2Bb answered.jsonl"
 #guard targetFile "s" (.accepted "event") == "s/%65vent accepted.jsonl"
 #guard targetFile "s" (.request "a.b" "c") == "s/request a%2Eb.c.jsonl"
 #guard targetFile "s" (.event (some "é")) == "s/event %C3%A9.jsonl"

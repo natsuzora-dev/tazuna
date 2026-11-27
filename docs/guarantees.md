@@ -138,7 +138,7 @@ For each target, `generate` searches runs from the initial state, one input long
 
 ## verify
 
-`verify <root> <dir>` replays each `.jsonl` trace in the directory against the spec.
+`verify <root> <dir>` replays each `.jsonl` trace in the directory and its subdirectories against the spec, so `verify <root> inputs` reads what `generate <root> inputs` wrote.
 Each `in` line runs as the spec's input.
 The `out` lines up to the next `in` line form its window, which must hold the spec's `out` lines in some order.
 The implementation names its ids and request ids its own way.
