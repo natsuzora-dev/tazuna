@@ -53,6 +53,7 @@ def Term.code (d : Nat) : Term → Option Term
     else do pure (.slt (← a.code d) (← b.code d))
   | .ite c a b => do pure (.ite (← c.code d) (← a.code d) (← b.code d))
   | .ctor e k args => if e = d ∧ k = 1 then none else (Term.codes d args).map (.ctor e k)
+  | .app f args => (Term.codes d args).map (.app f)
   | .is e k a => (a.code d).map (.is e k)
   | .sel e k j a => if e = d ∧ k = 1 then none else (a.code d).map (.sel e k j)
   | .shared h t => (t.code d).map (.shared h)
@@ -131,6 +132,7 @@ def Term.codeC (d : Nat) : Term → CodeCache → Option Term × CodeCache
     let (b, c) := b.codeC d c
     (do pure (.ite (← x) (← a) (← b)), c)
   | .ctor e k args, c => if e = d ∧ k = 1 then (none, c) else let (xs, c) := Term.codesC d args c; (xs.map (.ctor e k), c)
+  | .app f args, c => let (xs, c) := Term.codesC d args c; (xs.map (.app f), c)
 def Term.codeNameC (d : Nat) : Term → CodeCache → Option Term × CodeCache
   | .shared h t, c => let (x, c) := t.codeNameC d c; (x.map (.shared h), c)
   | .sel e k j a, c => if e = d ∧ k = 1 ∧ j = 0 then let (x, c) := a.codeC d c; (x.map (.sel d 1 0), c) else (none, c)

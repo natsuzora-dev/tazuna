@@ -26,6 +26,7 @@ inductive Name where
   | ctor (d k : Nat)
   | sel (d k j : Nat)
   | def_ (i : Nat)
+  | fn (f : Nat)
 deriving DecidableEq, Repr
 
 def Name.chars : Name → List Char
@@ -33,6 +34,7 @@ def Name.chars : Name → List Char
   | .ctor d k => 'D' :: decChars d ++ '_' :: decChars k
   | .sel d k j => 'D' :: decChars d ++ '_' :: decChars k ++ '_' :: decChars j
   | .def_ i => 's' :: decChars i
+  | .fn f => 'u' :: decChars f
 
 def Name.text (n : Name) : String := String.ofList n.chars
 
@@ -42,6 +44,9 @@ def Name.read : List Char → Option Name
     | _ => none
   | 's' :: cs => match readNat cs with
     | some (i, []) => some (.def_ i)
+    | _ => none
+  | 'u' :: cs => match readNat cs with
+    | some (f, []) => some (.fn f)
     | _ => none
   | 'D' :: cs => match readNat cs with
     | some (d, '_' :: cs) => match readNat cs with
@@ -123,6 +128,8 @@ def Term.toSExp : Term → SExp
   | .ite c a b => .list [.sym "ite", c.toSExp, a.toSExp, b.toSExp]
   | .ctor d k [] => .sym (Name.ctor d k).text
   | .ctor d k (a :: as) => .list (.sym (Name.ctor d k).text :: Term.toSExps (a :: as))
+  | .app f [] => .sym (Name.fn f).text
+  | .app f (a :: as) => .list (.sym (Name.fn f).text :: Term.toSExps (a :: as))
   | .is d k a => .list [.list [.sym "_", .sym "is", .sym (Name.ctor d k).text], a.toSExp]
   | .sel d k j a => .list [.sym (Name.sel d k j).text, a.toSExp]
   | .ref i => .sym (Name.def_ i).text
@@ -142,6 +149,7 @@ def Term.ofSExp : SExp → Option Term
     | .name (.var n) => some (.var n)
     | .name (.def_ i) => some (.ref i)
     | .name (.ctor d k) => some (.ctor d k [])
+    | .name (.fn f) => some (.app f [])
     | _ => none
   | .list [.sym f, a] => match classify f with
     | .op1 o => (Term.ofSExp a).map o.mk
@@ -150,6 +158,7 @@ def Term.ofSExp : SExp → Option Term
       | _ => none
     | .name (.sel d k j) => (Term.ofSExp a).map (.sel d k j)
     | .name (.ctor d k) => (Term.ofSExp a).map fun t => .ctor d k [t]
+    | .name (.fn f) => (Term.ofSExp a).map fun t => .app f [t]
     | _ => none
   | .list [.list [.sym u, .sym i, .sym c], a] =>
     match classify u, classify i, classify c with
@@ -158,13 +167,16 @@ def Term.ofSExp : SExp → Option Term
   | .list [.sym f, a, b] => match classify f with
     | .op2 o => do pure (o.mk (← Term.ofSExp a) (← Term.ofSExp b))
     | .name (.ctor d k) => do pure (.ctor d k [← Term.ofSExp a, ← Term.ofSExp b])
+    | .name (.fn f) => do pure (.app f [← Term.ofSExp a, ← Term.ofSExp b])
     | _ => none
   | .list [.sym f, c, a, b] => match classify f with
     | .ite => do pure (.ite (← Term.ofSExp c) (← Term.ofSExp a) (← Term.ofSExp b))
     | .name (.ctor d k) => do pure (.ctor d k [← Term.ofSExp c, ← Term.ofSExp a, ← Term.ofSExp b])
+    | .name (.fn f) => do pure (.app f [← Term.ofSExp c, ← Term.ofSExp a, ← Term.ofSExp b])
     | _ => none
   | .list (.sym f :: args) => match classify f with
     | .name (.ctor d k) => (Term.ofSExps args).map (.ctor d k)
+    | .name (.fn f) => (Term.ofSExps args).map (.app f)
     | _ => none
   | .list _ => none
 def Term.ofSExps : List SExp → Option (List Term)
@@ -208,6 +220,8 @@ theorem Name.read_chars (nm : Name) : Name.read nm.chars = some nm := by
       readNat_dec n [] (by simp)]
   | def_ i => simp only [Name.chars, Name.read]; rw [show decChars i = decChars i ++ [] from by simp,
       readNat_dec i [] (by simp)]
+  | fn f => simp only [Name.chars, Name.read]; rw [show decChars f = decChars f ++ [] from by simp,
+      readNat_dec f [] (by simp)]
   | ctor d k =>
     simp only [Name.chars, List.cons_append, Name.read]
     rw [readNat_dec d _ (by simp [underscore_not_digit])]
@@ -242,7 +256,7 @@ def Term.inDomain : Term → Bool
   | .and a b | .or a b | .eq a b | .lt a b | .le a b | .add a b | .sub a b | .mul a b | .div a b | .mod a b
   | .cat a b | .slt a b => a.inDomain && b.inDomain
   | .ite c a b => c.inDomain && a.inDomain && b.inDomain
-  | .ctor _ _ args => Term.inDomains args
+  | .ctor _ _ args | .app _ args => Term.inDomains args
 def Term.inDomains : List Term → Bool
   | [] => true
   | t :: ts => t.inDomain && Term.inDomains ts
@@ -285,6 +299,22 @@ theorem Term.ofSExp_toSExp : (t : Term) → t.inDomain = true → Term.ofSExp t.
     simp [Term.toSExp, Term.toSExps, Term.ofSExp, classify_name, Term.ofSExp_toSExp a h.1, Term.ofSExp_toSExp b h.2.1,
       Term.ofSExp_toSExp c h.2.2.1]
   | .ctor d k (a :: b :: c :: e :: rest), h => by
+    simp only [Term.inDomain] at h
+    have := Term.ofSExps_toSExps (a :: b :: c :: e :: rest) h
+    simp only [Term.toSExp, Term.toSExps] at this ⊢
+    simp [Term.ofSExp, classify_name, this]
+  | .app f [], _ => by simp [Term.toSExp, Term.ofSExp, classify_name]
+  | .app f [a], h => by
+    simp only [Term.inDomain, Term.inDomains, Bool.and_eq_true] at h
+    simp [Term.toSExp, Term.toSExps, Term.ofSExp, classify_name, Term.ofSExp_toSExp a h.1]
+  | .app f [a, b], h => by
+    simp only [Term.inDomain, Term.inDomains, Bool.and_eq_true] at h
+    simp [Term.toSExp, Term.toSExps, Term.ofSExp, classify_name, Term.ofSExp_toSExp a h.1, Term.ofSExp_toSExp b h.2.1]
+  | .app f [a, b, c], h => by
+    simp only [Term.inDomain, Term.inDomains, Bool.and_eq_true] at h
+    simp [Term.toSExp, Term.toSExps, Term.ofSExp, classify_name, Term.ofSExp_toSExp a h.1, Term.ofSExp_toSExp b h.2.1,
+      Term.ofSExp_toSExp c h.2.2.1]
+  | .app f (a :: b :: c :: e :: rest), h => by
     simp only [Term.inDomain] at h
     have := Term.ofSExps_toSExps (a :: b :: c :: e :: rest) h
     simp only [Term.toSExp, Term.toSExps] at this ⊢
@@ -367,7 +397,8 @@ theorem simpleSym_name (nm : Name) : simpleSym nm.text = true := by
     simp [simpleSym, Name.text, Name.chars, String.toList_ofList, List.all_eq_true, hu,
       show isDigit 'v' = false from by decide, show isSymChar 'v' = true from by decide,
       show isDigit 'D' = false from by decide, show isSymChar 'D' = true from by decide,
-      show isDigit 's' = false from by decide, show isSymChar 's' = true from by decide] <;>
+      show isDigit 's' = false from by decide, show isSymChar 's' = true from by decide,
+      show isDigit 'u' = false from by decide, show isSymChar 'u' = true from by decide] <;>
     first | exact ⟨hd _, hd _, hd _⟩ | exact ⟨hd _, hd _⟩ | exact hd _
 
 theorem simpleSym_fixed : simpleSym "not" ∧ simpleSym "str.len" ∧ simpleSym "and" ∧ simpleSym "or" ∧ simpleSym "=" ∧
@@ -403,6 +434,12 @@ theorem Term.toSExp_ok : (t : Term) → t.inDomain = true → t.toSExp.ok = true
       Term.toSExp_ok b h.2]
   | .ctor d k [], _ => by simp [Term.toSExp, SExp.ok, simpleSym_name]
   | .ctor d k (a :: as), h => by
+    simp only [Term.inDomain] at h
+    have := Term.toSExps_oks (a :: as) h
+    simp only [Term.toSExp, SExp.ok, SExp.oks, simpleSym_name, Bool.true_and]
+    exact this
+  | .app f [], _ => by simp [Term.toSExp, SExp.ok, simpleSym_name]
+  | .app f (a :: as), h => by
     simp only [Term.inDomain] at h
     have := Term.toSExps_oks (a :: as) h
     simp only [Term.toSExp, SExp.ok, SExp.oks, simpleSym_name, Bool.true_and]

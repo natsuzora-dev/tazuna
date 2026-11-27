@@ -70,6 +70,7 @@ def Term.extract : Term → Defs → Term × Defs
   | .ite c a b, D =>
     let (c, D) := c.extract D; let (a, D) := a.extract D; let (b, D) := b.extract D; (.ite c a b, D)
   | .ctor d k args, D => let (args, D) := Term.extracts args D; (.ctor d k args, D)
+  | .app f args, D => let (args, D) := Term.extracts args D; (.app f args, D)
   | t@(.var _), D | t@(.int _), D | t@(.str _), D | t@(.bool _), D | t@(.ref _), D => (t, D)
 def Term.extracts : List Term → Defs → List Term × Defs
   | [], D => ([], D)
@@ -181,6 +182,9 @@ theorem Term.extract_ok : (t : Term) → (D : Defs) → D.Wf → ExtractOk t D (
   | .ctor d k args, D, hw => by
     have h := Term.extracts_ok args D hw
     exact ⟨h.1, h.2.1, fun M hM => by simp [Term.extract, Term.denote, h.2.2 M hM]⟩
+  | .app f args, D, hw => by
+    have h := Term.extracts_ok args D hw
+    exact ⟨h.1, h.2.1, fun M hM => by simp [Term.extract, Term.denote, h.2.2 M hM]⟩
   | .var _, D, hw | .int _, D, hw | .str _, D, hw | .bool _, D, hw | .ref _, D, hw =>
     ⟨hw, Defs.le_refl D, fun _ _ => rfl⟩
 theorem Term.extracts_ok : (ts : List Term) → (D : Defs) → D.Wf → ExtractsOk ts D (Term.extracts ts D)
@@ -219,7 +223,7 @@ def Term.refFree : Term → Bool
   | .and a b | .or a b | .eq a b | .lt a b | .le a b | .add a b | .sub a b | .mul a b | .div a b | .mod a b
   | .cat a b | .slt a b => a.refFree && b.refFree
   | .ite c a b => c.refFree && a.refFree && b.refFree
-  | .ctor _ _ args => Term.refFrees args
+  | .ctor _ _ args | .app _ args => Term.refFrees args
   | .var _ | .int _ | .str _ | .bool _ => true
 def Term.refFrees : List Term → Bool
   | [] => true
@@ -241,7 +245,7 @@ theorem Term.denote_defs (M : Model) (f : Nat → Val) : (t : Term) → t.refFre
   | .ite c a b, h => by
     simp only [Term.refFree, Bool.and_eq_true] at h
     simp [Term.denote, Term.denote_defs M f c h.1.1, Term.denote_defs M f a h.1.2, Term.denote_defs M f b h.2]
-  | .ctor _ _ args, h => by
+  | .ctor _ _ args, h | .app _ args, h => by
     simp only [Term.refFree] at h; simp [Term.denote, Term.denotes_defs M f args h]
   | .var _, _ | .int _, _ | .str _, _ | .bool _, _ => rfl
 theorem Term.denotes_defs (M : Model) (f : Nat → Val) : (ts : List Term) → Term.refFrees ts = true →
@@ -280,7 +284,7 @@ theorem Term.extract_refFree : (t : Term) → (D : Defs) → t.refFree = true �
   | .ite c a b, D, ht, hD => by
     simp only [Term.refFree, Bool.and_eq_true] at ht
     exact Term.extract_refFree b _ ht.2 (Term.extract_refFree a _ ht.1.2 (Term.extract_refFree c D ht.1.1 hD))
-  | .ctor _ _ args, D, ht, hD => by
+  | .ctor _ _ args, D, ht, hD | .app _ args, D, ht, hD => by
     simp only [Term.refFree] at ht; exact Term.extracts_refFree args D ht hD
   | .var _, _, _, hD | .int _, _, _, hD | .str _, _, _, hD | .bool _, _, _, hD => hD
   | .ref _, _, ht, _ => by simp [Term.refFree] at ht

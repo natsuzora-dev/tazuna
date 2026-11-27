@@ -79,7 +79,7 @@ set_option linter.tazuna.silentDefault false in
 their fields' sorts (`layoutSel_coverModel`). -/
 noncomputable def coverModel (L : Layout) (ws : List Val) : Model :=
   { vars := fun n => ws.getD n (.bool false), divZero := fun _ => 0, modZero := fun _ => 0,
-    selOther := fun d k j _ => layoutField L d k j, defs := fun _ => .bool false }
+    selOther := fun d k j _ => layoutField L d k j, defs := fun _ => .bool false, funs := fun _ _ => 0 }
 
 theorem layoutSel_coverModel (L : Layout) (ws : List Val) : LayoutSel L (coverModel L ws) := by
   intro dts hd e k j s v hf hinh

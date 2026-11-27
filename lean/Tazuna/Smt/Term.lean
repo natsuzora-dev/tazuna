@@ -61,6 +61,9 @@ inductive Term where
   | shared (h : UInt64) (t : Term)
   /-- The definition `s<i>` a script makes of a shared term. -/
   | ref (i : Nat)
+  /-- `(u<f> args)`: a function from Ints to an Int that the script declares and leaves to the model, an
+  uninterpreted function. -/
+  | app (f : Nat) (args : List Term)
 deriving Repr, Inhabited
 
 mutual
@@ -76,6 +79,7 @@ def Term.beq : Term → Term → Bool
   | .cat a b, .cat c d | .slt a b, .slt c d => a.beq c && b.beq d
   | .ite a b c, .ite a' b' c' => a.beq a' && b.beq b' && c.beq c'
   | .ctor d k as, .ctor d' k' bs => d == d' && k == k' && Term.beqs as bs
+  | .app f as, .app f' bs => f == f' && Term.beqs as bs
   | .is d k a, .is d' k' b => d == d' && k == k' && a.beq b
   | .sel d k j a, .sel d' k' j' b => d == d' && k == k' && j == j' && a.beq b
   | .shared h a, .shared h' b => h == h' && a.beq b
@@ -93,7 +97,7 @@ theorem Term.beq_refl : (t : Term) → t.beq t = true
   | .and a b | .or a b | .eq a b | .lt a b | .le a b | .add a b | .sub a b | .mul a b | .div a b | .mod a b
   | .cat a b | .slt a b => by simp [Term.beq, Term.beq_refl a, Term.beq_refl b]
   | .ite a b c => by simp [Term.beq, Term.beq_refl a, Term.beq_refl b, Term.beq_refl c]
-  | .ctor _ _ as => by simp [Term.beq, Term.beqs_refl as]
+  | .ctor _ _ as | .app _ as => by simp [Term.beq, Term.beqs_refl as]
   | .is _ _ a | .sel _ _ _ a | .shared _ a => by simp [Term.beq, Term.beq_refl a]
 theorem Term.beqs_refl : (ts : List Term) → Term.beqs ts ts = true
   | [] => rfl
@@ -120,6 +124,9 @@ theorem Term.eq_of_beq : (a b : Term) → a.beq b = true → a = b
   | .ctor d k as, e, h => by
     cases e <;> try (simp [Term.beq] at h; done)
     simp only [Term.beq, Bool.and_eq_true, beq_iff_eq] at h; rw [h.1.1, h.1.2, Term.eq_of_beqs as _ h.2]
+  | .app f as, e, h => by
+    cases e <;> try (simp [Term.beq] at h; done)
+    simp only [Term.beq, Bool.and_eq_true, beq_iff_eq] at h; rw [h.1, Term.eq_of_beqs as _ h.2]
   | .is d k a, e, h => by
     cases e <;> try (simp [Term.beq] at h; done)
     simp only [Term.beq, Bool.and_eq_true, beq_iff_eq] at h; rw [h.1.1, h.1.2, Term.eq_of_beq a _ h.2]
@@ -162,6 +169,7 @@ def Term.beqS : (a b : Term) → {r : Bool // r = a.beq b}
     by simp [Term.beq, (Term.beqS a a').2, (Term.beqS b b').2, (Term.beqS c c').2]⟩
   | .ctor d k as, .ctor d' k' bs => ⟨d == d' && k == k' && (Term.beqsS as bs).1,
     by simp [Term.beq, (Term.beqsS as bs).2]⟩
+  | .app f as, .app f' bs => ⟨f == f' && (Term.beqsS as bs).1, by simp [Term.beq, (Term.beqsS as bs).2]⟩
   | .is d k a, .is d' k' b => ⟨d == d' && k == k' && (Term.beqS a b).1, by simp [Term.beq, (Term.beqS a b).2]⟩
   | .sel d k j a, .sel d' k' j' b => ⟨d == d' && k == k' && j == j' && (Term.beqS a b).1,
     by simp [Term.beq, (Term.beqS a b).2]⟩
@@ -211,6 +219,7 @@ def Term.hash0 : Term → UInt64
   | .sel d k j a => mixHash 21 (mixHash (hash (d, k, j)) a.hash0)
   | .shared h _ => h
   | .ref i => mixHash 22 (hash i)
+  | .app f args => mixHash 24 (mixHash (hash f) (Term.hash0s args))
 def Term.hash0s : List Term → UInt64
   | [] => 23
   | t :: ts => mixHash t.hash0 (Term.hash0s ts)
@@ -268,6 +277,8 @@ structure Model where
   selOther : Nat → Nat → Nat → Val → Val
   /-- The value of each definition `s<i>`; a model of a script gives each the value of its body. -/
   defs : Nat → Val
+  /-- Each function `u<f>` the script declares, from Ints to an Int. -/
+  funs : Nat → List Int → Int
 
 mutual
 /-- The value is one of the sort `s` in a script declaring the datatypes `dts`: an Int, a Bool, a string of SMT-LIB's
@@ -330,6 +341,7 @@ def Term.denote (M : Model) : Term → Val
     | v => M.selOther d k j v
   | .shared _ t => t.denote M
   | .ref i => M.defs i
+  | .app f args => .int (M.funs f ((Term.denotes M args).map Val.toInt))
 def Term.denotes (M : Model) : List Term → List Val
   | [] => []
   | t :: ts => t.denote M :: Term.denotes M ts
@@ -398,6 +410,7 @@ def Term.evalC (M : Model) : Term → EvalCache → Val × EvalCache
   | .slt a b, c => let (x, c) := a.evalC M c; let (y, c) := b.evalC M c; (.bool (decide (x.toStr < y.toStr)), c)
   | .ite a b e, c => let (x, c) := a.evalC M c; if x.toBool then b.evalC M c else e.evalC M c
   | .ctor d k args, c => let (xs, c) := Term.evalsC M args c; (.ctor d k xs, c)
+  | .app f args, c => let (xs, c) := Term.evalsC M args c; (.int (M.funs f (xs.map Val.toInt)), c)
 def Term.evalsC (M : Model) : List Term → EvalCache → List Val × EvalCache
   | [], c => ([], c)
   | t :: ts, c => let (x, c) := t.evalC M c; let (xs, c) := Term.evalsC M ts c; (x :: xs, c)
@@ -464,6 +477,10 @@ theorem Term.evalC_ok (M : Model) : (t : Term) → (c : EvalCache) → c.Ok M �
     · exact Term.evalC_ok M b _ ha.2
     · exact Term.evalC_ok M e _ ha.2
   | .ctor d k args, c, hc => by
+    have h := Term.evalsC_ok M args c hc
+    simp only [Term.evalC, Term.denote, h.1]
+    exact ⟨by first | rfl | trivial, h.2⟩
+  | .app f args, c, hc => by
     have h := Term.evalsC_ok M args c hc
     simp only [Term.evalC, Term.denote, h.1]
     exact ⟨by first | rfl | trivial, h.2⟩

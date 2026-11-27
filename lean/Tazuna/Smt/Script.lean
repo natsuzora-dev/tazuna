@@ -28,6 +28,7 @@ def Term.srt? (dts : List Datatype) (vars : List Srt) (defs : Array Srt) : Term 
   | .bool _ | .not _ | .and .. | .or .. | .eq .. | .lt .. | .le .. | .slt .. | .is .. => some .bool
   | .ite _ a _ | .shared _ a => a.srt? dts vars defs
   | .ctor d _ _ => some (.dt d)
+  | .app .. => some .int
   | .sel d k j _ => do (← (← (← dts[d]?).ctors[k]?)[j]?)
 
 structure Script where
@@ -35,6 +36,8 @@ structure Script where
   datatypes : List Datatype := []
   /-- The sort of each variable `v<n>`, by `n`. -/
   vars : List Srt := []
+  /-- The number of arguments of each function `u<f>`, by `f`; each takes Ints and gives an Int. -/
+  funs : List Nat := []
   asserts : List Term := []
   /-- The variables whose values a sat answer reports. -/
   shows : List Nat := []
@@ -67,6 +70,7 @@ def linesText (ls : List String) : String := String.join (ls.map (· ++ "\n"))
 def Script.parts (s : Script) (header : List String) (asserts : List Term) (defs : List (Term × Srt)) : TextParts :=
   { head := linesText (header ++ ["(set-option :produce-models true)", "(set-logic ALL)"] ++
       s.datatypes.zipIdx.map (fun (d, i) => d.text i) ++
+      s.funs.zipIdx.map (fun (n, f) => s!"(declare-fun {(Name.fn f).text} ({" ".intercalate (List.replicate n "Int")}) Int)") ++
       s.vars.zipIdx.map (fun (srt, n) => s!"(declare-const {(Name.var n).text} {srt.text})") ++
       defs.zipIdx.map (fun ((b, srt), i) => defineLine i b srt))
     body := linesText (asserts.map (fun t => s!"(assert {t.print})"))

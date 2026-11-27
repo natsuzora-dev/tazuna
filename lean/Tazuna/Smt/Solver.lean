@@ -67,7 +67,7 @@ set_option linter.tazuna.silentDefault false in
 /-- The values the solver gave, as a model. -/
 def modelOf (vs : List (Nat × Val)) : Model :=
   { vars := fun n => (vs.lookup n).getD default, divZero := fun _ => 0, modZero := fun _ => 0,
-    selOther := fun _ _ _ _ => default, defs := fun _ => default }
+    selOther := fun _ _ _ _ => default, defs := fun _ => default, funs := fun _ _ => 0 }
 
 /-- Why a script has no text: a shared term without a sort. The encoder builds only sorted terms, but no theorem
 states it, so where it happens it is an engine bug, never a spec's undecided line. -/

@@ -107,6 +107,10 @@ theorem Term.codeC_ok (d : Nat) : (t : Term) → (c : CodeCache) → c.Ok d →
     split
     · exact ⟨rfl, hc⟩
     · simp only [ih.1]; exact ⟨by first | rfl | trivial, ih.2⟩
+  | .app f args, c, hc => by
+    have ih := Term.codesC_ok d args c hc
+    simp only [Term.codeC, Term.code, ih.1]
+    exact ⟨by first | rfl | trivial, ih.2⟩
 theorem Term.codeNameC_ok (d : Nat) : (t : Term) → (c : CodeCache) → c.Ok d →
     (t.codeNameC d c).1 = t.codeName d ∧ (t.codeNameC d c).2.Ok d
   | .shared h t, c, hc => by
@@ -122,7 +126,7 @@ theorem Term.codeNameC_ok (d : Nat) : (t : Term) → (c : CodeCache) → c.Ok d 
   | .var _, c, hc | .int _, c, hc | .str _, c, hc | .bool _, c, hc | .ref _, c, hc | .not _, c, hc | .len _, c, hc
   | .is .., c, hc | .and .., c, hc | .or .., c, hc | .lt .., c, hc | .le .., c, hc | .add .., c, hc | .sub .., c, hc
   | .mul .., c, hc | .div .., c, hc | .mod .., c, hc | .cat .., c, hc | .eq .., c, hc | .slt .., c, hc
-  | .ite .., c, hc | .ctor .., c, hc => ⟨rfl, hc⟩
+  | .ite .., c, hc | .ctor .., c, hc | .app .., c, hc => ⟨rfl, hc⟩
 theorem Term.codesC_ok (d : Nat) : (ts : List Term) → (c : CodeCache) → c.Ok d →
     (Term.codesC d ts c).1 = Term.codes d ts ∧ (Term.codesC d ts c).2.Ok d
   | [], c, hc => ⟨rfl, hc⟩
@@ -315,6 +319,10 @@ theorem codeN_toInt {v : Val} (h : v.toStr ∈ S) : (codeN d S v).toInt = rank S
   | str s => simp only [Val.toStr] at h; simp [codeN, h, Val.toInt, Val.toStr]
   | _ => simp [codeN, Val.toInt, Val.toStr, rank_empty]
 
+theorem codeVs_map_toInt : (vs : List Val) → (codeVs d S vs).map Val.toInt = vs.map Val.toInt
+  | [] => rfl
+  | v :: vs => by simp only [codeVs, List.map_cons, codeV_toInt, codeVs_map_toInt vs]
+
 -- `Term.denote`'s default for a missing field.
 set_option linter.tazuna.silentDefault false in
 theorem codeVs_getD : (vs : List Val) → (j : Nat) →
@@ -336,7 +344,7 @@ def Term.nameStrs (d : Nat) (M : Model) : Term → List String
   | .and a b | .or a b | .eq a b | .lt a b | .le a b | .add a b | .sub a b | .mul a b | .div a b | .mod a b
   | .cat a b | .slt a b => a.nameStrs d M ++ b.nameStrs d M
   | .ite c a b => c.nameStrs d M ++ a.nameStrs d M ++ b.nameStrs d M
-  | .ctor _ _ args => Term.nameStrss d M args
+  | .ctor _ _ args | .app _ args => Term.nameStrss d M args
   | .var _ | .int _ | .str _ | .bool _ | .ref _ => []
 def Term.nameStrss (d : Nat) (M : Model) : List Term → List String
   | [] => []
@@ -375,6 +383,7 @@ noncomputable def codedModel (M : Model) : Model where
   selOther e k j v := if e = d ∧ k = 1 ∧ j = 0 then codeN d S (M.selOther e k j (uncodeV d S v))
     else codeV d S (M.selOther e k j (uncodeV d S v))
   defs i := codeV d S (M.defs i)
+  funs := M.funs
 
 end
 
@@ -549,6 +558,10 @@ theorem code_denote : (t t' : Term) → t.code d = some t' → (∀ s ∈ t.name
       obtain ⟨args', ha, rfl⟩ := h
       simp only [Term.denote, codes_denote args args' ha (by simpa [Term.nameStrs] using hs)]
       simp [codeV, hek]
+  | .app f args, t', h, hs => by
+    simp only [Term.code, Option.map_eq_some_iff] at h
+    obtain ⟨args', ha, rfl⟩ := h
+    simp only [Term.denote, codes_denote args args' ha (by simpa [Term.nameStrs] using hs), codeVs_map_toInt]; rfl
 theorem codeName_denote : (t t' : Term) → t.codeName d = some t' → (∀ s ∈ t.nameStrs d M, s ∈ S) →
     t'.denote (codedModel d S M) = codeN d S (t.denote M)
   | .shared _ a, t', h, hs => by
@@ -571,7 +584,7 @@ theorem codeName_denote : (t t' : Term) → t.codeName d = some t' → (∀ s �
   | .var _, _, h, _ | .int _, _, h, _ | .str _, _, h, _ | .bool _, _, h, _ | .ref _, _, h, _ | .not _, _, h, _
   | .len _, _, h, _ | .is .., _, h, _ | .and .., _, h, _ | .or .., _, h, _ | .lt .., _, h, _ | .le .., _, h, _
   | .add .., _, h, _ | .sub .., _, h, _ | .mul .., _, h, _ | .div .., _, h, _ | .mod .., _, h, _ | .cat .., _, h, _
-  | .eq .., _, h, _ | .slt .., _, h, _ | .ite .., _, h, _ | .ctor .., _, h, _ => by cases h
+  | .eq .., _, h, _ | .slt .., _, h, _ | .ite .., _, h, _ | .ctor .., _, h, _ | .app .., _, h, _ => by cases h
 theorem codes_denote : (ts ts' : List Term) → Term.codes d ts = some ts' → (∀ s ∈ Term.nameStrss d M ts, s ∈ S) →
     Term.denotes (codedModel d S M) ts' = codeVs d S (Term.denotes M ts)
   | [], ts', h, _ => by cases h; rfl
