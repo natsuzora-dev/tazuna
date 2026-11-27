@@ -297,7 +297,7 @@ def searchDepths {α : Type} (what : String) (ds : Array (Task (Option (Depth s.
       | .ok g => pure g
     let U := B.withGoal g
     if refused.isNone then refused := kinds.head?
-    let some answer ← solver.askGoal cache s.L.ids pre g | return fail s!"depth {d}: {noSort}"
+    let some answer ← solver.askGoal cache s.L.ids pre g | return fail s!"depth {d}: {noText}"
     match answer with
     | .unsat => pure ()
     | .unknown why => return .ok (.undecided (.undecided .unknown) [("depth", Lean.toJson d), ("why", Json.str why)])

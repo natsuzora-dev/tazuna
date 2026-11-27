@@ -111,12 +111,13 @@ elab "#check_tazuna_reach" : command => do
     -- SMT-LIB text: printing then parsing gives the values back (and the terms, which values rest on), and shared
     -- definitions keep the meaning.
     ``Tazuna.Smt.Val.parse_print, ``Tazuna.Smt.shared_agrees,
-    ``Tazuna.Smt.shared_conservative,
     -- The compiled printer appends to a string in place; it is the printer the theorems above are about.
     ``Tazuna.Smt.SExp.print_eq_printFast,
-    -- Compiled code evaluates a term with each shared term once, and compares terms stopping at shared terms that are
-    -- one object; they are the evaluation and equality the theorems are about.
-    ``Tazuna.Smt.Term.denote_eq_denoteFast, ``Tazuna.Smt.Term.beq_eq_beqFast,
+    -- Compiled code evaluates a term and checks assertions for references with each shared term once, and compares
+    -- terms stopping at shared terms that are one object; they are the evaluation, check and equality the theorems
+    -- are about.
+    ``Tazuna.Smt.Term.denote_eq_denoteFast, ``Tazuna.Smt.Term.refFrees_eq_refFreesFast,
+    ``Tazuna.Smt.Term.beq_eq_beqFast,
     -- Compiled code extends a script's shared definitions in place; it is the extension the sharing theorems are about.
     ``Tazuna.Smt.Defs.add_eq_addFast,
     -- The service's layout, derived from its program: every create fits its table's slots. (The commands read every

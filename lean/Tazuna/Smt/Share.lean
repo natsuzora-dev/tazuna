@@ -230,6 +230,122 @@ def Term.refFrees : List Term → Bool
   | t :: ts => t.refFree && Term.refFrees ts
 end
 
+/-! Checking with sharing. `Term.refFree` follows the tree, so it costs what `Term.denote` does; `Term.refFreeC`
+checks each shared term once, kept by the stored hash and confirmed by `Term.same`, as `Term.evalC` does. -/
+
+/-- Shared terms found free of references, by hash. -/
+abbrev RefCache := Std.HashMap UInt64 (List Term)
+
+def RefCache.Ok (c : RefCache) : Prop :=
+  ∀ (h : UInt64) (l : List Term), c[h]? = some l → ∀ t ∈ l, t.refFree = true
+
+-- A hash with no bucket has no terms.
+set_option linter.tazuna.silentDefault false in
+mutual
+/-- Whether no definition is referred to, as `Term.refFree` says, with each shared term checked once. -/
+def Term.refFreeC : Term → RefCache → Bool × RefCache
+  | .shared h t, c =>
+    if (c.getD h []).any (·.same t) then (true, c)
+    else let (b, c) := t.refFreeC c; (b, if b then c.insert h (t :: c.getD h []) else c)
+  | .ref _, c => (false, c)
+  | .not a, c | .len a, c | .is _ _ a, c | .sel _ _ _ a, c => a.refFreeC c
+  | .and a b, c | .or a b, c | .eq a b, c | .lt a b, c | .le a b, c | .add a b, c | .sub a b, c | .mul a b, c
+  | .div a b, c | .mod a b, c | .cat a b, c | .slt a b, c =>
+    let (x, c) := a.refFreeC c; if x then b.refFreeC c else (false, c)
+  | .ite p a b, c =>
+    let (x, c) := p.refFreeC c
+    if x then (let (y, c) := a.refFreeC c; if y then b.refFreeC c else (false, c)) else (false, c)
+  | .ctor _ _ args, c | .app _ args, c => Term.refFreesC args c
+  | .var _, c | .int _, c | .str _, c | .bool _, c => (true, c)
+def Term.refFreesC : List Term → RefCache → Bool × RefCache
+  | [], c => (true, c)
+  | t :: ts, c => let (x, c) := t.refFreeC c; if x then Term.refFreesC ts c else (false, c)
+end
+
+-- A hash with no bucket has no terms.
+set_option linter.tazuna.silentDefault false in
+theorem RefCache.ok_insert {c : RefCache} (hc : c.Ok) (h : UInt64) {t : Term} (ht : t.refFree = true) :
+    RefCache.Ok (c.insert h (t :: c.getD h [])) := by
+  intro h' l hl u hu
+  by_cases hh : h = h'
+  · subst hh
+    simp only [Std.HashMap.getElem?_insert_self, Option.some.injEq] at hl
+    subst hl
+    rcases List.mem_cons.1 hu with rfl | hu
+    · exact ht
+    · rw [Std.HashMap.getD_eq_getD_getElem?] at hu
+      cases hg : c[h]? with
+      | none => simp [hg] at hu
+      | some l => simp only [hg, Option.getD_some] at hu; exact hc h l hg u hu
+  · simp only [Std.HashMap.getElem?_insert, beq_iff_eq, hh, ite_false] at hl
+    exact hc h' l hl u hu
+
+-- A hash with no bucket has no terms.
+set_option linter.tazuna.silentDefault false in
+theorem RefCache.refFree_of_any {c : RefCache} (hc : c.Ok) {h : UInt64} {t : Term}
+    (ha : (c.getD h []).any (·.same t) = true) : t.refFree = true := by
+  obtain ⟨u, hu, hs⟩ := List.any_eq_true.1 ha
+  rw [Std.HashMap.getD_eq_getD_getElem?] at hu
+  cases hg : c[h]? with
+  | none => simp [hg] at hu
+  | some l => simp only [hg, Option.getD_some] at hu; rw [← Term.eq_of_same hs]; exact hc h l hg u hu
+
+mutual
+theorem Term.refFreeC_ok : (t : Term) → (c : RefCache) → c.Ok →
+    (t.refFreeC c).1 = t.refFree ∧ (t.refFreeC c).2.Ok
+  | .shared h t, c, hc => by
+    unfold Term.refFreeC
+    split
+    · rename_i ha; exact ⟨by simp [Term.refFree, RefCache.refFree_of_any hc ha], hc⟩
+    · have ih := Term.refFreeC_ok t c hc
+      refine ⟨by simp [Term.refFree, ih.1], ?_⟩
+      simp only
+      split
+      · rename_i hb; exact RefCache.ok_insert ih.2 h (ih.1 ▸ hb)
+      · exact ih.2
+  | .ref _, c, hc => ⟨rfl, hc⟩
+  | .not a, c, hc | .len a, c, hc | .is _ _ a, c, hc | .sel _ _ _ a, c, hc => by
+    simpa [Term.refFreeC, Term.refFree] using Term.refFreeC_ok a c hc
+  | .and a b, c, hc | .or a b, c, hc | .eq a b, c, hc | .lt a b, c, hc | .le a b, c, hc | .add a b, c, hc
+  | .sub a b, c, hc | .mul a b, c, hc | .div a b, c, hc | .mod a b, c, hc | .cat a b, c, hc
+  | .slt a b, c, hc => by
+    have ha := Term.refFreeC_ok a c hc
+    simp only [Term.refFreeC, Term.refFree]
+    split
+    · rename_i hx; have hb := Term.refFreeC_ok b _ ha.2; simp [hb.1, ← ha.1, hx, hb.2]
+    · rename_i hx; simp [← ha.1, hx, ha.2]
+  | .ite p a b, c, hc => by
+    have hp := Term.refFreeC_ok p c hc
+    simp only [Term.refFreeC, Term.refFree]
+    split
+    · rename_i hx
+      have ha := Term.refFreeC_ok a _ hp.2
+      split
+      · rename_i hy; have hb := Term.refFreeC_ok b _ ha.2; simp [hb.1, ← ha.1, ← hp.1, hx, hy, hb.2]
+      · rename_i hy; simp [← ha.1, ← hp.1, hx, hy, ha.2]
+    · rename_i hx; simp [← hp.1, hx, hp.2]
+  | .ctor _ _ args, c, hc | .app _ args, c, hc => by
+    simpa [Term.refFreeC, Term.refFree] using Term.refFreesC_ok args c hc
+  | .var _, c, hc | .int _, c, hc | .str _, c, hc | .bool _, c, hc => ⟨rfl, hc⟩
+theorem Term.refFreesC_ok : (ts : List Term) → (c : RefCache) → c.Ok →
+    (Term.refFreesC ts c).1 = Term.refFrees ts ∧ (Term.refFreesC ts c).2.Ok
+  | [], c, hc => ⟨rfl, hc⟩
+  | t :: ts, c, hc => by
+    have ht := Term.refFreeC_ok t c hc
+    simp only [Term.refFreesC, Term.refFrees]
+    split
+    · rename_i hx; have hs := Term.refFreesC_ok ts _ ht.2; simp [hs.1, ← ht.1, hx, hs.2]
+    · rename_i hx; simp [← ht.1, hx, ht.2]
+end
+
+def Term.refFreesFast (ts : List Term) : Bool := (Term.refFreesC ts {}).1
+
+/-- Compiled code checks assertions with sharing: an unrolled run's states cost their size as definitions, not as
+trees. The theorems are about `Term.refFrees`, which this makes the code compute. -/
+@[csimp] theorem Term.refFrees_eq_refFreesFast : @Term.refFrees = @Term.refFreesFast := by
+  funext ts
+  exact (Term.refFreesC_ok ts {} (fun h l hl => by simp at hl)).1.symm
+
 mutual
 theorem Term.denote_defs (M : Model) (f : Nat → Val) : (t : Term) → t.refFree = true →
     t.denote { M with defs := f } = t.denote M

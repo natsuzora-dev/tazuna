@@ -69,10 +69,24 @@ def AbsSorted (L : Layout) (q : TypedScript) (M : Model) : Prop :=
     (∀ n σ, (q.sent L).vars[n]? = some σ → n < q.tys.length → M.vars n = scodeV (q.sent L).datatypes c σ (M₀.vars n)) ∧
     ∀ n, (q.sent L).vars.length ≤ n → ∃ i, M.vars n = .int i
 
-/-- No model of the script satisfying `P` that is an SMT-LIB structure for the script's declarations (`WellSorted`)
-satisfies every assertion. -/
+/-- No assertion holds a reference, which the engine checks before it sends the script (`Script.shared`), and no
+model of the script satisfying `P` that is an SMT-LIB structure for the script's declarations (`WellSorted`) and gives
+each shared definition its body's value, as `define-fun` does (`Defs.Sat`), satisfies every assertion. -/
 def NoModel (s : Script) (P : Model → Prop) : Prop :=
-  ∀ M : Model, P M → WellSorted s.datatypes s.vars M → ∃ a ∈ s.asserts, ¬ Holds M a
+  Term.refFrees s.asserts = true ∧ ∀ M : Model, P M → WellSorted s.datatypes s.vars M →
+    (Term.extracts s.asserts {}).2.Sat M → ∃ a ∈ s.asserts, ¬ Holds M a
+
+theorem Term.refFree_of_mem : {ts : List Term} → Term.refFrees ts = true → ∀ {t}, t ∈ ts → t.refFree = true
+  | _ :: _, h, _, .head _ => by simp only [Term.refFrees, Bool.and_eq_true] at h; exact h.1
+  | _ :: _, h, _, .tail _ ht => by simp only [Term.refFrees, Bool.and_eq_true] at h; exact Term.refFree_of_mem h.2 ht
+
+/-- A script with no model whatever its definitions: its assertions read none (`refFree`), and every model has a
+variant that differs only in the definitions and satisfies them (`shared_conservative`). -/
+theorem NoModel.none {s : Script} {P : Model → Prop} (h : NoModel s P) (M : Model)
+    (hP : ∀ f, P { M with defs := f }) (hS : WellSorted s.datatypes s.vars M) : ∃ a ∈ s.asserts, ¬ Holds M a := by
+  obtain ⟨f, hf⟩ := shared_conservative s.asserts h.1 M
+  obtain ⟨a, ha, hna⟩ := h.2 _ (hP f) hS hf
+  exact ⟨a, ha, fun hh => hna (by simpa [Holds, Term.denote_defs M f a (Term.refFree_of_mem h.1 ha)] using hh)⟩
 
 /-- The solver found no model of a script it read for the question: of what it reads (`TypedScript.sent`), no model
 whose variables hold values of the sorts of the question's types (`SentSorted`); or of the abstract variant it reads
@@ -85,8 +99,8 @@ more than an unsat answer, because each value a model holds is one an SMT-LIB st
 - `divZero`, `modZero`, `funs`: Ints of Ints by their types, as SMT-LIB leaves division by 0 and the declared
   functions `u0` and `u1`.
 - strings: code points of SMT-LIB's domain only, and no surrogate, so the models are fewer, never more.
-- `defs`: free, where a `define-fun` fixes it. It matters only to an assertion holding a reference; name coding and
-  the abstract variant refuse references, and no encoder builds one, though no theorem says so.
+- `defs`: each shared definition holds its body's value, as its `define-fun` fixes it (`Defs.Sat`). The engine sends
+  no script whose assertions hold a reference (`refFree`), so they read no definition (`NoModel.none`).
 On such values `Term.denote` is the standard's meaning: Ints are unbounded, `div` and `mod` are Euclidean (Lean's `/`
 and `%` on `Int`), `str.len` counts code points and `str.<` orders them lexicographically. Without `WellSorted` the
 models would be more: a free slot's item could be a Bool at an Int field, which makes `(not (= x 0))` and
@@ -167,10 +181,10 @@ theorem Unsat.noModel {L : Layout} {q : TypedScript} (h : Unsat L q) (M : Model)
   have hall : ∀ a ∈ q.script.asserts, Holds M a := fun a ha => Classical.byContradiction fun hna => hno ⟨a, ha, hna⟩
   obtain ⟨M₁, hs₁, hS₁, hall₁⟩ := sent_model M hM hS hall
   rcases h.answered with hn | ⟨s, hs, hn⟩
-  · obtain ⟨a, ha, hna⟩ := hn M₁ hs₁ hS₁
+  · obtain ⟨a, ha, hna⟩ := hn.none M₁ (fun _ => hs₁) hS₁
     exact hna (hall₁ a ha)
   · obtain ⟨M₂, c, hv, hi, hS₂, hall₂⟩ := abs_model hs M₁ hall₁ hS₁
-    obtain ⟨a, ha, hna⟩ := hn M₂ ⟨M₁, c, hs₁, fun n σ hn _ => hv n σ hn, hi⟩ hS₂
+    obtain ⟨a, ha, hna⟩ := hn.none M₂ (fun _ => ⟨M₁, c, hs₁, fun n σ hn _ => hv n σ hn, hi⟩) hS₂
     exact hna (hall₂ a ha)
 
 /-- An unsat question has no model whose variables hold values of the types it was built with that is an SMT-LIB

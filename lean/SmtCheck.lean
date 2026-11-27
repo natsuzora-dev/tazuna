@@ -3449,6 +3449,21 @@ def reshareCheck (depth : Nat) : IO Bool := do
     IO.println s!"smt-check: re-shared chain: {task.get} definitions, want {depth}"; return false
   return true
 
+/-- A script whose assertion holds a reference is never sent: the shared term `x or not x` prints as `s0`, and an
+assertion reading `s0` itself would leave Lean's model free where the solver's `define-fun` fixes it, so asking it
+is an engine bug (`noText`), while the same script without that assertion gets an answer. -/
+def refCheck (solver : Solver) : IO Bool := do
+  let shared := (Term.or (.var 0) (.not (.var 0))).share
+  let base : Script := { vars := [.bool], asserts := [shared] }
+  let dir := (← IO.FS.createTempDir) / "cache"
+  let ok ← match ← solver.runCached dir none { base with asserts := base.asserts ++ [.not (.ref 0)] } with
+    | .error m => pure (m == noText)
+    | .ok a => IO.println s!"smt-check: an assertion holding a reference was asked: {repr a}"; pure false
+  match ← solver.runCached dir none base with
+  | .ok (.sat _) => pure ok
+  | .ok a => IO.println s!"smt-check: the script without the reference: {repr a}"; pure false
+  | .error m => IO.println s!"smt-check: the script without the reference: {m}"; pure false
+
 /-! prove's questions (`questions`, `question_sound`): on the event service with the machine `calm`, each target's
 question is sat, and the step from the state and input the model decodes to reaches its end in a state that breaks the
 target's rule (`Step.settled`). On the cascade service `c`, whose reaction queues an own `put (ev + 10)` that accepts
@@ -4043,6 +4058,7 @@ def check (z3 : String) : IO Bool := do
   unless ← twiceCheck solver do ok := false
   unless ← answerMCheck solver do ok := false
   unless ← reshareCheck 40 do ok := false
+  unless ← refCheck solver do ok := false
   unless ← mixCheck solver do ok := false
   unless ← internalCheck solver do ok := false
   unless ← ownQueryCheck solver do ok := false

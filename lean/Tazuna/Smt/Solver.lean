@@ -70,13 +70,16 @@ def modelOf (vs : List (Nat × Val)) : Model :=
   { vars := fun n => (vs.lookup n).getD default, divZero := fun _ => 0, modZero := fun _ => 0,
     selOther := fun _ _ _ _ => default, defs := fun _ => default, funs := fun _ _ => 0 }
 
-/-- Why a script has no text: a shared term without a sort. The encoder builds only sorted terms, but no theorem
-states it, so where it happens it is an engine bug, never a spec's undecided line. -/
-def noSort : String := "a shared term of the script has no sort; the encoder builds only sorted terms (unproved)"
+/-- Why a script has no text (`Script.shared`): a shared term without a sort, or an assertion holding a reference.
+The encoder builds neither, but no theorem states it, so where it happens it is an engine bug, never a spec's
+undecided line. -/
+def noText : String :=
+  "the script has a shared term without a sort or an assertion holding a reference; the encoder builds neither " ++
+    "(unproved)"
 
 /-- Runs one script and reads the answer; smt-check's runner, which reads a script without text as unknown. -/
 def Solver.run (s : Solver) (script : Script) : IO Answer := do
-  let some text := script.text s.header | return .unknown noSort
+  let some text := script.text s.header | return .unknown noText
   match ← s.runText text with
   | .ok out => return Answer.parse out
   | .error a => return a
@@ -142,7 +145,7 @@ def Solver.overApprox (s : Solver) (dir : System.FilePath) (ids : Option Nat) (d
 
 /-- Asks what the solver reads for a script (`Script.sent`, `ids` being the id datatype if the script has one): its
 abstract variant first where it holds strings (`Solver.overApprox`), else the script; each answer read from the cache
-directory `dir` where kept. An engine bug where a script has no text (`noSort`). -/
+directory `dir` where kept. An engine bug where a script has no text (`noText`). -/
 def Solver.runCached (s : Solver) (dir : System.FilePath) (ids : Option Nat) (script : Script) :
     IO (Except String Answer) := do
   let e := script.sent ids
@@ -155,7 +158,7 @@ def Solver.runCached (s : Solver) (dir : System.FilePath) (ids : Option Nat) (sc
     | some a => s.overApprox dir ids e.datatypes e.vars e.lits a fixed exact
   return match r with
     | some a => .ok a
-    | none => .error noSort
+    | none => .error noText
 
 /-- A script's text parts with their shared definitions found, the definitions' sorts and the SHA-256 of the framed
 parts: what scripts that add one goal assertion share (the goals of generate's targets and of a service's responses at
@@ -168,8 +171,9 @@ structure ScriptPrefix where
   parts : TextParts
   digest : String
 
-/-- The script `s` as the prefix of scripts that add a goal, read once. -/
+/-- The script `s` as the prefix of scripts that add a goal, read once; none as `Script.shared`. -/
 def Script.prefix? (s : Script) (header : List String) : Option ScriptPrefix := do
+  guard (Term.refFrees s.asserts)
   let (asserts, D) := Term.extracts s.asserts {}
   let sorts ← D.entries.foldlM (fun acc (_, b) => do pure (acc.push (← b.srt? s.datatypes s.vars acc))) #[]
   let parts := s.parts header asserts (D.entries.toList.map (·.2) |>.zip sorts.toList)
@@ -178,8 +182,9 @@ def Script.prefix? (s : Script) (header : List String) : Option ScriptPrefix := 
 /-- The prefix's script with `goals` as its last assertions, keyed: the text is the prefix's parts with the goals' new
 definitions after the prefix's and their assertions after the prefix's, and the key is the SHA-256 of the prefix's
 digest and those two pieces, so the key covers exactly what prints the text without printing the prefix again. None
-where a new definition has no sort. -/
+as `Script.shared`. -/
 def ScriptPrefix.askAll (p : ScriptPrefix) (goals : List Term) : Option Keyed := do
+  guard (Term.refFrees goals)
   let (gs, D) := Term.extracts goals p.defs
   let fresh := D.entries.toList.drop p.defs.entries.size
   let sorts ← fresh.foldlM (fun acc (_, b) => do pure (acc.push (← b.srt? p.script.datatypes p.script.vars acc))) p.sorts
