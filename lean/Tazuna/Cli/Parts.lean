@@ -102,7 +102,8 @@ def partsOf (c : CheckedSpec) (sv : CheckedService c) : IO Unit := do
         cols := cols ++ [(name, Lean.toJson n)]
       let dropped : List String := match a.t.out.finish? with
         | some fo => fo.settle.steps.zipIdx.flatMap fun ((st : Term × OwnStepOut v), j) =>
-            st.2.dropped.map fun (_, k) => s!"{j} {kindName k}"
+            (st.2.listed.filter fun (_, k) => !st.2.kinds.any fun (_, k') => kindName k' == kindName k).map
+              fun (_, k) => s!"{j} {kindName k}"
         | none => []
       row ([("service", Json.str v.name), ("kind", Json.str inp.text), ("bound", Lean.toJson (textBytes L.ids a.bound)),
         ("dropped", Lean.toJson dropped)] ++ cols)

@@ -95,9 +95,9 @@ terms. -/
 structure OwnStepOut (v : ServiceV) where
   kinds : List (Term × OwnKindOut v)
   terms : StepTerms v
-  /-- The own kinds the step cannot queue, with their tests: `prove` lists their targets as the step's, and their
-  questions have no model. -/
-  dropped : List (Term × OwnKindOut v)
+  /-- Every own kind with its test, in order, those the step cannot queue too: `prove` lists their targets as the
+  step's, in the order of the kinds, and the questions of a left-out kind's targets have no model. -/
+  listed : List (Term × OwnKindOut v)
 
 /-- The fault the model's kind names: the outcome terms of the kind whose test holds. -/
 def OwnStepOut.fault? {v : ServiceV} (M : Model) (o : OwnStepOut v) : Option Fault :=
@@ -155,7 +155,7 @@ def encodeOwnStep (P : List AnySite) (live : Option (List SiteId)) (v : ServiceV
   let ls := (ks.filter (·.1)).map (·.2)
   let base : StepTerms v := ⟨tt, ⟨records, xs, n, [], [], q, []⟩, fresh⟩
   pure ⟨⟨ls.map fun k => (k.1, k.2.out.kind), ls.foldr (fun k t => pickTerms k.1 k.2.out.terms t) base,
-      (ks.filter (!·.1)).map fun k => (k.2.1, k.2.2.out.kind)⟩,
+      ks.map fun k => (k.2.1, k.2.2.out.kind)⟩,
     allT (ls.map fun k => .ite k.1 k.2.cond tt), allT (ks.map (·.2.2.codes))⟩
 
 end
@@ -765,7 +765,7 @@ theorem ownStep_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
     rw [List.foldr_map] at hag htab
     have hfk : (OwnStepOut.fault? M ⟨ls.map fun k => (k.1, k.2.out.kind),
         ls.foldr (fun k t => pickTerms k.1 k.2.out.terms t) ⟨tt, ⟨records, xs, n, [], [], q, []⟩, fresh⟩,
-        (ks.filter (!·.1)).map fun k => (k.2.1, k.2.2.out.kind)⟩) = ko.fault? M := by
+        ks.map fun k => (k.2.1, k.2.2.out.kind)⟩) = ko.fault? M := by
       unfold OwnStepOut.fault?
       rw [find_hit (k := m) (ls.map fun k => (k.1, k.2.out.kind))
         (y := (Term.share (.is senv.dE ((L.effectsOf v.event).length + k) (Term.share eff)), ko)) (by simp [hlm])

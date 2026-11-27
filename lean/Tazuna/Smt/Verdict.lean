@@ -434,7 +434,7 @@ theorem settle_breaks {f : Fault} (o : SettleOut v) (h : o.fault? M = some f) :
     have hkm := List.mem_of_find?_eq_some hk
     have htest := List.find?_some hk
     obtain ⟨g, hg, hcov, hbr⟩ := kind_breaks k.2 hkf
-    refine ⟨g, List.mem_append_left _ (List.mem_flatMap.2 ⟨st, hmem, List.mem_flatMap.2 ⟨k, List.mem_append_left _ hkm, hg⟩⟩),
+    refine ⟨g, List.mem_append_left _ (List.mem_flatMap.2 ⟨st, hmem, List.mem_flatMap.2 ⟨k, List.mem_append_right _ hkm, hg⟩⟩),
       hcov, ?_⟩
     have hb : Holds M (anyT (o.steps.map fun st => andT st.1 (anyT (st.2.kinds.map fun k => andT k.1 (k.2.breaks g))))) :=
       (holds_anyT _).2 ⟨_, List.mem_map_of_mem hmem, (holds_andT _ _).2 ⟨hpred.1,

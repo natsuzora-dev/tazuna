@@ -311,10 +311,11 @@ def OwnKindOut.breaks : OwnKindOut v → Target → Term
   | .missing name, .effect c => if name = c then tt else .bool false
   | _, _ => .bool false
 
-/-- What the cascade can break: each own kind's targets, and its bound. The own kinds the step cannot queue keep their
-targets here, so the step's lines do not depend on what the code rules out. -/
+/-- What the cascade can break: each own kind's targets, and its bound. Every own kind lists its targets, in the order of
+the kinds, those the step cannot queue too, so the step's lines do not depend on what the code rules out; the kinds the
+faults read follow, which `dedup` drops again. -/
 def SettleOut.targets (o : SettleOut v) : List Target :=
-  o.steps.flatMap (fun st => (st.2.kinds ++ st.2.dropped).flatMap (·.2.targets)) ++ [.cascade]
+  o.steps.flatMap (fun st => (st.2.listed ++ st.2.kinds).flatMap (·.2.targets)) ++ [.cascade]
 
 /-- Whether the cascade faults by the target: a place past the bound is occupied, or an internal step that runs
 breaks it in the kind its effect is. -/
@@ -326,7 +327,7 @@ def SettleOut.breaks (o : SettleOut v) : Target → Term
 out, as it did before the cascade left those kinds out. Only `Term.const?` reads it; no script holds it. -/
 def SettleOut.listed (o : SettleOut v) : Target → Term
   | .cascade => o.over
-  | g => anyT (o.steps.map fun st => andT st.1 (anyT ((st.2.kinds ++ st.2.dropped).map fun k => andT k.1 (k.2.breaks g))))
+  | g => anyT (o.steps.map fun st => andT st.1 (anyT (st.2.listed.map fun k => andT k.1 (k.2.breaks g))))
 
 /-- What the input itself can break, where it is the command `cmd`: the command's `ensures` rules, or a clock line's
 bound on firing rounds. -/

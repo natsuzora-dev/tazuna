@@ -2975,8 +2975,8 @@ def dispCheck (solver : Solver) : IO Bool := do
     match dispScriptOf 3 effect goal [deadKey] live with
     | .error m => ok ← fail s!"{name}: {m}"
     | .ok (script, nn, o) =>
-      if live.isSome && (o.kinds.length != 1 || o.dropped.length != 2) then
-        ok ← fail s!"{name}: {o.kinds.length} kinds encoded and {o.dropped.length} left out, not 1 and 2"
+      if live.isSome && (o.kinds.length != 1 || o.listed.length != 3) then
+        ok ← fail s!"{name}: {o.kinds.length} kinds encoded of {o.listed.length} listed, not 1 of 3"
       match ← solver.run script with
       | .sat vs =>
         let M := modelOf vs
