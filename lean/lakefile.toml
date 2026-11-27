@@ -24,3 +24,7 @@ root = "Kinds"
 [[lean_exe]]
 name = "smt-check"
 root = "SmtCheck"
+
+[[lean_exe]]
+name = "size-parts"
+root = "SizeParts"
