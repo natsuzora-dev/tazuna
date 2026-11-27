@@ -76,6 +76,7 @@ So a kind whose functions write no constructor of the target's event cannot show
 A query, and a command that no outside caller may send, applies no event and sends nothing.
 This reading holds only where no value a step starts from can hold an event: the records, the callers, the machines' keys and states, the commands' inputs and rejections, the queries' outputs, the subscriptions' events and the values the kept functions captured.
 Where one can, every kind is asked.
+A target's questions run in the input kinds' order and stop at the first answer that is not unsat, since that answer already rules the line out.
 A target that only a query's answer shows gets no question, since no step question is about a query.
 Nor does any target of a service whose initial state breaks an invariant or one of whose input kinds is refused.
 

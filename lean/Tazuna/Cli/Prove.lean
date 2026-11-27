@@ -528,6 +528,18 @@ inductive Placed where
   | skipped (service : String) (target : Target)
   | asked (result : IO.Ref (Option (Except String Report)))
 
+/-- Whether every question of a dead-target family reads unsat, asked in order: the first answer that is not unsat
+settles that the target is not dead, so the rest are not asked. One job asks them all, so which run is a function of
+the spec and the solver, not of the schedule. -/
+def allUnsat (solver : Solver) (cache : System.FilePath) (inputs : List String) (ids : Option Nat) :
+    List (List String × Script) → IO (Except String Bool)
+  | [] => pure (.ok true)
+  | (name, q) :: rest => do
+    match ← solver.ask cache (directKey inputs name) ids q with
+    | .ok .unsat => allUnsat solver cache inputs ids rest
+    | .ok _ => pure (.ok false)
+    | .error m => pure (.error m)
+
 -- Every service a report names has a scope, so the empty list is never read.
 set_option linter.tazuna.silentDefault false in
 def prove (root path : String) (opts : Options) : Cmd Unit := do
@@ -552,19 +564,19 @@ def prove (root path : String) (opts : Options) : Cmd Unit := do
     let mut names : Std.HashSet (List String) := {}
     let mut questions : Array Job := #[]
     let mut placed : Array Placed := #[]
-    let mut deads : Array (String × GenTarget × List (IO.Ref (Option (Except String Smt.Answer)))) := #[]
+    let mut deads : Array (String × GenTarget × IO.Ref (Option (Except String Bool))) := #[]
     for (s, sc) in scopes do
       let ids := (c.services.find? (·.v.name == s)).bind (·.L.ids)
       for it in sc.shows do
-        let mut refs := []
+        let mut asks := []
         for (step, q) in it.asks do
           let name := ["shows", s, it.target.text, step]
           if names.contains name then return ← internal s!"two questions are named {name}"
           names := names.insert name
-          let (j, r) ← Job.of (solver.ask cache (directKey inputs name) ids q.script)
-          questions := questions.push j
-          refs := refs ++ [r]
-        deads := deads.push (s, it.target, refs)
+          asks := asks ++ [(name, q.script)]
+        let (j, r) ← Job.of (allUnsat solver cache inputs ids asks)
+        questions := questions.push j
+        deads := deads.push (s, it.target, r)
     for it in items do
       match it with
       | .ready r => placed := placed.push (.ready r)
@@ -618,13 +630,10 @@ def prove (root path : String) (opts : Options) : Cmd Unit := do
     for r in reports do
       if let some (kind, fields) := lineOf unproved past r then printLine kind fields
     -- A dead target is a fact, not a verdict: only where every kind's question is unsat (`unshown_within`, at any
-    -- depth `unshown_sound`); a model or no answer says nothing.
-    for (s, g, refs) in deads do
-      let mut dead := true
-      for r in refs do
-        match ← r.get with
-        | some (.ok .unsat) => pure ()
-        | some (.ok _) => dead := false
+    -- depth `unshown_sound`); a model or no answer says nothing, and stops its family's questions.
+    for (s, g, r) in deads do
+      let dead ← match ← r.get with
+        | some (.ok dead) => pure dead
         | some (.error m) => return ← internal m
         | none => return ← internal "a question's job never ran"
       if dead then
