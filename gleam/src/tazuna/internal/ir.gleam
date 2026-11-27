@@ -122,8 +122,9 @@ pub type FnParam {
   FnParam(label: Option(String), name: String, ty: Ty)
 }
 
+/// `annotation` is the type the source wrote, if it wrote one.
 pub type Constant {
-  Constant(name: String, ty: Ty, value: Expr, at: At)
+  Constant(name: String, annotation: Option(Ty), value: Expr, at: At)
 }
 
 pub type Program {
@@ -240,7 +241,7 @@ pub fn to_json(p: Program) -> Json {
         list.map(p.constants, fn(c) {
           Object([
             #("name", Str(c.name)),
-            #("ty", ty(c.ty)),
+            #("ty", ty(option.unwrap(c.annotation, c.value.ty))),
             #("value", expr_json(c.value, ty)),
             #("at", at_json(c.at)),
           ])

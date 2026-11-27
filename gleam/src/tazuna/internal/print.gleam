@@ -127,8 +127,10 @@ pub fn module(
     list.map(constants, fn(c) {
       "const "
       <> local(c.name)
-      <> ": "
-      <> ty(p, c.ty)
+      <> case c.annotation {
+        Some(t) -> ": " <> ty(p, t)
+        None -> ""
+      }
       <> " = "
       <> expr(p, c.value)
     }),

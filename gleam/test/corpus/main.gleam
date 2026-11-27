@@ -17,6 +17,10 @@ pub const names: List(String) = ["a\tb", "tab	raw", "\u{1F600}\"\\"]
 
 pub const pick: fn(Int, String) -> Int = choose
 
+pub const both = #(limits, step)
+
+pub const step = shapes.unit
+
 pub fn spec() -> tazuna.Spec {
   tazuna.spec(services: [], externals: [])
 }

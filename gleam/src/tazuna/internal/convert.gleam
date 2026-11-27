@@ -74,10 +74,10 @@ type TypeInfo {
 }
 
 /// `ty` has its aliases expanded, for typing; `written` keeps them, for the IR
-/// and printing back.
+/// and printing back. A constant written without a type has no `written`.
 type Global {
   GFn(labels: List(Option(String)), tvars: List(String), ty: Ty, written: Ty)
-  GConst(ty: Ty, written: Ty)
+  GConst(ty: Ty, written: Option(Ty))
   GCtor(type_: String, variant: String)
 }
 
@@ -274,21 +274,40 @@ pub fn convert(
     list.flat_map(all, fn(m) {
       list.append(
         list.map(m.ast.functions, fn(d) { function_sig(env1, m, d.definition) }),
-        list.map(m.ast.constants, fn(d) { constant_sig(env1, m, d.definition) }),
+        list.filter_map(m.ast.constants, fn(d) {
+          case d.definition.annotation {
+            Some(t) -> Ok(constant_sig(env1, m, d.definition, t))
+            None -> Error(Nil)
+          }
+        }),
       )
     })
     |> partition
   use <- bail(sig_findings)
-  let env =
-    Env(
-      ..env1,
-      globals: dict.from_list(
-        list.flatten([
-          list.flat_map(dict.to_list(types), fn(t) { constructors(t.0, t.1) }),
-          sigs,
-        ]),
+  let unannotated =
+    list.flat_map(all, fn(m) {
+      list.filter_map(m.ast.constants, fn(d) {
+        case d.definition.annotation {
+          None -> Ok(#(m, d.definition))
+          Some(_) -> Error(Nil)
+        }
+      })
+    })
+  use env <- result.try(
+    infer_constants(
+      Env(
+        ..env1,
+        globals: dict.from_list(
+          list.flatten([
+            list.flat_map(dict.to_list(types), fn(t) { constructors(t.0, t.1) }),
+            sigs,
+          ]),
+        ),
       ),
+      unannotated,
     )
+    |> result.map_error(list.wrap),
+  )
   let st0 = St(dict.new(), 0, [])
   let #(st, functions, constants, refs, findings) =
     list.fold(mods, #(st0, [], [], [], []), fn(acc, m) {
@@ -819,20 +838,74 @@ fn constant_sig(
   env: Env,
   m: Mod,
   c: g.Constant,
+  annotation: g.Type,
 ) -> Result(#(String, Global), Finding) {
-  case c.annotation {
-    Some(t) ->
-      declared(env, m, t)
-      |> result.map(fn(t) {
-        #(m.name <> "." <> c.name, GConst(expand(env, t), t))
-      })
-    None ->
+  declared(env, m, annotation)
+  |> result.map(fn(t) {
+    #(m.name <> "." <> c.name, GConst(expand(env, t), Some(t)))
+  })
+}
+
+/// A constant written without a type has its value's type, as Gleam infers it.
+/// Its value may name another such constant from anywhere in the spec, so they
+/// are typed in rounds: each round types those whose names are known.
+fn infer_constants(
+  env: Env,
+  pending: List(#(Mod, g.Constant)),
+) -> Result(Env, Finding) {
+  let #(env, left, errors) =
+    list.fold(pending, #(env, [], []), fn(acc, p) {
+      let #(env, left, errors) = acc
+      let #(m, c) = p
+      case constant_ty(env, m, c) {
+        Ok(t) -> {
+          let global = GConst(t, None)
+          #(
+            Env(
+              ..env,
+              globals: dict.insert(env.globals, m.name <> "." <> c.name, global),
+            ),
+            left,
+            errors,
+          )
+        }
+        Error(e) -> #(env, [p, ..left], [e, ..errors])
+      }
+    })
+  case left, list.reverse(errors) {
+    [], _ -> Ok(env)
+    _, [e, ..] if left == pending -> Error(e)
+    _, _ -> infer_constants(env, list.reverse(left))
+  }
+}
+
+fn constant_ty(env: Env, m: Mod, c: g.Constant) -> Result(Ty, Finding) {
+  use #(x, st) <- result.try(infer(
+    Cx(env, m, dict.new(), []),
+    St(dict.new(), 0, []),
+    c.value,
+  ))
+  let t = ir.solve(st.solved, x.ty)
+  case open(t) {
+    False -> Ok(t)
+    True ->
       Error(finding(
         m,
         AnnotationNeeded,
         c.location,
-        "annotate the type of constant " <> c.name,
+        "annotate the type of constant "
+          <> c.name
+          <> ": its value leaves it open",
       ))
+  }
+}
+
+fn open(t: Ty) -> Bool {
+  case t {
+    Meta(_) -> True
+    Con(_, args) | Tuple(args) -> list.any(args, open)
+    Fun(ps, r) -> list.any([r, ..ps], open)
+    Var(_) -> False
   }
 }
 

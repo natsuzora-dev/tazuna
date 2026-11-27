@@ -200,6 +200,14 @@ pub fn high_code_points_are_found_raw_or_escaped_test() {
   assert kinds("\"\\\\u{30000}\"") == []
 }
 
+pub fn a_constant_whose_value_leaves_its_type_open_needs_its_type_test() {
+  let text = "pub const empty = []"
+  let assert Error([f]) =
+    convert.convert([Source("m", "src/m.gleam", text)], "m")
+  assert kind.name(f.kind) == "Restricted.annotationNeeded"
+  assert f.at == Some(ir.At(1, 1))
+}
+
 pub fn a_finding_is_one_json_line_test() {
   let text = "pub fn f() -> Int {\n  panic\n}"
   let assert Error([f]) =

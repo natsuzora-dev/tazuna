@@ -52,8 +52,9 @@ inductive Tazuna.Restricted : Type
   | variantField
   /-- A constructor called through a pipe or `use`, or used as a function value: write it applied to every argument. -/
   | constructorValue
-  /-- A type the converter cannot infer alone: every parameter, return type, constant and record whose field is read
-  carries its annotation. -/
+  /-- A type the converter cannot infer alone: every parameter and the return type of a module function carry their
+  annotation, as do a constant whose value leaves its type open, such as `[]`, and a value whose field is read before
+  anything fixes its type. -/
   | annotationNeeded
   /-- The root module defines no `spec() -> tazuna.Spec`, or defines `spec` with another type. -/
   | rootSpec
