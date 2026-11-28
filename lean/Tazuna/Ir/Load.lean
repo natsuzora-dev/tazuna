@@ -209,10 +209,59 @@ def globalsOf (fileOf : String → Option String) (p : Surface.Program) : Except
   if let some n := nodup (all.map (·.name)) then throw ⟨none, none, s!"global {n} is defined twice"⟩
   return all
 
+/-- The program the IR holds, its declarations by name: Gleam gives top-level declarations no order, so nothing the
+engine prints or asks depends on the order the source writes them in. -/
 def read (j : Lean.Json) : Except LoadError Surface.Program :=
   match Surface.readProgram (builtinAliases.map (·.1)) j with
-  | .ok p => pure p
+  | .ok p => pure { p with
+      types := p.types.mergeSort (·.name ≤ ·.name), aliases := p.aliases.mergeSort (·.name ≤ ·.name),
+      functions := p.functions.mergeSort (·.name ≤ ·.name), constants := p.constants.mergeSort (·.name ≤ ·.name) }
   | .error e => throw ⟨none, e.pos, match e.global with | some g => s!"{g}: {e.message}" | none => e.message⟩
+
+/-- A declaration of the IR without its positions (`at`), its local names (variables, parameters, names a pattern
+binds) numbered in the order they first appear: a bijection within the declaration, so two declarations give the same
+JSON exactly where they are equal up to positions and renaming locals. A parameter is an object in `params` (a type's
+parameters are strings). -/
+partial def declKey (param : Bool) : Lean.Json → StateM (Array String) Lean.Json
+  | .obj kvs => do
+    let tag (k : String) : String := match kvs.get? k with
+      | some (.str t) => t
+      | _ => ""
+    let named := param || tag "op" == "var" || ["var", "discard", "as"].contains (tag "p")
+    let mut out : List (String × Lean.Json) := []
+    for (k, v) in kvs.toList do
+      if k == "at" then continue
+      let v' : Lean.Json ← match k, v with
+        | "name", .str n => if named then numbered n else pure v
+        | "params", .arr ps => Lean.Json.arr <$> ps.mapM (declKey true)
+        | _, v => declKey false v
+      out := out ++ [(k, v')]
+    return Lean.Json.mkObj out
+  | .arr a => Lean.Json.arr <$> a.mapM (declKey false)
+  | j => pure j
+where
+  numbered (n : String) : StateM (Array String) Lean.Json := do
+    let seen ← get
+    match seen.idxOf? n with
+    | some i => return .str s!"${i}"
+    | none =>
+      set (seen.push n)
+      return .str s!"${seen.size}"
+
+/-- What builds every question's script, for the direct keys (`Smt.directKey`): the IR without what only messages
+read, its source files and each declaration's positions and local names (`declKey`), with its declarations by name as
+`read` takes them, as reproducible builds map source paths away. So an edit that changes no meaning keeps every direct
+key. -/
+def scriptInputs (j : Lean.Json) : Lean.Json :=
+  let byName (x : Lean.Json) : String := match x.getObjValAs? String "name" with
+    | .ok n => n
+    | .error _ => ""
+  match j with
+  | .obj kvs => Lean.Json.mkObj (kvs.foldl (fun acc k v => match k, v with
+      | "sources", _ => acc
+      | _, .arr a => acc ++ [(k, .arr ((a.map fun d => (declKey false d).run' #[]).qsort (byName · < byName ·)))]
+      | _, v => acc ++ [(k, v)]) [])
+  | j => j
 
 /-- The model functions of the root module, by their names in it: functions that take nothing and return a
 `tazuna.Model`. -/

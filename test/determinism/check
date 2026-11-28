@@ -85,7 +85,8 @@ done
 
 # An edit that changes no meaning changes no output: edits/ searched as it is and with a comment and blank lines
 # added, an import added, its declarations in reverse order and a local variable renamed, each from an empty cache,
-# must print the same lines, exit the same, write the same files and ask the same scripts (the cache's answer files).
+# must print the same lines, exit the same, write the same files and ask the same scripts under the same direct keys
+# (the cache's file names).
 mkdir -p "$work/plain" "$work/edited/src"
 cp -R "$here/edits/src" "$work/plain/"
 {
@@ -100,7 +101,7 @@ for name in plain edited; do
   code=0
   (cd "$work/$name" && launch search m written >out.jsonl) || code=$?
   echo "$code" >"$work/$name/exit"
-  (cd "$work/$name/build/tazuna/prove-cache" && find . -type f ! -path '*/direct/*' | sort) >"$work/$name/cache"
+  (cd "$work/$name/build/tazuna/prove-cache" && find . -type f | sort) >"$work/$name/cache"
 done
 if ! cmp -s "$work/plain/out.jsonl" "$work/edited/out.jsonl" || ! cmp -s "$work/plain/exit" "$work/edited/exit"; then
   echo "determinism: an edit that changes no meaning changed search's lines or exit code:"
@@ -110,4 +111,4 @@ fi
 diff -r "$work/plain/written" "$work/edited/written" >/dev/null ||
   { echo "determinism: an edit that changes no meaning changed the files search wrote"; exit 1; }
 cmp -s "$work/plain/cache" "$work/edited/cache" ||
-  { echo "determinism: an edit that changes no meaning changed a script:"; diff "$work/plain/cache" "$work/edited/cache" || true; exit 1; }
+  { echo "determinism: an edit that changes no meaning changed a script or a direct key:"; diff "$work/plain/cache" "$work/edited/cache" || true; exit 1; }

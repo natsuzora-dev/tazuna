@@ -591,7 +591,7 @@ def proveStage (cm : CheckedModel) (name path : String) (opts : Options) (deadli
   let version ← solver.version
   let cache := opts.cache / Sha256.hex version.toUTF8
   -- What builds every question's script, for the direct keys: the IR is the whole spec.
-  let ir := Sha256.hex (← IO.FS.readBinFile path)
+  let ir := Sha256.hex (Ir.Load.scriptInputs (← IO.ofExcept (Json.parse (← IO.FS.readFile path)))).compress.toUTF8
   let inputs := [← IO.ofExcept (← IO.wait engine), version] ++ solver.header ++ [ir]
   let mut names : Std.HashSet (List String) := {}
   let mut questions : Array Job := #[]
