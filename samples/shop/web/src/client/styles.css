@@ -1,0 +1,46 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color-scheme: light dark;
+}
+
+body {
+  margin: 0 auto;
+  max-width: 48rem;
+  padding: 1rem;
+}
+
+header,
+nav,
+.session {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+header {
+  justify-content: space-between;
+  border-bottom: 1px solid #8884;
+  padding-bottom: 0.5rem;
+}
+
+form {
+  display: grid;
+  gap: 0.5rem;
+  margin-block: 1rem;
+  justify-items: start;
+}
+
+table {
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 0.25rem 0.75rem;
+  text-align: left;
+}
+
+[role="alert"] {
+  color: #c33;
+}
