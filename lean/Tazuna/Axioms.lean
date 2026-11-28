@@ -196,10 +196,11 @@ elab "#check_tazuna_reach" : command => do
     -- lines pass no waiting timer, and its steps violate the response as `ResponseV.Violated` defines it.
     ``Tazuna.Explore.response_trace,
     -- explore covers what it reports (Explore.unreached, Explore.notViolated): every transition of a run of the
-    -- scope's inputs within the reported coverage shows only classes, faults and broken responses the search keeps.
-    -- Its chain: `key_link` (equal keys give a renaming that keeps the counters' order), `link_move` (such nodes move
-    -- alike, through `step_ren`), `levels_spec` (the breadth-first levels).
-    ``Tazuna.Explore.explore_sound,
+    -- scope's inputs within the reported coverage shows only classes and faults the search keeps, and no such run
+    -- with timely clock lines violates a response the search did not see broken (`ResponseV.Violated`). Their chain:
+    -- `key_link` (equal keys give a renaming that keeps the counters' order), `link_move` (such nodes move alike,
+    -- through `step_ren`), `levels_spec` (the breadth-first levels), `watchBreaks_of` (the watch misses no violation).
+    ``Tazuna.Explore.explore_sound, ``Tazuna.Explore.explore_response_sound,
     -- generate's "unsettled within k steps" (Generate.unsettled): where its break cubes at a depth cover it with no
     -- model, or the step question whether a step breaks the target is unsat for every kind of a cube's last pick, no
     -- run of that many valid inputs within the slots whose steps before the last fault nowhere faults at its last step

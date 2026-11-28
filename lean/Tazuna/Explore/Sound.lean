@@ -465,11 +465,9 @@ theorem good_init : Good T sc (SearchSt.init v) := by
   · simp [SearchSt.init] at h
   · simp [SearchSt.init] at h
 
-/-- explore covers what it reports: every transition of a run of the scope's inputs that faults nowhere before it, from
-a node reached within `coverage.depth` transitions, or at any depth where `coverage.exhausted` (no state was left),
-shows only classes of out line among `classes`, faults only by a fault among `faults`, and breaks only responses
-among `responses`. -/
-theorem explore_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Smt.Checked P E T v) (hv : v.Equivariant)
+/-- Every transition from a node reached within the coverage shows only classes, faults and broken responses the search
+kept. -/
+theorem explore_covers {P : List AnySite} {E : List AnyEffectSite} (chk : Smt.Checked P E T v) (hv : v.Equivariant)
     (sc : ScopeV) (depth cap : Nat) {j : Nat} {m : Node v} (hm : Reach T sc j m)
     (hcov : j < (search T v sc depth cap).coverage.depth ∨ (search T v sc depth cap).coverage.exhausted = true)
     {x : Input v} (hx : x ∈ inputsOf sc m) :
@@ -509,6 +507,135 @@ theorem explore_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Smt.Che
     rw [Std.HashMap.contains_eq_isSome_getElem?, Option.isSome_iff_exists] at hcon
     obtain ⟨h, hh⟩ := hcon
     exact ⟨h, (List.mergeSort_perm _ _).symm.subset (Std.HashMap.mem_toList_iff_getElem?_eq_some.2 hh)⟩
+
+/-- explore covers what it reports: every transition of a run of the scope's inputs that faults nowhere before it, from
+a node reached within `coverage.depth` transitions, or at any depth where `coverage.exhausted` (no state was left),
+shows only classes of out line among `classes` and faults only by a fault among `faults`. -/
+theorem explore_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Smt.Checked P E T v) (hv : v.Equivariant)
+    (sc : ScopeV) (depth cap : Nat) {j : Nat} {m : Node v} (hm : Reach T sc j m)
+    (hcov : j < (search T v sc depth cap).coverage.depth ∨ (search T v sc depth cap).coverage.exhausted = true)
+    {x : Input v} (hx : x ∈ inputsOf sc m) :
+    (∀ c ∈ classes T v x (move T m x).result, ∃ h, (c, h) ∈ (search T v sc depth cap).classes) ∧
+      (∀ f, (move T m x).result.outcome = .fault f → ∃ h, (f, h) ∈ (search T v sc depth cap).faults) :=
+  have h := explore_covers chk hv sc depth cap hm hcov hx
+  ⟨h.1, h.2.1⟩
+
+section Watch
+variable (resp : ResponseV v.records v.event)
+
+/-- Whether watching from the waiting triggers `trs` some step breaks the response. -/
+def watchBreaks : List (v.event.den0 × Int) → List (Moment v.event) → Bool
+  | _, [] => false
+  | trs, m :: ms => (watchStep resp m trs).1 || watchBreaks (watchStep resp m trs).2 ms
+
+/-- A waiting trigger comes due: some step comes past its deadline with no step before answering it. -/
+def LateFrom (trs : List (v.event.den0 × Int)) (ms : List (Moment v.event)) : Prop :=
+  ∃ p ∈ trs, ∃ j, ∃ hj : j < ms.length, ms[j].time > p.2 + (resp.withinNat : Int) ∧
+    ∀ l (hl : l < j), resp.answers p.1 ms[l] = false
+
+/-- The watch misses no violation: a run that violates the response, or lets a waiting trigger come due, breaks it at
+some step. -/
+theorem watchBreaks_of : (ms : List (Moment v.event)) → (trs : List (v.event.den0 × Int)) →
+    resp.Violated ms ∨ LateFrom resp trs ms → watchBreaks resp trs ms = true
+  | [], _, h => by
+    rcases h with ⟨_, _, _, _, hj, _⟩ | ⟨_, _, _, hj, _⟩ <;> simp at hj
+  | m :: ms, trs, h => by
+    unfold watchBreaks
+    by_cases hl : (watchStep resp m trs).1 = true
+    · simp [hl]
+    · simp only [hl, Bool.false_or]
+      refine watchBreaks_of ms _ ?_
+      have hnl : ∀ p ∈ trs, decide (m.time > p.2 + (resp.withinNat : Int)) = false := by
+        intro p hp
+        cases hc : decide (m.time > p.2 + (resp.withinNat : Int))
+        · rfl
+        · exact absurd (by simp only [watchStep, List.any_eq_true]; exact ⟨p, hp, hc⟩) hl
+      rcases h with ⟨i, j, trig, hij, hj, hev, hop, ht, hans⟩ | ⟨p, hp, j, hj, ht, hans⟩
+      · cases i with
+        | zero =>
+          obtain ⟨j', rfl⟩ : ∃ j', j = j' + 1 := ⟨j - 1, by omega⟩
+          refine .inr ⟨(trig, m.time), ?_, j', by simpa using hj, by simpa using ht,
+            fun l hl' => by simpa using hans (l + 1) (by omega) (by omega)⟩
+          have ha0 : resp.answers trig m = false := hans 0 (Nat.le_refl _) hij
+          simp only [watchStep, List.mem_append, List.mem_map, List.mem_filter]
+          exact .inr ⟨trig, ⟨by simpa using hev, by simp [hop, ha0]⟩, rfl⟩
+        | succ i =>
+          obtain ⟨j', rfl⟩ : ∃ j', j = j' + 1 := ⟨j - 1, by omega⟩
+          exact .inl ⟨i, j', trig, by omega, by simpa using hj, by simpa using hev, hop, by simpa using ht,
+            fun l h1 h2 => by simpa using hans (l + 1) (by omega) (by omega)⟩
+      · cases j with
+        | zero => exact absurd (by simpa using ht) (by simpa using hnl p hp)
+        | succ j' =>
+          refine .inr ⟨p, ?_, j', by simpa using hj, by simpa using ht, fun l hl' => by simpa using hans (l + 1) (by omega)⟩
+          have ha0 : resp.answers p.1 m = false := hans 0 (by omega)
+          simp only [watchStep, List.mem_append, List.mem_filter]
+          exact .inl ⟨hp, by simp [hnl p hp, ha0]⟩
+
+end Watch
+
+/-- The inputs `xs` run from `n` as explore runs them: each among those it tries, none faulting. -/
+inductive Path (T : List TypeDecl) (sc : ScopeV) : Node v → List (Input v) → Prop
+  | nil (n : Node v) : Path T sc n []
+  | cons {n n' : Node v} {x : Input v} {xs : List (Input v)} : x ∈ inputsOf sc n → (move T n x).next = some n' →
+    Path T sc n' xs → Path T sc n (x :: xs)
+
+theorem path_breaks {P : List AnySite} {E : List AnyEffectSite} (chk : Smt.Checked P E T v) (hv : v.Equivariant)
+    (sc : ScopeV) (depth cap : Nat) {resp : ResponseV v.records v.event} {r : Nat}
+    (hr : v.responses[r]? = some resp) : {n : Node v} → {xs : List (Input v)} → Path T sc n xs → {k : Nat} →
+    Reach T sc k n → (k + xs.length ≤ (search T v sc depth cap).coverage.depth ∨
+      (search T v sc depth cap).coverage.exhausted = true) →
+    TimelyRun T n.state xs → {ws : List (List (v.event.den0 × Int))} → n.watch = some ws →
+    ws.length = v.responses.length → {trs : List (v.event.den0 × Int)} → ws[r]? = some trs →
+    watchBreaks resp trs ((run T v n.state xs).2.map Result.moment) = true →
+    ∃ h, (r, h) ∈ (search T v sc depth cap).responses
+  | _, [], .nil _, _, _, _, _, _, _, _, _, _, hb => by simp [run, watchBreaks] at hb
+  | n, x :: xs, .cons hx hn hp, k, hk, hcov, ht, ws, hw, hlen, trs, htrs, hb => by
+    have hsteps : ((v.responses.zip ws).map fun (resp, trs) => watchStep resp (step T v n.state x).moment trs)[r]? =
+        some (watchStep resp (step T v n.state x).moment trs) := by
+      simp only [List.getElem?_map]
+      rw [(List.getElem?_zip_eq_some (z := (resp, trs))).2 ⟨hr, htrs⟩]
+      rfl
+    have htime : timelyAt n.state x = true := ht.1
+    have hwn : watchNext n x (step T v n.state x) = (((((v.responses.zip ws).map fun (resp, trs) =>
+          watchStep resp (step T v n.state x).moment trs).zipIdx.filter (·.1.1)).map (·.2)),
+        some (((v.responses.zip ws).map fun (resp, trs) => watchStep resp (step T v n.state x).moment trs).map
+          (·.2))) := by
+      simp only [watchNext, hw, htime, ↓reduceIte]
+    simp only [run, List.map_cons, watchBreaks, Bool.or_eq_true] at hb
+    rcases hb with hb | hb
+    · have hbr : r ∈ (move T n x).broken := by
+        show r ∈ (watchNext n x (step T v n.state x)).1
+        rw [hwn]
+        simp only [List.mem_map, List.mem_filter]
+        refine ⟨((watchStep resp (step T v n.state x).moment trs), r), ?_, rfl⟩
+        refine ⟨List.mem_iff_getElem?.2 ⟨r, ?_⟩, hb⟩
+        rw [List.getElem?_zipIdx, hsteps]
+        simp
+      exact (explore_covers chk hv sc depth cap hk (hcov.imp_left fun h => by simp only [List.length_cons] at h; omega)
+        hx).2.2 r hbr
+    · have hn' := hn
+      unfold move at hn'
+      simp only at hn'
+      split at hn'
+      · cases hn'
+      · cases hn'
+        refine path_breaks chk hv sc depth cap hr hp (.step hk hx hn)
+          (hcov.imp_left fun h => by simp only [List.length_cons] at h; omega) ht.2
+          (by rw [hwn]) (by simp [hlen]) ?_ hb
+        simp only [List.getElem?_map, hsteps]
+        rfl
+
+/-- explore's responses cover what it reports: no run of the scope's inputs within the coverage, from the initial
+state, faulting nowhere and with timely clock lines, violates a response the search did not see broken, as
+`ResponseV.Violated` defines it. -/
+theorem explore_response_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Smt.Checked P E T v)
+    (hv : v.Equivariant) (sc : ScopeV) (depth cap : Nat) {xs : List (Input v)} (hp : Path T sc (Node.init v) xs)
+    (hcov : xs.length ≤ (search T v sc depth cap).coverage.depth ∨ (search T v sc depth cap).coverage.exhausted = true)
+    (ht : TimelyRun T (State.init v) xs) {r : Nat} {resp : ResponseV v.records v.event}
+    (hr : v.responses[r]? = some resp) (hviol : resp.Violated ((run T v (State.init v) xs).2.map Result.moment)) :
+    ∃ h, (r, h) ∈ (search T v sc depth cap).responses :=
+  path_breaks chk hv sc depth cap hr hp .init (by simpa using hcov) ht rfl (by simp)
+    (by simp [List.getElem?_map, hr]) (watchBreaks_of resp _ [] (.inl hviol))
 
 end Sim
 
