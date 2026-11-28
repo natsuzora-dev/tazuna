@@ -42,11 +42,15 @@ inductive Tazuna.ProveKind : Type
   is any state of the right shape, invariants or not. -/
   | unproved
   /-- No step from a state of the right shape whose invariants hold, of any input kind, shows the class of out line
-  the generate target aims at unless it faults: no run on valid inputs that faults nowhere ever shows it, at any depth
-  where no step goes past the slots and every input and the initial state fit them, else within the slots the line
-  names. A fact about the spec, not a violation: a defensive branch may be meant never to run. A target only a query's
-  answer shows gets no line, nor does a target whose question has a model, which may be a state no run reaches. -/
+  the generate target aims at unless it faults, no step of any kind goes past the slots the bounds give, and every
+  input and the initial state fit them: no run on valid inputs that faults nowhere ever shows it, at any depth. A fact
+  about the spec, not a violation: a defensive branch may be meant never to run. A target only a query's answer shows
+  gets no line, nor does a target whose question has a model, which may be a state no run reaches. -/
   | unreachable
+  /-- As `unreachable`, but only within the slots: a step can go past them, or an input or the initial state does not
+  fit them, and the line names those bounds. No run on valid inputs that faults nowhere shows the class while its
+  states and inputs fit them; a run past them may, so raising a bound the line names can make the target reachable. -/
+  | unreachableWithinBounds
 deriving DecidableEq
 
 /-- What `generate` found for one target. -/
@@ -56,10 +60,14 @@ inductive Tazuna.GenerateKind : Type
   /-- No run of at most the spec's steps within the slots, on which its `assumes` hold (valid inputs, no step faults),
   shows the target's class at any step. Not "unreachable": a longer run or larger slots may reach it. -/
   | unreached
-  /-- Every input kind's dead-target question is unsat, as prove's line of the same name says: no run within the slots
-  the line names, on which its `assumes` hold, shows the target's class, at any length. generate asks these questions
-  from its second depth on, once no run of one step reached the target. -/
+  /-- Every input kind's dead-target question is unsat, no step goes past the slots and every input and the initial
+  state fit them, as prove's line of the same name says: no run on which its `assumes` hold shows the target's class,
+  at any length. generate asks the dead-target questions from its second depth on, once no run of one step reached the
+  target, and prove's bound questions once a target is dead. -/
   | unreachable
+  /-- As `unreachable`, but only within the slots the line names, as prove's line of the same name says: a step can go
+  past them, or an input or the initial state does not fit them. A run past them may show the class. -/
+  | unreachableWithinBounds
   /-- A run from the initial state on valid inputs whose steps before the last fault nowhere, and whose last step
   faults by a fault the target covers: prove's target is broken in a state a run reaches. Its trace is written, and
   verify replays it to that fault at its last line. -/
@@ -206,7 +214,8 @@ def TestKind.name : TestKind → String
   | .written => "written"
   | .badStep => "badStep"
 
-def ProveKind.all : List ProveKind := [.proved, .withinBounds, .violated, .unproved, .unreachable]
+def ProveKind.all : List ProveKind :=
+  [.proved, .withinBounds, .violated, .unproved, .unreachable, .unreachableWithinBounds]
 
 theorem ProveKind.mem_all (k : ProveKind) : k ∈ ProveKind.all := by cases k <;> simp [ProveKind.all]
 
@@ -216,8 +225,10 @@ def ProveKind.name : ProveKind → String
   | .violated => "violated"
   | .unproved => "unproved"
   | .unreachable => "unreachable"
+  | .unreachableWithinBounds => "unreachableWithinBounds"
 
-def GenerateKind.all : List GenerateKind := [.reached, .unreached, .unreachable, .violated, .unsettled]
+def GenerateKind.all : List GenerateKind :=
+  [.reached, .unreached, .unreachable, .unreachableWithinBounds, .violated, .unsettled]
 
 theorem GenerateKind.mem_all (k : GenerateKind) : k ∈ GenerateKind.all := by cases k <;> simp [GenerateKind.all]
 
@@ -225,6 +236,7 @@ def GenerateKind.name : GenerateKind → String
   | .reached => "reached"
   | .unreached => "unreached"
   | .unreachable => "unreachable"
+  | .unreachableWithinBounds => "unreachableWithinBounds"
   | .violated => "violated"
   | .unsettled => "unsettled"
 
@@ -293,10 +305,10 @@ def exit : Kind → Exit
   | test .passed | test .written => .ok
   | test .changed | test .badStep => .violation
   | checkPassed | verifyPassed | explain | version => .ok
-  | prove .proved | prove .withinBounds | prove .unreachable => .ok
+  | prove .proved | prove .withinBounds | prove .unreachable | prove .unreachableWithinBounds => .ok
   | prove .violated => .violation
   | prove .unproved => .undecided
-  | generate .reached | generate .unreached | generate .unreachable => .ok
+  | generate .reached | generate .unreached | generate .unreachable | generate .unreachableWithinBounds => .ok
   | generate .violated => .violation
   | generate .unsettled => .undecided
   | undecided _ => .undecided

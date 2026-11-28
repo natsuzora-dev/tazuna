@@ -52,7 +52,7 @@ Everything a verdict depends on appears in the spec or in the output:
 - A verdict prints what it assumes in `assumes`.
 - An undecided line says why it has no verdict, such as the solver's answer or the limit a search hit.
 - No counterexample within the bounds is a success, `Prove.withinBounds`, as Alloy reports no counterexample within its scope. Otherwise every spec with a growing table would exit 2.
-- `generate` says unreached, never unreachable, of what its search did not reach. `Prove.unreachable` and `Generate.unreachable` say unreachable only where every input kind's code or one-step question proves that no reachable step shows the class.
+- `generate` says unreached, never unreachable, of what its search did not reach. `Prove.unreachable` and `Generate.unreachable` say unreachable only where every input kind's code or one-step question proves that no reachable step shows the class. Where that holds only within the slots, the line is `Prove.unreachableWithinBounds` or `Generate.unreachableWithinBounds` instead, as `Prove.withinBounds` is to `Prove.proved`, so a bound that keeps a target out of reach never reads as the spec doing so.
 - A step that breaks a target from a state where every invariant holds is `Prove.unproved`, not a violation: the state may be one no run reaches. Only the initial state or a run from it is a violation, as TLC reports one only with a behavior and Dafny says "might not hold" of a failed one-step proof.
 
 ## Illegal states are unrepresentable
@@ -151,7 +151,7 @@ A command exits with the code of its worst line:
 
 | Code | Meaning |
 | --- | --- |
-| 0 | Every line is a success. `Prove.withinBounds`, `Prove.unreachable`, `Generate.unreached` and `Generate.unreachable` count. |
+| 0 | Every line is a success. `Prove.withinBounds`, `Prove.unreachable`, `Prove.unreachableWithinBounds`, `Generate.unreached`, `Generate.unreachable` and `Generate.unreachableWithinBounds` count. |
 | 1 | A line is a violation: the initial state or a run from it breaks a target. |
 | 2 | A line is not settled and none is a violation: undecided, `Prove.unproved` or `Generate.unsettled`. |
 | 3 | The command did not run as asked, for a usage or system error. The spec is not judged. |

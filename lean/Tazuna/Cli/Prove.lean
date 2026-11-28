@@ -605,15 +605,13 @@ def prove (root path : String) (opts : Options) : Cmd Unit := do
     -- A line rests on the states runs reach. They stay within the slots only where no input kind's step leaves them,
     -- every input fits and the initial state does (`run_within`); the initial state's line rests on no input.
     let reach (s : String) (here : Bool) : Option (List Json) :=
-      if here || left s (steps s).contains then some (scope s)
-      else if fits s then none
-      else if (inputScope s).isEmpty then some (scope s) else some (inputScope s)
+      runScope (here || left s (steps s).contains) (fits s) (scope s) (inputScope s)
     let past (s step : String) : Option (List Json) :=
       if step == "init" then none else reach s (left s (· == step))
     for r in reports do
       if let some (kind, fields) := lineOf unproved past r then printLine kind fields
-    -- A dead target is a fact, not a verdict: only where every kind's question is unsat (`unshown_within`, at any
-    -- depth `unshown_sound`); a model or no answer says nothing, and stops its family's questions.
+    -- A dead target is a fact, not a verdict: only where every kind's question is unsat (`unshown_sound` at any depth,
+    -- else `unshown_within`); a model or no answer says nothing, and stops its family's questions.
     for (s, g, r) in deads do
       let dead ← match ← r.get with
         | some (.ok dead) => pure dead
@@ -622,6 +620,8 @@ def prove (root path : String) (opts : Options) : Cmd Unit := do
       if dead then
         let fields := [("service", Json.str s), ("target", Json.str g.text),
           ("assumes", Json.arr (Step.Assumption.ofRuns.map (Json.str ·.text)).toArray)]
-        printLine (.prove .unreachable) (fields ++ ((reach s false).map fun bs => ("bounds", Json.arr bs.toArray)).toList)
+        match reach s false with
+        | none => printLine (.prove .unreachable) fields
+        | some bs => printLine (.prove .unreachableWithinBounds) (fields ++ [("bounds", Json.arr bs.toArray)])
 
 end Tazuna.Cli

@@ -26,6 +26,8 @@ target a fault breaks
    └─ the solver gives no answer ...... Undecided.*                         exit 2
 behavior target
 ├─ no step shows it ................... Prove.unreachable, Generate.unreachable  exit 0
+├─ none shows it within the slots ..... Prove.unreachableWithinBounds,          exit 0
+│                                       Generate.unreachableWithinBounds
 ├─ generate finds a run ............... Generate.reached, trace written     exit 0
 ├─ no run within steps ................ Generate.unreached                  exit 0
 └─ the solver gives no answer ......... Undecided.*                         exit 2
@@ -46,7 +48,7 @@ A response's, a pair's and a timer machine's line has no fault to search for, so
 - `steps` limits the inputs of a run that `generate` unrolls.
 
 A verdict speaks only of states and inputs that fit the slots.
-`Prove.withinBounds`, `Generate.unreached` and `Generate.unsettled` list in `bounds` every bound a step of the service can go past.
+`Prove.withinBounds`, `Prove.unreachableWithinBounds`, `Generate.unreached`, `Generate.unreachableWithinBounds` and `Generate.unsettled` list in `bounds` every bound a step of the service can go past.
 That list is the service's static scope, the same in every run.
 
 ## check
@@ -95,7 +97,7 @@ A step line's `assumes` lists `validInputs` and the invariants the induction too
 ## prove: dead targets
 
 For each of `generate`'s targets, `prove` asks per input kind whether a step from a state of the right shape where every invariant holds shows the target's class, the same question as a T4 step line with that goal in place of a broken rule.
-It prints `Prove.unreachable` only where every input kind's question is unsat, and nothing otherwise: a model's state may be one no run reaches.
+It prints a line only where every input kind's question is unsat, and nothing otherwise: a model's state may be one no run reaches.
 Before asking, `prove` reads the code, and a kind whose step cannot show the class gets no question (`Step.step_events`).
 A step applies only events built by a constructor written in a function it runs: the input's own (`decide`, `wrap`, an `on_answer` of the answer's type) and the cascade's (every machine's `effect`, every reaction, every command the service runs as `Own`).
 A request's `on_answer` runs when its answer comes, so its constructors count for that answer, not for the step that sends the request.
@@ -107,13 +109,13 @@ A target's questions run in the input kinds' order and stop at the first answer 
 A target that only a query's answer shows gets no question, since no step question is about a query.
 Nor does any target of a service whose initial state breaks an invariant or one of whose input kinds is refused.
 
-- `unshown_sound`: where every bound question reads proved and every input and the initial state fit the slots, no step of any run from the initial state, on inputs that satisfy `validInputs`, that faults nowhere shows the class. The line has no `bounds`.
-- `unshown_within`: otherwise, the same for every step within the slots, and the line names the `bounds` as a `Prove.withinBounds` line does.
+- `Prove.unreachable`, `unshown_sound`: where every bound question reads proved and every input and the initial state fit the slots, no step of any run from the initial state, on inputs that satisfy `validInputs`, that faults nowhere shows the class.
+- `Prove.unreachableWithinBounds`, `unshown_within`: otherwise, the same for every step within the slots, and the line names the `bounds` as a `Prove.withinBounds` line does. A run past them may show the class, so the target can be one only the bounds keep out of reach.
 
 Both rest on `run_invariants` and `run_supp`: every state such a run reaches has the shape the question assumes, whether or not the invariants were proved.
 The line exits 0, like a compiler warning, because a defensive branch may be meant never to run.
-`generate` asks the same questions from its second length on and prints `Generate.unreachable` for such a target.
-A target whose question has a model, from a state no run reaches, gets no `Prove.unreachable` line, and `generate` may still find no run of at most `steps` inputs to it (`Generate.unreached`).
+`generate` asks the same questions from its second length on, and for such a target the bound questions, and prints `Generate.unreachable` or `Generate.unreachableWithinBounds` as `prove` does.
+A target whose question has a model, from a state no run reaches, gets no such line, and `generate` may still find no run of at most `steps` inputs to it (`Generate.unreached`).
 
 ## prove: order of own steps and timers (T5)
 
@@ -177,7 +179,7 @@ A cube needs no question where the code rules out that its last step's kinds sho
 
 - `Generate.reached` writes the trace of the shortest run it found to `<dir>/<service>/<target>.jsonl`. `generate_reaches` (T6): the written trace reads as the spec from the initial state, so `verify` replays it as passed unless it runs out of tries, and the last step of its run shows the target. `generate_sound`: every model the solver gives decodes to inputs that satisfy `validInputs` whose run faults nowhere and reaches the target. `targetFile_inj`: two targets never share a file, so no written trace overwrites another's.
 - `Generate.unreached`: `noModel_cubes` (T6b): no run of at most `steps` inputs within the slots, on which the line's `assumes` hold, shows the target's class at any step. Every input's kind is one a split lists, so cubes with no model at a length leave no run of that length.
-- `Generate.unreachable`: every input kind's dead-target question is unsat, as for `Prove.unreachable` (`unshown_within`), so no run of any length shows the class.
+- `Generate.unreachable`, `Generate.unreachableWithinBounds`: every input kind's dead-target question is unsat, as for the `prove` lines of the same names (`unshown_sound`, `unshown_within`), so no run of any length shows the class, or none within the slots. The cubes' pruning rests only on runs within the slots, which every cube's run is, so it reads no bound question.
 
 For each target a fault breaks whose `Prove.unproved` lines some input kind has, `generate` searches runs the same way, for a run whose steps fault nowhere until the last, which faults by a fault the target covers.
 The last step of every cube takes only the input kinds whose step question, whether a step from a state where every invariant holds breaks the target, is not unsat.
@@ -207,8 +209,8 @@ Three assumptions appear in `assumes`, in these words.
 
 | Text in `assumes` | Lines that print it |
 | --- | --- |
-| `ids the service made are used only after they appeared on an out line` | step lines, pair lines, responses, `Prove.unreachable`, `Generate.unreached`, `Generate.unreachable`, `Generate.unsettled` |
-| `no step of the run faults` | `Prove.unreachable`, `Generate.unreached`, `Generate.unreachable` |
+| `ids the service made are used only after they appeared on an out line` | step lines, pair lines, responses, `Prove.unreachable`, `Prove.unreachableWithinBounds`, `Generate.unreached`, `Generate.unreachable`, `Generate.unreachableWithinBounds`, `Generate.unsettled` |
+| `no step of the run faults` | `Prove.unreachable`, `Prove.unreachableWithinBounds`, `Generate.unreached`, `Generate.unreachable`, `Generate.unreachableWithinBounds` |
 | `no clock line moves time past a timer that waits` | responses |
 
 The first leaves ids from outside the service unrestricted.

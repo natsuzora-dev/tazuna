@@ -148,6 +148,15 @@ def inputBounds (T : List TypeDecl) (L : Layout) (v : ServiceV) : List Json :=
   let held := Ty.collectionsOf (inputTys v)
   boundsOf T L v fun t => held.any fun u => (Ty.same t u).isSome
 
+/-- The bounds a line about runs is scoped to, from whether a step can go past the slots (`left`: a bound question is
+not unsat) and whether every input and the initial state fit them: none where neither can leave them, as every state
+a run reaches is then within them (`run_within`); else the bounds the inputs carry where only an input can, else the
+service's whole scope. -/
+def runScope (left fits : Bool) (scope inputScope : List Json) : Option (List Json) :=
+  if left then some scope
+  else if fits then none
+  else if inputScope.isEmpty then some scope else some inputScope
+
 /-- A builder's refusal as a line where it is the spec's; else an engine bug, a case the loaded program's types rule
 out. -/
 def refusedLine (T : List TypeDecl) : Refused → Except String (Kind × List (String × Json))

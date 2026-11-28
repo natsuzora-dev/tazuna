@@ -21,8 +21,10 @@ only where some input kind's step question whether its step breaks it is not uns
 step breaks it (`brk`, `BreakCover`), and its last step only takes those kinds. One question per kind first asks
 whether its step breaks any such target (`breakAnyT`), so most kinds need no question per target (`breakT`). A run
 found is run in Lean and replayed by verify (`generate_breaks`); none within the steps leaves the target unsettled
-(`noModel_breaks`). A behavior target every kind's dead-target question rules out is unreachable at every depth
-(`unshown_within`). -/
+(`noModel_breaks`). A behavior target every kind's dead-target question rules out is unreachable at every depth:
+of every run where prove's bound questions are unsat and every input and the initial state fit (`unshown_sound`),
+else within the slots (`unshown_within`). The pruning of last picks rests only on runs within the slots, which every
+cube's run is, so it does not read the bound questions. -/
 
 namespace Tazuna.Cli
 
@@ -203,13 +205,26 @@ inductive GenResult where
   | brk (r : SearchResult (Except String (TraceFile × Fault)))
   | settled
 
-/-- A target's job: its service, the target's text and file, the service's scope, and where its result lands. -/
+/-- A target's job: its service, the target's text and file, the service's scope and a dead target's, and where its
+result lands. -/
 structure GenJob where
   service : String
   target : String
   file : String
   scope : List Json
+  deadScope : IO (Except String (Option (List Json)))
   result : IO.Ref (Option (Except String GenResult))
+
+/-- `f`, run by its first call only; every later call gets that call's result. -/
+def once {α : Type} (f : IO α) : IO (IO α) := do
+  let r ← IO.mkRef none
+  pure do
+    match ← r.get with
+    | some a => pure a
+    | none =>
+      let a ← f
+      r.set (some a)
+      pure a
 
 def generate (root dir path : String) (opts : Options) : Cmd Unit := do
   match ← loadSpec root path with
@@ -249,6 +264,13 @@ def generate (root dir path : String) (opts : Options) : Cmd Unit := do
       builds := builds ++ bjs
       let asks := Thunk.mk fun _ => stepAsks c sv
       let scope := scopeBounds c.T L v
+      -- A dead target's scope (`runScope`) from each input kind's bound question, the one prove asks: asked once a
+      -- target of the service is dead, and not before.
+      let deadScope ← once do
+        let some xs := asks.get | return .error s!"service {v.name}: a target is dead without step questions"
+        let qs := xs.map fun (inp, a) => (["bound", v.name, "", inp.place], Thunk.mk fun _ => some a.bound)
+        return (← allUnsat solver cache inputs L.ids qs).map fun u =>
+          runScope (!u) (inputsFit L v && initFits L v) scope (inputBounds c.T L v)
       -- Whether each kind's step breaks no target a fault breaks (`breakAnyT` unsat), asked once for all of the
       -- service's break targets by its own job; none where `BreakCover.deadLast` does not apply (`stepAsks`).
       let anyDead : IO.Promise (Except String (Option (List (SymInput v (shapes v) sv.senv.nT × StepAsk v × Bool)))) ←
@@ -279,7 +301,7 @@ def generate (root dir path : String) (opts : Options) : Cmd Unit := do
           return (← searchDepths solver cache sv g.text ds live (!mayShow c.P c.T g ·) none
             (fun sts => .ok (genGoal L c.T rules g sts)) (genTrace c.T v rules g (c.checked v sv.mem))).map .search
         searches := searches.push j
-        jobs := jobs.push ⟨v.name, g.text, targetFile v.name g, scope, r⟩
+        jobs := jobs.push ⟨v.name, g.text, targetFile v.name g, scope, deadScope, r⟩
       for g in bs do
         -- The picks of the kinds whose step question whether the step breaks `g` is not unsat (`BreakCover.deadLast`);
         -- every pick where `stepAsks` gives none.
@@ -309,7 +331,7 @@ def generate (root dir path : String) (opts : Options) : Cmd Unit := do
           | .ok ks => return (← searchDepths solver cache sv g.text ds (pure (.ok ks)) (brk := some g)
               (goal := fun _ => .ok ff) (play := breakTrace c.T v g)).map .brk
         searches := searches.push j
-        jobs := jobs.push ⟨v.name, g.text, breakFile v.name g.text, scope, r⟩
+        jobs := jobs.push ⟨v.name, g.text, breakFile v.name g.text, scope, deadScope, r⟩
     -- One pool: the builds first, so a search waits only on a build some worker runs. Its workers mostly wait on
     -- their cubes, so there are enough of them to keep every solver busy.
     runAll (opts.jobs * cubeChunk) (builds ++ searches)
@@ -334,12 +356,16 @@ def generate (root dir path : String) (opts : Options) : Cmd Unit := do
         unwrite
         printLine (.generate .unreached) (common ++ [("steps", Lean.toJson k), ("bounds", Json.arr job.scope.toArray),
           ("assumes", Json.arr (Step.Assumption.ofRuns.map (Json.str ·.text)).toArray)])
-      -- `unshown_within`: every kind's dead-target question is unsat, so no step shows the target, at any depth.
+      -- Every kind's dead-target question is unsat, so no step shows the target, at any depth: of every run where no
+      -- step can go past the slots and every input and the initial state fit (`unshown_sound`), else of every run
+      -- within the slots (`unshown_within`).
       | .search .dead =>
         unwrite
-        printLine (.generate .unreachable) (common ++
-          [("assumes", Json.arr (Step.Assumption.ofRuns.map (Json.str ·.text)).toArray),
-            ("bounds", Json.arr job.scope.toArray)])
+        let fields := common ++ [("assumes", Json.arr (Step.Assumption.ofRuns.map (Json.str ·.text)).toArray)]
+        match ← job.deadScope with
+        | .error m => return ← internal m
+        | .ok none => printLine (.generate .unreachable) fields
+        | .ok (some bs) => printLine (.generate .unreachableWithinBounds) (fields ++ [("bounds", Json.arr bs.toArray)])
       | .brk (.found d (.ok (tr, f))) =>
         write tr
         printLine (.generate .violated) (common ++ [("file", Json.str job.file), ("steps", Lean.toJson d),

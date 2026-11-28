@@ -170,7 +170,8 @@ def ProveKind.explanation : ProveKind → Explanation
     [`Tazuna.Smt.cti_sound, `Tazuna.Ir.step_settled, `Tazuna.Smt.timer_violates, `Tazuna.Smt.pair_violates],
     questionFields ++ [fromField, state, input, after, outcome, out, inst, records, timer, next, first, second,
       firstThenSecond, secondThenFirst, trigger, Field.violated, assumes, widened]⟩
-  | .unreachable => ⟨docOf% ProveKind.unreachable, [`Tazuna.Smt.unshown_sound, `Tazuna.Smt.unshown_within],
+  | .unreachable => ⟨docOf% ProveKind.unreachable, [`Tazuna.Smt.unshown_sound], [service, target, assumes]⟩
+  | .unreachableWithinBounds => ⟨docOf% ProveKind.unreachableWithinBounds, [`Tazuna.Smt.unshown_within],
     [service, target, assumes, bounds]⟩
 
 def GenerateKind.explanation : GenerateKind → Explanation
@@ -179,7 +180,8 @@ def GenerateKind.explanation : GenerateKind → Explanation
     [service, target, written, steps]⟩
   | .unreached => ⟨docOf% GenerateKind.unreached, [`Tazuna.Smt.noModel_cubes],
     [service, target, steps, bounds, assumes]⟩
-  | .unreachable => ⟨docOf% GenerateKind.unreachable, [`Tazuna.Smt.unshown_within],
+  | .unreachable => ⟨docOf% GenerateKind.unreachable, [`Tazuna.Smt.unshown_sound], [service, target, assumes]⟩
+  | .unreachableWithinBounds => ⟨docOf% GenerateKind.unreachableWithinBounds, [`Tazuna.Smt.unshown_within],
     [service, target, assumes, bounds]⟩
   | .violated => ⟨docOf% GenerateKind.violated, [`Tazuna.Cli.generate_breaks], [service, target, written, steps, outcome]⟩
   | .unsettled => ⟨docOf% GenerateKind.unsettled, [`Tazuna.Smt.noModel_breaks],
