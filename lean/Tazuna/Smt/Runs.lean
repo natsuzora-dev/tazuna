@@ -115,7 +115,14 @@ theorem begins_coJ {M : Model} {T : List TypeDecl} {P : List AnySite} {E : List 
     obtain ⟨value, rfl, -⟩ := decode_event hx
     cases hb with
     | event _ _ _ h => exact coJ_event T hv k _ value h
-  | _ => intro c hc; obtain ⟨_, _, _, _, he, -⟩ := co_some hc; cases he
+  | clock st =>
+    obtain ⟨time, rfl, -⟩ := decode_clock hx
+    cases hb with
+    | clock _ s' effs _ _ hf h => exact coJ_clock hv _ _ hf h
+  | _ =>
+    intro c hc
+    obtain ⟨_, _, _, _, _, he⟩ := co_some hc
+    rcases he with ⟨_, _, he, -⟩ | ⟨_, he, -⟩ <;> cases he
 
 /-- The cascade a step of a run starts has its own effects among those the input's kind can queue
 (`begins_liveJ`), and as the kind reads them together (`begins_coJ`). -/

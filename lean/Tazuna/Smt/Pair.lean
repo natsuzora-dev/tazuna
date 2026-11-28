@@ -137,15 +137,42 @@ def encodePair (S : SymState v) (e1 e2 : Term) (k1 k2 : OwnPlace L v.event) : Ex
   let viol := Term.and (.not a1.fault) (.or (.and b1.fault (.not a2.fault)) (.and (.not b1.fault) (.not agree)))
   pure ⟨viol, allT [c1, c3, .ite a1.fault tt c2, .ite b1.fault tt c4], allT [ca, x1, x2, x3, x4]⟩
 
+/-- The input type of an own kind. -/
+def OwnKey.input : OwnKey → Ty
+  | .command _ _ _ i _ _ | .query _ _ _ i _ _ => i
+
+mutual
+/-- That a value of type `t`, coded by `z`, is what the pattern says (`SPat.Fits`). -/
+def patT : SPat → Ty → Term → Term
+  | .int n, .int, z => .eq z (.int n)
+  | .ctor k fs, .adt (i + 1) a vs, z => match L.find? (.adt (i + 1) a vs) with
+    | some (d, _) => if h : k < vs.length then .and (.is d k z) (patsT fs (vs.get ⟨k, h⟩) d k 0 z) else .bool false
+    | none => .bool true
+  | _, _, _ => .bool true
+/-- That fields `j` on of constructor `k` of datatype `d`, coded by `z`, are what the patterns say. -/
+def patsT : List SPat → List Ty → Nat → Nat → Nat → Term → Term
+  | p :: ps, t :: ts, d, k, j, z => .and (patT p t (.sel d k j z)) (patsT ps ts d k (j + 1) z)
+  | _, _, _, _, _, _ => .bool true
+end
+
 /-- The types of a pair question's variables: the state's, then the two effects. -/
 def pairTys : List Ty := stateTys v (shapes v) ++ [.dsl .effect [v.event], .dsl .effect [v.event]]
 
 /-- The place of the first effect's variable, after the state's. -/
 def pairVar : Nat := stateWidth v
 
+/-- That the effect of the own kind `k` at the variable `n` has an input its site sends (`sendPat`), where the site's
+sends say more than anything. -/
+def ownPat (k : OwnPlace L v.event) (n : Nat) : List Term :=
+  let key := (L.ownsOf v.event)[k]
+  let p := sendPat P (stepInputs v (shapes v) senv.nT (stateWidth v)) key.answer.site
+  if p ≠ .any ∧ key.input.isData = true then [patT L p key.input (.sel senv.dE (L.ownCtor v.event k) 0 (.var n))]
+  else []
+
 /-- A pair's two questions, over a well-formed state whose names are below its counter and pending ids below its next
 id, and well-formed effects of the two kinds: the bound question, whether the codes' condition or a step reached leaves the
-slots; and the target question, whether the two orders do not commute where everything fits. A pair with a kind the
+slots; and the target question, whether the two orders do not commute where everything fits and each effect has an
+input its site sends (`ownPat`). A pair with a kind the
 program never builds (`ownFound`) asserts false: no effect of it exists, so both questions are unsat and no model of
 an effect that does not decode is asked for. -/
 def pairQuestions (k1 k2 : OwnPlace L v.event) : Except Refusal (TypedScript × TypedScript) := do
@@ -163,7 +190,8 @@ def pairQuestions (k1 k2 : OwnPlace L v.event) : Except Refusal (TypedScript × 
   let found := if ownFound P L v.event k1 && ownFound P L v.event k2 then [] else [Term.bool false]
   let script (asserts : List Term) : TypedScript :=
     ⟨dts, pairTys v, vars, [wf, below, names] ++ tests ++ [w1, w2] ++ found, asserts⟩
-  pure (script [.or (.not o.codes) (.not o.cond)], script [o.codes, o.cond, o.viol])
+  pure (script [.or (.not o.codes) (.not o.cond)],
+    script ([o.codes, o.cond, o.viol] ++ ownPat L P v senv k1 n ++ ownPat L P v senv k2 (n + 1)))
 
 /-- Whether no input kind's cascade can have effects of the own kinds `k1` and `k2` waiting together (`together`): no
 step ever runs the two in either order, so the pair needs no question and its line reads proved (`PairOk`). -/
@@ -211,6 +239,64 @@ def decodeOwn (k : OwnPlace L v.event) (z : Val) : Option (OwnEffectV v.event) :
     let ⟨Γ, site⟩ ← siteFor P (Ty.fn [o] (.list v.event)) a
     pure (.query name c j o (← readData L j vi) (site.fn (← readData L (.tuple Γ) va)))
   | _, _ => none
+
+end
+
+section
+variable {M : Model} {L : Layout}
+
+theorem relAlts_of_inj (d : Nat) : (k : Nat) → {vs : List (List Ty)} → (v : Fin vs.length) →
+    (y : Ty.dens (vs.get v)) → (w : Val) → RelAlts L d k vs (Alts.inj v y) w →
+    ∃ vals, w = .ctor d (k + v.val) vals ∧ RelVs L (vs.get v) y vals
+  | _, _ :: _, ⟨0, _⟩, _, _, ⟨vals, e, h⟩ => ⟨vals, e, h⟩
+  | k, _ :: _, ⟨j + 1, hj⟩, y, w, h => by
+    obtain ⟨vals, e, hv⟩ := relAlts_of_inj d (k + 1) (vs := _) ⟨j, Nat.lt_of_succ_lt_succ hj⟩ y w h
+    exact ⟨vals, by rw [e]; congr 1; simp only; omega, hv⟩
+
+mutual
+/-- A coded value that is what the pattern says satisfies the pattern's term. -/
+theorem patT_holds : (p : SPat) → (t : Ty) → (x : t.den) → (z : Term) → RelV L t x (z.denote M) →
+    p.Fits t x → Holds M (patT L p t z)
+  | .int n, .int, x, z, hr, hf => by
+    have hr' : z.denote M = .int x := hr
+    have hf' : x = n := hf
+    subst hf'
+    simp [patT, Holds, Term.denote, hr', Val.toBool, BEq.beq, Val.beq]
+    rfl
+  | .ctor k fs, .adt (i + 1) a vs, x, z, hr, hf => by
+    obtain ⟨d, nn, hd, hra⟩ := hr
+    obtain ⟨w, y, rfl, hk, hfs⟩ := hf
+    obtain ⟨vals, hz, hrs⟩ := relAlts_of_inj d 0 w y _ hra
+    subst hk
+    simp only [Nat.zero_add] at hz
+    simp only [patT, hd, holds_and, w.isLt, ↓reduceDIte]
+    refine ⟨by simp [Holds, Term.denote, hz, Val.toBool], ?_⟩
+    exact patsT_holds fs (vs.get w) y d w.val 0 z vals hz (by simpa using hrs) hfs
+  | .any, _, _, _, _, _ => by simp [patT, Holds, Term.denote, Val.toBool]
+  | .int _, .str, _, _, _, _ | .int _, .list _, _, _, _, _ | .int _, .bag _, _, _, _, _
+  | .int _, .tuple _, _, _, _, _ | .int _, .fn .., _, _, _, _ | .int _, .adt .., _, _, _, _
+  | .int _, .table .., _, _, _, _ | .int _, .dsl .., _, _, _, _ | .int _, .param _, _, _, _, _
+  | .int _, .point _, _, _, _, _ | .int _, .id, _, _, _, _
+  | .ctor .., .int, _, _, _, _ | .ctor .., .str, _, _, _, _ | .ctor .., .list _, _, _, _, _
+  | .ctor .., .bag _, _, _, _, _ | .ctor .., .tuple _, _, _, _, _ | .ctor .., .fn .., _, _, _, _
+  | .ctor .., .adt 0 .., _, _, _, _ | .ctor .., .table .., _, _, _, _ | .ctor .., .dsl .., _, _, _, _
+  | .ctor .., .param _, _, _, _, _ | .ctor .., .point _, _, _, _, _ | .ctor .., .id, _, _, _, _ => by
+    simp [patT, Holds, Term.denote, Val.toBool]
+theorem patsT_holds : (ps : List SPat) → (ts : List Ty) → (xs : Ty.dens ts) → (d k j : Nat) → (z : Term) →
+    (vals : List Val) → z.denote M = .ctor d k vals → RelVs L ts xs (vals.drop j) → SPat.Fitss ps ts xs →
+    Holds M (patsT L ps ts d k j z)
+  | p :: ps, t :: ts, (x, xs), d, k, j, z, vals, hz, hr, hf => by
+    obtain ⟨w, ws, hw, hrw, hrs⟩ := hr
+    have hj : vals[j]? = some w := by rw [← List.head?_drop, hw]; rfl
+    have hsel : (Term.sel d k j z).denote M = w := by
+      simp [Term.denote, hz, hj]
+    simp only [patsT, holds_and]
+    refine ⟨patT_holds p t x _ (by rw [hsel]; exact hrw) hf.1, patsT_holds ps ts xs d k (j + 1) z vals hz ?_ hf.2⟩
+    rw [← List.drop_drop, hw]
+    simpa using hrs
+  | [], _, _, _, _, _, _, _, _, _, _ | _ :: _, [], _, _, _, _, _, _, _, _, _ => by
+    simp [patsT, Holds, Term.denote, Val.toBool]
+end
 
 end
 
@@ -780,6 +866,45 @@ theorem not_alone {P : List AnySite} (senv : StepEnv L (shapes v)) {k1 k2 : OwnP
     L.alone P v senv k1 k2 = false := by
   simp only [Layout.alone, OwnKey.holds_site h1, OwnKey.holds_site h2, hc, Bool.not_true]
 
+/-- An effect a model codes at the variable `n`, of the own kind `k`, whose input its site sends satisfies the kind's
+pattern terms (`ownPat`). -/
+theorem ownPat_holds {P : List AnySite} (senv : StepEnv L (shapes v)) {k : OwnPlace L v.event} {n : Nat}
+    {x : OwnEffectV v.event} (hx : RelV L (.dsl .effect [v.event]) x.effect (M.vars n))
+    (ht : Holds M (.is senv.dE (L.ownCtor v.event k) (.var n)))
+    (hf : x.Fits (sendPat P (stepInputs v (shapes v) senv.nT (stateWidth v)) x.site)) :
+    ∀ a ∈ ownPat L P v senv k n, Holds M a := by
+  obtain ⟨vals, hz, hh⟩ := own_key hx ht rfl
+  rw [← OwnKey.holds_site hh] at hf
+  unfold ownPat
+  intro a ha
+  dsimp only at ha
+  split at ha
+  · rename_i hc
+    simp only [List.mem_singleton] at ha
+    subst ha
+    have hsel : ∀ vi va, vals = [vi, va] →
+        (Term.sel senv.dE (L.ownCtor v.event k) 0 (.var n)).denote M = vi := fun vi va hv => by
+      simp [Term.denote, hz, hv]
+    revert hh
+    revert hf
+    revert hc
+    generalize (L.ownsOf v.event)[k] = key
+    intro hc hf hh
+    cases key with
+    | command ev name c i j an =>
+      cases x with
+      | command name' c' i' j' value f =>
+        obtain ⟨-, -, rfl, -, -, -, vi, va, hv, hrd, -⟩ := hh
+        exact patT_holds _ _ _ _ (by rw [hsel vi va hv]; exact relD_up i' hc.2 value vi hrd) (hf hc.2)
+      | query => exact hh.elim
+    | query ev name c i o an =>
+      cases x with
+      | query name' c' i' o' value f =>
+        obtain ⟨-, -, rfl, -, -, -, vi, va, hv, hrd, -⟩ := hh
+        exact patT_holds _ _ _ _ (by rw [hsel vi va hv]; exact relD_up i' hc.2 value vi hrd) (hf hc.2)
+      | command => exact hh.elim
+  · cases ha
+
 /-- A pair's questions at a model of their variables whose state is one a pair question assumes (pending ids below
 the next id, names below the counter) and whose effect variables hold the pair's kinds: the questions' context holds,
 so an unsat bound question makes the codes and the condition hold, and an unsat target question leaves only orders
@@ -798,7 +923,9 @@ theorem pair_unfold {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P
     (hreach1 : x1.effect.Reach P) (hreach2 : x2.effect.Reach P) :
     ∃ o, encodePair L T P v senv (SymState.vars 0) (.var (pairVar v)) (.var (pairVar v + 1)) k1 k2 = .ok o ∧
       (Unsat L bq → Holds M o.codes ∧ Holds M o.cond) ∧
-      (Unsat L tq → Holds M o.codes → Holds M o.cond → ¬ Holds M o.viol) := by
+      (Unsat L tq → x1.Fits (sendPat P (stepInputs v (shapes v) senv.nT (stateWidth v)) x1.site) →
+        x2.Fits (sendPat P (stepInputs v (shapes v) senv.nT (stateWidth v)) x2.site) →
+        Holds M o.codes → Holds M o.cond → ¬ Holds M o.viol) := by
   obtain ⟨o, ho, hq⟩ := bind_ok.1 hq
   obtain ⟨wf, hwf, hq⟩ := bind_ok.1 hq
   obtain ⟨below, hbl, hq⟩ := bind_ok.1 hq
@@ -825,7 +952,7 @@ theorem pair_unfold {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P
     · exact ht2
     · exact ownWf_holds hL senv.hE hx1 ht1 (need_ok.1 hw1)
     · exact ownWf_holds hL senv.hE hx2 ht2 (need_ok.1 hw2)
-  refine ⟨o, ho, fun hbq => ?_, fun htq hc hd hv => ?_⟩
+  refine ⟨o, ho, fun hbq => ?_, fun htq hp1 hp2 hc hd hv => ?_⟩
   · obtain ⟨a, ha, hna⟩ := hbq.noModel M hM hW
     rcases List.mem_append.1 ha with ha | ha
     · exact (hna (hpre a ha)).elim
@@ -836,11 +963,15 @@ theorem pair_unfold {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P
   · obtain ⟨a, ha, hna⟩ := htq.noModel M hM hW
     rcases List.mem_append.1 ha with ha | ha
     · exact hna (hpre a ha)
-    simp only [List.mem_cons, List.not_mem_nil, or_false] at ha
-    rcases ha with rfl | rfl | rfl
-    · exact hna hc
-    · exact hna hd
-    · exact hna hv
+    rcases List.mem_append.1 ha with ha | ha
+    rcases List.mem_append.1 ha with ha | ha
+    · simp only [List.mem_cons, List.not_mem_nil, or_false] at ha
+      rcases ha with rfl | rfl | rfl
+      · exact hna hc
+      · exact hna hd
+      · exact hna hv
+    · exact hna (ownPat_holds senv hx1 ht1 hp1 a ha)
+    · exact hna (ownPat_holds senv hx2 ht2 hp2 a ha)
 
 /-- Two own effects a model codes are effects of a listed pair of own kinds, whose tests the model's effect variables
 pass (T5b, `ownPairs_complete`). -/
@@ -874,7 +1005,9 @@ theorem pair_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P 
     (hx2 : RelV L (.dsl .effect [v.event]) x2.effect (M.vars (pairVar v + 1)))
     (hreach1 : x1.effect.Reach P) (hreach2 : x2.effect.Reach P)
     (ht1 : Holds M (.is senv.dE (L.ownCtor v.event k1) (.var (pairVar v))))
-    (ht2 : Holds M (.is senv.dE (L.ownCtor v.event k2) (.var (pairVar v + 1)))) :
+    (ht2 : Holds M (.is senv.dE (L.ownCtor v.event k2) (.var (pairVar v + 1))))
+    (hp1 : x1.Fits (sendPat P (stepInputs v (shapes v) senv.nT (stateWidth v)) x1.site))
+    (hp2 : x2.Fits (sendPat P (stepInputs v (shapes v) senv.nT (stateWidth v)) x2.site)) :
     Step.PairCommutes T a0 x1 x2 := by
   obtain ⟨bq, tq, hq, htq, hbq⟩ := hl
   replace htq := htq.resolve_right (by rw [hna]; decide)
@@ -885,7 +1018,7 @@ theorem pair_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P 
     have hcodes := (pair_codes ho).2 hc
     ⟨hcodes, (pair_fits chk senv hR hinv hqk hx1 hx2 hreach1 hreach2 ht1 ht2 ho hcodes).2 hf⟩
   exact pair_commutes chk hv senv hR hinv hqk hsa (t1 := .var (pairVar v)) (t2 := .var (pairVar v + 1)) hb1 hb2 hx1 hx2
-    hreach1 hreach2 ht1 ht2 ho hcc.1 hcc.2 (ht htq hcc.1 hcc.2)
+    hreach1 hreach2 ht1 ht2 ho hcc.1 hcc.2 (ht htq hp1 hp2 hcc.1 hcc.2)
 
 end
 

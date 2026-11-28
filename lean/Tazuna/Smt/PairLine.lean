@@ -227,8 +227,9 @@ theorem pair_model (hL : SortedLayout L) {s : State v} (hkeys : Step.KeysOk T s)
 
 /-- What the pair lines say of a state, whichever verdict each reads: any two waiting own effects commute from every
 step in progress whose state fits the slots, whose names are below its counter, whose pending requests and waiting
-effects are the program's, and whose two effects some value codes and some input kind's step can have waiting together
-(`coQueued`), where every line reading within the bounds has the two orders fit the slots. -/
+effects are the program's, and whose two effects some value codes, some input kind's step can have waiting together
+(`coQueued`) and have inputs their sites send (`sendPat`), where every line reading within the bounds has the two
+orders fit the slots. -/
 theorem pairs_at {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (hv : v.Equivariant)
     (hL : SortedLayout L) (senv : StepEnv L (shapes v))
     {a0 : Step.Acc v} {x1 x2 : OwnEffectV v.event}
@@ -239,7 +240,9 @@ theorem pairs_at {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E 
     (hb2 : Below (fun P x => OwnEffectV.Rel P x x) a0.state.fresh x2) (he1 : ∃ z, RelV L (.dsl .effect [v.event]) x1.effect z)
     (he2 : ∃ z, RelV L (.dsl .effect [v.event]) x2.effect z)
     (hreach1 : x1.effect.Reach P) (hreach2 : x2.effect.Reach P)
-    (hco : coQueued P (stepInputs v (shapes v) senv.nT (stateWidth v)) x1.site x2.site = true) :
+    (hco : coQueued P (stepInputs v (shapes v) senv.nT (stateWidth v)) x1.site x2.site = true)
+    (hp1 : x1.Fits (sendPat P (stepInputs v (shapes v) senv.nT (stateWidth v)) x1.site))
+    (hp2 : x2.Fits (sendPat P (stepInputs v (shapes v) senv.nT (stateWidth v)) x2.site)) :
     Step.PairCommutes T a0 x1 x2 := by
   obtain ⟨M, hM, hsel, hS, hx1, hx2⟩ := pair_model hL hkeys hW he1 he2
   obtain ⟨p, hp, ht1, ht2⟩ := pair_kinds senv hx1 hx2
@@ -247,7 +250,7 @@ theorem pairs_at {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E 
   obtain ⟨_, -, h2⟩ := own_key hx2 ht2 rfl
   rcases hall p hp with hline | hap | ⟨hal, -⟩
   · exact pair_sound chk hv hL senv hline (not_alone senv h1 h2 hco) hM hsel hS hinv.below hsupp hqk hsa hb1 hb2 hx1
-      hx2 hreach1 hreach2 ht1 ht2
+      hx2 hreach1 hreach2 ht1 ht2 hp1 hp2
   · rw [not_apart senv h1 h2 (coQueued_together hco)] at hap
     cases hap
   · rw [not_alone senv h1 h2 hco] at hal

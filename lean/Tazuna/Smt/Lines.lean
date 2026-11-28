@@ -116,6 +116,7 @@ theorem cascade_lines (c : CheckedSpec) (hv : v ∈ c.spec.services) (hL : Sorte
     hb.2.1.inv hs hq hsa (fun P hP => (hsb P hP).2.2 _ (List.getElem_mem hi))
     (fun P hP => (hsb P hP).2.2 _ (List.getElem_mem hj)) (hb.2.2.1 _ (List.getElem_mem hi))
     (hb.2.2.1 _ (List.getElem_mem hj)) hr1 hr2 (coQueued_at hm hb.2.2.2.1 hb.2.2.2.2 hi hj hij)
+    (fits_at hm hb.2.2.2.1 hb.2.2.2.2 (List.getElem_mem hi)) (fits_at hm hb.2.2.2.1 hb.2.2.2.2 (List.getElem_mem hj))
 
 /-- A timer's context fits the slots: the instance's key, its state and the records embed. -/
 def CtxFits (L : Layout) {r e : Ty} (m : MachineV r e) (records : r.den0) (key : m.key.den0) (st : m.state.den0) :

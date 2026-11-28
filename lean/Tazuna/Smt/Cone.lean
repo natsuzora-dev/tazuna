@@ -91,14 +91,18 @@ def KindCo.rel (c : KindCo) (s1 s2 : SiteId) : Bool :=
   s1 ∈ c.casc || s2 ∈ c.casc || (s1, s2) ∈ c.entry.pairs || (s2, s1) ∈ c.entry.pairs
 
 /-- What a step of the kind can have waiting together. An event line applies one event, so its reactions run once
-on it and start what `reactionsCo` reads off them; what the cascade's internal steps start is read off the events
-they can apply (`cascEvs`). None for any other kind, whose own effects may wait together in any number. -/
-def SymInput.co (P : List AnySite) : SymInput v shs n → Option KindCo
-  | .event k _ => do
-    let i ← eventDecl v
-    let cs ← cascEvs P v i
-    pure ⟨(v.liveSites i (fun j => cs.contains j) false).map (·.2.2.site),
-      reactionsCo i (fun j => ((v.subscribes.get k).wrap.evs i ++ v.cascadeEvs i).contains j) v.reactions⟩
+on it and start what `reactionsCo` reads off them; a clock line's timers start any number of effects of the machines'
+`effect` functions, each as its code builds it (`machinesCo`); what the cascade's internal steps start is read off
+the events they can apply (`cascEvs`). None for any other kind, whose own effects may wait together in any number,
+with any input. -/
+def SymInput.co (P : List AnySite) (inp : SymInput v shs n) : Option KindCo := do
+  let i ← eventDecl v
+  let cs ← cascEvs P v i
+  let casc := (v.liveSites i (fun j => cs.contains j) false).map (·.2.2.site)
+  match inp with
+  | .event k _ => pure ⟨casc, reactionsCo i (fun j => ((v.subscribes.get k).wrap.evs i ++ v.cascadeEvs i).contains j)
+      v.reactions⟩
+  | .clock _ => pure ⟨casc, machinesCo v.machines⟩
   | _ => none
 
 /-- What a step of the kind keeps of its waiting effects (`Step.QueueCo`), where the kind bounds them. -/
@@ -113,6 +117,22 @@ def coQueued (P : List AnySite) (inps : List (SymInput v shs n)) (s1 s2 : SiteId
     | none => true) && match inp.co P with
     | some c => c.rel s1 s2
     | none => true
+
+/-- What an effect answered at `s` sends in a step of the kind: anything where the cascade's internal steps can start
+it, else what the kind's items for `s` allow (`SPat.common`). -/
+def KindCo.pat (c : KindCo) (s : SiteId) : SPat :=
+  if s ∈ c.casc then .any else SPat.common ((c.entry.items.filter (·.1 = s)).map (·.2))
+
+/-- What an effect answered at `s` sends in any step of `inps` that can queue it: what every such kind allows. -/
+def sendPat (P : List AnySite) (inps : List (SymInput v shs n)) (s : SiteId) : SPat :=
+  SPat.common (inps.filterMap fun inp =>
+    if (match inp.live P with
+      | some l => decide (s ∈ l)
+      | none => true) then
+      some (match inp.co P with
+        | some c => c.pat s
+        | none => .any)
+    else none)
 
 theorem coQueued_of {P : List AnySite} {inps : List (SymInput v shs n)} {inp : SymInput v shs n} (hm : inp ∈ inps)
     {s1 s2 : SiteId} (hl : ∀ l, inp.live P = some l → s1 ∈ l ∧ s2 ∈ l)
@@ -374,15 +394,24 @@ theorem cascEvs_some {i : Nat} {cs : List Nat} (h : cascEvs P v i = some cs) :
   · cases h
 
 theorem co_some {inp : SymInput v shs n} {c : KindCo} (h : inp.co P = some c) :
-    ∃ k sv i cs, inp = .event k sv ∧ eventDecl v = some i ∧ cascEvs P v i = some cs ∧
-      c = ⟨(v.liveSites i (fun j => cs.contains j) false).map (·.2.2.site),
-        reactionsCo i (fun j => ((v.subscribes.get k).wrap.evs i ++ v.cascadeEvs i).contains j) v.reactions⟩ := by
+    ∃ i cs, eventDecl v = some i ∧ cascEvs P v i = some cs ∧
+      c.casc = (v.liveSites i (fun j => cs.contains j) false).map (·.2.2.site) ∧
+      ((∃ k sv, inp = .event k sv ∧
+        c.entry = reactionsCo i (fun j => ((v.subscribes.get k).wrap.evs i ++ v.cascadeEvs i).contains j) v.reactions) ∨
+        ∃ t, inp = .clock t ∧ c.entry = machinesCo v.machines) := by
+  simp only [SymInput.co, Option.bind_eq_bind, Option.bind_eq_some_iff] at h
+  obtain ⟨i, hi, cs, hcs, h⟩ := h
+  refine ⟨i, cs, hi, hcs, ?_⟩
   cases inp with
   | event k sv =>
-    simp only [SymInput.co, Option.bind_eq_bind, Option.bind_eq_some_iff, Option.pure_def, Option.some.injEq] at h
-    obtain ⟨i, hi, cs, hcs, rfl⟩ := h
-    exact ⟨k, sv, i, cs, rfl, hi, hcs, rfl⟩
-  | _ => simp [SymInput.co] at h
+    simp only [Option.pure_def, Option.some.injEq] at h
+    subst h
+    exact ⟨rfl, .inl ⟨k, sv, rfl, rfl⟩⟩
+  | clock t =>
+    simp only [Option.pure_def, Option.some.injEq] at h
+    subst h
+    exact ⟨rfl, .inr ⟨t, rfl, rfl⟩⟩
+  | _ => cases h
 
 /-- The cascade of an event line starts with what its kind reads (`SymInput.co`). -/
 theorem coJ_event (hv : v.Reach P E) (k : Fin v.subscribes.length) {sv : Term} (s : State v)
@@ -390,10 +419,15 @@ theorem coJ_event (hv : v.Reach P E) (k : Fin v.subscribes.length) {sv : Term} (
     (h : Step.applyEvents T { state := s } [(v.subscribes.get k).wrap.fn (value, ())] = .ok a) :
     (SymInput.event (shs := shs) (slots := n) k sv).CoJ P a := by
   intro c hc
-  obtain ⟨_, _, i, cs, he, hi, hcs, rfl⟩ := co_some hc
+  obtain ⟨i, cs, hi, hcs, hcasc, he⟩ := co_some hc
+  rcases he with ⟨_, _, he, hentry⟩ | ⟨_, he, -⟩
+  case inr => cases he
   cases he
   obtain ⟨hq, -, -⟩ := cascEvs_some hcs
   have hi15 := (eventDecl_some hi).1
+  obtain ⟨casc, entry⟩ := c
+  simp only at hcasc hentry
+  subst hcasc hentry
   refine Step.event_queueCo T hi15 hq hv (okV := (· ∈ (v.subscribes.get k).wrap.evs i ++ v.cascadeEvs i))
     (fun _ => ⟨List.elem_eq_true_of_mem, List.mem_of_elem_eq_true⟩)
     (fun m hm z hz => List.mem_map.2 ⟨z, by
@@ -407,14 +441,30 @@ theorem coJ_event (hv : v.Reach P E) (k : Fin v.subscribes.length) {sv : Term} (
   exact Fun.ok_eval hi15 _ (fun k hk => List.mem_append_left _ hk) (oks_free _ hΓ _) _
     (oks_free _ (by simp only [Ty.mentionsL, hevt]; rfl) _)
 
+/-- The cascade of a clock line starts with what its kind reads. -/
+theorem coJ_clock (hv : v.Reach P E) {time : Term} (s : State v) (fuel : Nat) {s' : State v}
+    {effs : List (Sender × EffectV v.event)} (hf : Step.fire s fuel = some (s', effs)) {a : Step.Acc v}
+    (h : Step.start { state := s' } effs = .ok a) : (SymInput.clock (shs := shs) (slots := n) time).CoJ P a := by
+  intro c hc
+  obtain ⟨i, cs, hi, hcs, hcasc, he⟩ := co_some hc
+  rcases he with ⟨_, _, he, -⟩ | ⟨_, he, hentry⟩
+  · cases he
+  · obtain ⟨casc, entry⟩ := c
+    simp only at hentry
+    subst hentry
+    exact Step.clock_queueCo hv s fuel hf h
+
 /-- A step of the cascade keeps what its kind reads. -/
 theorem coJ_pick (hv : v.Reach P E) {inp : SymInput v shs n} {a : Step.Acc v} (ha : inp.CoJ P a)
     (hqk : Step.QueueOk P a) {j : Nat} (hj : j < a.own.length) {a' : Step.Acc v}
     (h : Step.runOwn T { a with own := a.own.eraseIdx j } a.own[j] = .ok a') : inp.CoJ P a' := by
   intro c hc
   have hac := ha c hc
-  obtain ⟨_, _, i, cs, -, hi, hcs, rfl⟩ := co_some hc
+  obtain ⟨i, cs, hi, hcs, hcasc, -⟩ := co_some hc
   obtain ⟨hq, hcas, hans⟩ := cascEvs_some hcs
+  obtain ⟨casc, entry⟩ := c
+  simp only at hcasc
+  subst hcasc
   have hi15 := (eventDecl_some hi).1
   exact Step.queueCo_pick T hi15 hq hv (okV := (· ∈ cs)) (fun _ => ⟨List.elem_eq_true_of_mem, List.mem_of_elem_eq_true⟩)
     hcas (fun z hz => List.mem_map.2 ⟨z, hz, rfl⟩) hac hj
@@ -425,7 +475,7 @@ the kind relates. -/
 theorem queueCo_rel {C : List SiteId} {c : Co} {a : Step.Acc v} (h : Step.QueueCo C c a) {i j : Nat}
     (hi : i < a.own.length) (hj : j < a.own.length) (hij : i ≠ j) :
     KindCo.rel ⟨C, c⟩ a.own[i].site a.own[j].site = true := by
-  have hp := List.pairwise_iff_getElem.1 h
+  have hp := List.pairwise_iff_getElem.1 h.2
   simp only [KindCo.rel, Bool.or_eq_true, decide_eq_true_eq]
   rcases Nat.lt_or_gt_of_ne hij with hlt | hlt
   · rcases hp i j hi hj hlt with h1 | h1 | h1 | h1
@@ -446,6 +496,32 @@ theorem coQueued_at {inps : List (SymInput v shs n)} {inp : SymInput v shs n} (h
     coQueued P inps a.own[i].site a.own[j].site = true :=
   coQueued_of hm (fun l h => ⟨liveJ_site hl _ (List.getElem_mem hi) l h, liveJ_site hl _ (List.getElem_mem hj) l h⟩)
     fun c h => queueCo_rel (hc c h) hi hj hij
+
+/-- A waiting effect of a cascade of a kind of `inps` sends what `sendPat` allows for its site. -/
+theorem fits_at {inps : List (SymInput v shs n)} {inp : SymInput v shs n} (hm : inp ∈ inps) {a : Step.Acc v}
+    (hl : inp.LiveJ P a) (hc : inp.CoJ P a) {o : OwnEffectV v.event} (ho : o ∈ a.own) :
+    o.Fits (sendPat P inps o.site) := by
+  have hkind : o.Fits (match inp.co P with
+      | some c => c.pat o.site
+      | none => .any) := by
+    cases hco : inp.co P with
+    | none => exact o.fits_any
+    | some c =>
+      simp only
+      unfold KindCo.pat
+      split
+      · exact o.fits_any
+      · rename_i hn
+        rcases (hc c hco).1 o ho with h | ⟨p, hp, hf⟩
+        · exact absurd h hn
+        · exact OwnEffectV.fits_common (List.mem_map.2 ⟨_, List.mem_filter.2 ⟨hp, by simp⟩, rfl⟩) hf
+  have hlive : (match inp.live P with
+      | some l => decide (o.site ∈ l)
+      | none => true) = true := by
+    cases h : inp.live P with
+    | none => rfl
+    | some l => exact decide_eq_true (liveJ_site hl o ho l h)
+  exact OwnEffectV.fits_common (List.mem_filterMap.2 ⟨inp, hm, by rw [hlive]; rfl⟩) hkind
 
 end
 
