@@ -49,10 +49,10 @@ private def timerE {Γ : List Ty} {st : Ty} (d : Expr [] Γ (.point .ms)) (x : E
 private def someE {Γ : List Ty} {t : Ty} (x : Expr [] Γ t) : Expr [] Γ (Ty.option t) :=
   .ctor (vs := [[t], []]) ⟨0, by simp⟩ (.cons x .nil)
 private def noneE {Γ : List Ty} {t : Ty} : Expr [] Γ (Ty.option t) := .ctor (vs := [[t], []]) ⟨1, by simp⟩ .nil
-/-- A kept function written at `line` of this module, capturing nothing. -/
-private def keptE {Γ : List Ty} {t : Ty} (line : Nat) (body : Expr [] [] t) (ht : t.isData = true := by rfl) :
+/-- The `n`th kept function of the global `examples`, capturing nothing. -/
+private def keptE {Γ : List Ty} {t : Ty} (n : Nat) (body : Expr [] [] t) (ht : t.isData = true := by rfl) :
     Expr [] Γ (.dsl .closure [t]) :=
-  .close ⟨"examples", line, 1, 0⟩ .nil rfl ht body
+  .close ⟨"examples", n⟩ .nil rfl ht body
 
 /-- `request_command(external_command("ping"), "hi", fn(answer) { case answer { Ok(_) -> [1]  Error(_) -> [] } })`. -/
 private def pingE {Γ : List Ty} : Expr [] Γ (.dsl .effect [.int]) :=

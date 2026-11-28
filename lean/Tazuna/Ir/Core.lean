@@ -5,14 +5,14 @@ import Tazuna.Ir.Builtin
 
 namespace Tazuna.Ir
 
-/-- Where a program writes a kept function: the module, the line and column in its source, and the index of the
-global that holds it. Positions alone repeat across modules, and a generic function's repeat in each of its
-instances, each a global of its own. -/
+/-- Where a program writes a kept function, by the program's structure and never by a source position, so an edit
+that changes no meaning (a blank line, an import, the order of declarations) names every site the same, as rustc
+names a closure by its definition path and `{closure#n}`: the global instance that writes it (its name, with its type
+arguments where it has type variables, since each instance is a global of its own) and which of that instance's kept
+functions it is, counted from 1 in source order. Ordinal 0 is no site of the program's. -/
 structure SiteId where
-  module : String
-  line : Nat
-  col : Nat
-  index : Nat
+  global : String
+  ordinal : Nat
 deriving DecidableEq, Repr
 
 /-- A variable of type `t` in the context `Γ`, the innermost binding first. -/

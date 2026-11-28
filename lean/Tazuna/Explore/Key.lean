@@ -82,7 +82,7 @@ end
 end Key
 
 /-- A site as a term. -/
-def siteKey (s : SiteId) : Erl := .tuple [.bin s.module, .int s.line, .int s.col, .int s.index]
+def siteKey (s : SiteId) : Erl := .tuple [.bin s.global, .int s.ordinal]
 
 /-- A kept function as a term: its site and the values it captured. Sites are told apart by name (`SitesUnique`), so
 the site gives the source. -/

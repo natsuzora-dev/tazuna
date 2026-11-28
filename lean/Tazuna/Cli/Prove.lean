@@ -278,15 +278,19 @@ def timerReport (L : Layout) (m : MachineV v.records v.event) (step : String) (a
     -- Unreachable while the solver answers as SMT-LIB says (`timer_decode`).
     | none => .error s!"a model of {step} does not decode"
 
-/-- An own kind as a line names it: its command or query, and where its `on_answer` is written when another own kind
-has the same name. -/
+/-- An own kind as a line names it: its command or query, and where another own kind has the same name, the function
+that writes its `on_answer` (`SiteId`), and where that function writes several of the name's, which one in source
+order. So no source position names it, and a kept function added elsewhere in the function renames nothing. -/
 def ownText (owns : List OwnKey) (key : OwnKey) : String :=
   let word := match key with
     | .command .. => "command"
     | .query .. => "query"
   let a := key.answer.site
-  if (owns.filter (·.name == key.name)).length > 1 then s!"own {word} {key.name} answered at {a.module}:{a.line}:{a.col}"
-  else s!"own {word} {key.name}"
+  let same := owns.filter (·.name == key.name)
+  let here := ((same.map (·.answer.site)).filter (·.global == a.global) |>.map (·.ordinal)).mergeSort.eraseDups
+  if same.length ≤ 1 then s!"own {word} {key.name}"
+  else if here.length ≤ 1 then s!"own {word} {key.name} answered in {a.global}"
+  else s!"own {word} {key.name} answered in {a.global}#{here.idxOf a.ordinal + 1}"
 
 def effectWire (T : List TypeDecl) {e : Ty} : EffectV e → Show Wire
   | .request r => do pure (.obj [("request", .str r.name), ("input", ← wireOf T r.input r.value)])

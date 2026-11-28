@@ -334,9 +334,9 @@ theorem funKey_read {P : List AnySite} (hP : SitesUnique P) (hR : ∀ c c', A c 
     (h : funKey σ δ f = funKey σ' δ' g) : Fun.Rel R f g := by
   simp only [funKey, siteKey, Erl.tuple.injEq, List.cons.injEq, Erl.bin.injEq, Erl.int.injEq, Int.ofNat_inj,
     and_true] at h
-  obtain ⟨⟨hm, hl, hcol, hi⟩, he⟩ := h
+  obtain ⟨⟨hm, hi⟩, he⟩ := h
   have hs : f.site = g.site := by
-    cases hf' : f.site; cases hg' : g.site; rw [hf', hg'] at hm hl hcol hi; simp_all
+    cases hf' : f.site; cases hg' : g.site; rw [hf', hg'] at hm hi; simp_all
   have e := site_eq hP hf hg hs
   obtain ⟨site, G, defs, Γ, env, hΓ, ht, body⟩ := f
   obtain ⟨site', G', defs', Γ', env', hΓ', ht', body'⟩ := g

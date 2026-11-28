@@ -82,3 +82,32 @@ done
 # A written trace is one verify passes.
 (cd "$work/gone" && launch verify m written/counter >verify.jsonl) ||
   { echo "determinism: verify did not pass the traces search wrote:"; cat "$work/gone/verify.jsonl"; exit 1; }
+
+# An edit that changes no meaning changes no output: edits/ searched as it is and with a comment and blank lines
+# added, an import added, its declarations in reverse order and a local variable renamed, each from an empty cache,
+# must print the same lines, exit the same, write the same files and ask the same scripts (the cache's answer files).
+mkdir -p "$work/plain" "$work/edited/src"
+cp -R "$here/edits/src" "$work/plain/"
+{
+  printf '// A comment that changes no meaning.\n\n\n'
+  sed -n '1p' "$here/edits/src/m.gleam"
+  echo 'import gleam/int'
+  # One paragraph per declaration after the imports; reversed.
+  sed '1d' "$here/edits/src/m.gleam" | awk 'BEGIN { RS = ""; ORS = "\n\n" } /^import/ { print; next } { p[++n] = $0 }
+    END { for (i = n; i >= 1; i--) print p[i] }' | sed -E 's/(^|[^a-z_])got([^a-z_0-9]|$)/\1amount_in\2/g'
+} >"$work/edited/src/m.gleam"
+for name in plain edited; do
+  code=0
+  (cd "$work/$name" && launch search m written >out.jsonl) || code=$?
+  echo "$code" >"$work/$name/exit"
+  (cd "$work/$name/build/tazuna/prove-cache" && find . -type f ! -path '*/direct/*' | sort) >"$work/$name/cache"
+done
+if ! cmp -s "$work/plain/out.jsonl" "$work/edited/out.jsonl" || ! cmp -s "$work/plain/exit" "$work/edited/exit"; then
+  echo "determinism: an edit that changes no meaning changed search's lines or exit code:"
+  diff "$work/plain/out.jsonl" "$work/edited/out.jsonl" || true
+  exit 1
+fi
+diff -r "$work/plain/written" "$work/edited/written" >/dev/null ||
+  { echo "determinism: an edit that changes no meaning changed the files search wrote"; exit 1; }
+cmp -s "$work/plain/cache" "$work/edited/cache" ||
+  { echo "determinism: an edit that changes no meaning changed a script:"; diff "$work/plain/cache" "$work/edited/cache" || true; exit 1; }

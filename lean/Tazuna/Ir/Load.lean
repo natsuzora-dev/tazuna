@@ -1,4 +1,5 @@
 import Tazuna.Ir.Elab
+import Tazuna.Semantics.Sites
 
 /-! Loading a whole IR: the type table, every global's signature, the check that no global depends on itself (through
 calls, constants or function values alike), elaboration in dependency order, and the root's type. -/
@@ -89,9 +90,9 @@ partial def demand {T : List TypeDecl} (c : Ctx) (name : String) (args : List Ty
       | none => fail pos s!"{n} needs the type argument {v}"
     demand c n args'
   let st ← get
-  let cx : Cx T st.G :=
-    { module := moduleOf name, index := st.G.length, σ, sigs := c.globals.map fun g => (g.name, g.sig), glob := st.glob }
-  let ⟨t, body⟩ ← inGlobal c g.name do
+  let owner := if args.isEmpty then name else s!"{name}({", ".intercalate (args.map (showTy T))})"
+  let elabAt (site : At → SiteId) : M T ((t : Ty) × Expr st.G [] t) := inGlobal c g.name do
+    let cx : Cx T st.G := { site, σ, sigs := c.globals.map fun g => (g.name, g.sig), glob := st.glob }
     let ty (s : STy) : E Ty := match toTy T σ s with | .ok t => pure t | .error e => fail g.pos e
     match g.body with
     | .fn params ret b =>
@@ -106,6 +107,13 @@ partial def demand {T : List TypeDecl} (c : Ctx) (name : String) (args : List Ty
       let want ← ty s
       let ⟨vt, ve⟩ ← elabExpr cx [] v
       pure ⟨want, ← coerce cx v.pos want vt ve⟩
+  -- A site's ordinal is its rank among the instance's sites in source order, so a first elaboration names each site
+  -- by its position only to rank them.
+  let key (p : At) : Nat := p.line * 2 ^ 32 + p.col
+  let ⟨t, body⟩ ← elabAt fun p => ⟨owner, key p⟩
+  let ranked := ((Expr.sites st.defs body).map (·.2.2.site.ordinal) ++
+    (Expr.effectSites st.defs body).map (·.2.2.2.site.ordinal)).mergeSort.eraseDups
+  let ⟨t, body⟩ ← if ranked.isEmpty then pure ⟨t, body⟩ else elabAt fun p => ⟨owner, ranked.idxOf (key p) + 1⟩
   set ({ G := t :: st.G, defs := .snoc st.defs t body, done := ((name, args), st.G.length, t) :: st.done } : St T)
 
 /-- Finds a global that depends on itself, reporting the reference that closes the cycle. -/

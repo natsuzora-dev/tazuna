@@ -856,14 +856,14 @@ def insertE : E (.fn [Ty.applyCtx recordsT, .int] recordsT) :=
     (.cons (recsE (.var .here)) (.cons (.var (.there .here)) (.cons (.var (.there .here)) .nil))))
 
 def pendingSites : List AnySite :=
-  [⟨[.int], _, ⟨⟨"m", 1, 1, 0⟩, [], .nil, rfl, rfl, payAnswerE⟩⟩, ⟨[.int], _, ⟨⟨"m", 2, 1, 0⟩, [], .nil, rfl, rfl, rateAnswerE⟩⟩,
-   ⟨[], _, ⟨⟨"m", 3, 1, 0⟩, [], .nil, rfl, rfl, rateEnsuresE⟩⟩]
+  [⟨[.int], _, ⟨⟨"m.f1", 1⟩, [], .nil, rfl, rfl, payAnswerE⟩⟩, ⟨[.int], _, ⟨⟨"m.f2", 1⟩, [], .nil, rfl, rfl, rateAnswerE⟩⟩,
+   ⟨[], _, ⟨⟨"m.f3", 1⟩, [], .nil, rfl, rfl, rateEnsuresE⟩⟩]
 
 /-- The reaction's source writes the three sites, so its requests can hold them (`senderShapes`); it starts none. -/
 def askR : ReactionV recordsT .int := ⟨"ask", .closed (.lam
-  (.let_ (.close ⟨"m", 1, 1, 0⟩ (.cons (.int 0) .nil) rfl rfl payAnswerE)
-  (.let_ (.close ⟨"m", 2, 1, 0⟩ (.cons (.int 0) .nil) rfl rfl rateAnswerE)
-  (.let_ (.close ⟨"m", 3, 1, 0⟩ .nil rfl rfl rateEnsuresE) (.list .nil)))))⟩
+  (.let_ (.close ⟨"m.f1", 1⟩ (.cons (.int 0) .nil) rfl rfl payAnswerE)
+  (.let_ (.close ⟨"m.f2", 1⟩ (.cons (.int 0) .nil) rfl rfl rateAnswerE)
+  (.let_ (.close ⟨"m.f3", 1⟩ .nil rfl rfl rateEnsuresE) (.list .nil)))))⟩
 
 def fxDeclared : List (String × DeclaredV) :=
   [("fx", .externalCommand "pay" .str .int .str), ("fx", .externalQuery "rate" .str .int (.closed rateEnsuresE))]
@@ -1283,14 +1283,14 @@ def sendE (k : Int) : Expr [] [.int] (.dsl .effect [.int]) :=
   let handle : Expr [] [.int] (.dsl .externalCommand [.int, Ty.nil, Ty.nil]) :=
     .call (.prim .externalCommand [.int, Ty.nil, Ty.nil] rfl) (.cons (.str (str! "send")) .nil)
   let body : Expr [] [.int] answerTyE := .lam (.list (.cons (.var (.there .here)) .nil))
-  let clo : Expr [] [.int] (.dsl .closure [answerTyE]) := .close ⟨"m", 3, 7, 0⟩ (.cons (.var .here) .nil) rfl rfl body
+  let clo : Expr [] [.int] (.dsl .closure [answerTyE]) := .close ⟨"m.f3", 7⟩ (.cons (.var .here) .nil) rfl rfl body
   .call (.prim .requestCommand effArgs rfl) (.cons handle (.cons (.bin .add (.var .here) (.int k)) (.cons clo .nil)))
 
 def sendKey (site : SiteId) : EffectKey :=
   ⟨.int, "send", .int, Ty.nil, some Ty.nil, none, ⟨site, [.int]⟩⟩
 
 def effLayout : Layout :=
-  Layout.addEffects (fun _ => 2) (Layout.addTys (fun _ => 2) { effects := [sendKey ⟨"m", 9, 9, 0⟩, sendKey ⟨"m", 3, 7, 0⟩] }
+  Layout.addEffects (fun _ => 2) (Layout.addTys (fun _ => 2) { effects := [sendKey ⟨"m.f9", 9⟩, sendKey ⟨"m.f3", 7⟩] }
     [.dsl .effect [.int], .int])
 
 /-- Whether the solver's value `v` is the variant of the effect `eff` holds: its kind's name and site, its input and
@@ -1344,15 +1344,15 @@ def sendPutE (k : Int) : Expr [] [putHandleT, .int] (.dsl .effect [evT]) :=
   let x : Expr [] [putHandleT, .int] .int := .var (.there .here)
   let body : Expr [] [.int] putAnswerT :=
     .lam (.list (.cons (.tuple (.cons (.var (.there .here)) (.cons (.var (.there .here)) .nil))) .nil))
-  let clo : Expr [] [putHandleT, .int] (.dsl .closure [putAnswerT]) := .close ⟨"m", 4, 2, 0⟩ (.cons x .nil) rfl rfl body
+  let clo : Expr [] [putHandleT, .int] (.dsl .closure [putAnswerT]) := .close ⟨"m.f4", 2⟩ (.cons x .nil) rfl rfl body
   .call (.prim .sendCommand [recordsT, evT, .str, .int, .str] rfl)
     (.cons (.var .here) (.cons (.bin .add x (.int k)) (.cons clo .nil)))
 
 def ownLayout : Layout :=
   Layout.addEffects (fun _ => 2) (Layout.addTys (fun _ => 2)
-    { effects := [⟨evT, "send", .int, Ty.nil, some Ty.nil, none, ⟨⟨"m", 9, 9, 0⟩, [.int]⟩⟩],
-      owns := [.command evT "put" .str .int .str ⟨⟨"m", 8, 8, 0⟩, [.int]⟩,
-        .command evT "put" .str .int .str ⟨⟨"m", 4, 2, 0⟩, [.int]⟩] }
+    { effects := [⟨evT, "send", .int, Ty.nil, some Ty.nil, none, ⟨⟨"m.f9", 9⟩, [.int]⟩⟩],
+      owns := [.command evT "put" .str .int .str ⟨⟨"m.f8", 8⟩, [.int]⟩,
+        .command evT "put" .str .int .str ⟨⟨"m.f4", 2⟩, [.int]⟩] }
     [.dsl .effect [evT], .int, evT, .tuple [.int]])
 
 /-- Whether the solver's value `v` is the variant of the own effect `eff`: its kind's name and site after the request
@@ -1397,7 +1397,7 @@ free slot holds some value of the effect datatype, which no value reads; the occ
 def sendsE (k : Int) : Expr [] [.int] (.list (.dsl .effect [.int])) := .list (.cons (sendE k) .nil)
 
 def effListLayout : Layout :=
-  Layout.addEffects (fun _ => 2) (Layout.addTys (fun _ => 2) { effects := [sendKey ⟨"m", 9, 9, 0⟩, sendKey ⟨"m", 3, 7, 0⟩] }
+  Layout.addEffects (fun _ => 2) (Layout.addTys (fun _ => 2) { effects := [sendKey ⟨"m.f9", 9⟩, sendKey ⟨"m.f3", 7⟩] }
     [.list (.dsl .effect [.int]), .int])
 
 /-- The items of a list's occupied slots. -/
@@ -1445,7 +1445,7 @@ def machineEffectE : Expr [] [] (.fn [mctxT] (Ty.option (.dsl .effect [.int]))) 
   let handle : Expr [] [mctxT] (.dsl .externalCommand [.int, Ty.nil, Ty.nil]) :=
     .call (.prim .externalCommand [.int, Ty.nil, Ty.nil] rfl) (.cons (.str (str! "send")) .nil)
   let body : Expr [] [.int] answerTyE := .lam (.list (.cons (.var (.there .here)) .nil))
-  let clo : Expr [] [mctxT] (.dsl .closure [answerTyE]) := .close ⟨"m", 3, 7, 0⟩ (.cons key .nil) rfl rfl body
+  let clo : Expr [] [mctxT] (.dsl .closure [answerTyE]) := .close ⟨"m.f3", 7⟩ (.cons key .nil) rfl rfl body
   let req : Expr [] [mctxT] (.dsl .effect [.int]) :=
     .call (.prim .requestCommand effArgs rfl) (.cons handle (.cons (.bin .add key (.int 1)) (.cons clo .nil)))
   .lam (.case (.bin (.eq rfl) st (.int 5))
@@ -1460,7 +1460,7 @@ def effectM : MachineV .int .int :=
     invariants := .closed (.lam (.list .nil)) }
 
 def machineEffectLayout : Layout :=
-  Layout.addTys (fun _ => 2) { effects := [sendKey ⟨"m", 9, 9, 0⟩, sendKey ⟨"m", 3, 7, 0⟩] }
+  Layout.addTys (fun _ => 2) { effects := [sendKey ⟨"m.f9", 9⟩, sendKey ⟨"m.f3", 7⟩] }
     [mctxT, Ty.option (.dsl .effect [.int]), .tuple [.int]]
 
 def machineEffectCheck (solver : Solver) : IO Bool := do
@@ -1766,7 +1766,7 @@ def startEffectOf (st : Ty) : Expr [] [] (.fn [Ty.machineCtx .int st recordsT] (
     .call (.prim .externalCommand [.int, Ty.nil, Ty.nil] rfl) (.cons (.str (str! "send")) .nil)
   let body : Expr [] [.int] answerTyE := .lam (.list (.cons (.var (.there .here)) .nil))
   let clo : Expr [] [Ty.machineCtx .int st recordsT] (.dsl .closure [answerTyE]) :=
-    .close ⟨"m", 3, 7, 0⟩ (.cons key .nil) rfl rfl body
+    .close ⟨"m.f3", 7⟩ (.cons key .nil) rfl rfl body
   let req : Expr [] [Ty.machineCtx .int st recordsT] (.dsl .effect [.int]) :=
     .call (.prim .requestCommand effArgs rfl) (.cons handle (.cons (.bin .add key (.int 1)) (.cons clo .nil)))
   .lam (.ctor (vs := [[Ty.dsl .effect [.int]], []]) ⟨0, by decide⟩ (.cons req .nil))
@@ -1799,7 +1799,7 @@ def dueM : MachineV recordsT .int :=
 def startSvc : ServiceV := { querySvc with name := "st", queries := [], machines := [startM] }
 
 def startLayout : Layout :=
-  Layout.addTys (fun _ => 3) { effects := [sendKey ⟨"m", 9, 9, 0⟩, sendKey ⟨"m", 3, 7, 0⟩] } (reactTys ++ [.tuple [.int]])
+  Layout.addTys (fun _ => 3) { effects := [sendKey ⟨"m.f9", 9⟩, sendKey ⟨"m.f3", 7⟩] } (reactTys ++ [.tuple [.int]])
 
 def startsCheck (solver : Solver) : IO Bool := do
   let L := startLayout
@@ -1859,7 +1859,7 @@ def fireM : MachineV recordsT .int := { dueM with name := "fire" }
 def fireSvc : ServiceV := { startSvc with name := "fi", machines := [fireM] }
 
 def fireLayout : Layout :=
-  Layout.addTys (fun _ => 3) { effects := [sendKey ⟨"m", 9, 9, 0⟩, sendKey ⟨"m", 3, 7, 0⟩] }
+  Layout.addTys (fun _ => 3) { effects := [sendKey ⟨"m.f9", 9⟩, sendKey ⟨"m.f3", 7⟩] }
     (reactTys ++ [.tuple [.int], fireM.table, Ty.machineCtx .int dueT recordsT, Ty.next dueT,
       Ty.timerCtx .int dueT recordsT, Ty.option (Ty.timer dueT), Ty.timer dueT, dueT])
 
@@ -2045,7 +2045,7 @@ requests of that shape, yet the machine writes none. -/
 def quietM : MachineV recordsT .int :=
   let key : Expr [] [invCtxT] .int := .field (ft := .int) "key" 0 (by simp) (.var .here)
   let body : Expr [] [.int] answerTyE := .lam (.list (.cons (.var (.there .here)) .nil))
-  { reactM with effect := .closed (.lam (.let_ (.close ⟨"m", 3, 7, 0⟩ (.cons key .nil) rfl rfl body)
+  { reactM with effect := .closed (.lam (.let_ (.close ⟨"m.f3", 7⟩ (.cons key .nil) rfl rfl body)
       (.ctor (vs := [[Ty.dsl .effect [.int]], []]) ⟨1, by decide⟩ .nil))) }
 
 def quietCheck (solver : Solver) : IO Bool := do
@@ -2095,7 +2095,7 @@ def fanSendE (k : Int) : Expr [] [Ty.reactionCtx recordsT, .int] (.dsl .effect [
     .call (.prim .externalCommand [.int, Ty.nil, Ty.nil] rfl) (.cons (.str (str! "send")) .nil)
   let body : Expr [] [.int] answerTyE := .lam (.list (.cons (.var (.there .here)) .nil))
   let clo : Expr [] [Ty.reactionCtx recordsT, .int] (.dsl .closure [answerTyE]) :=
-    .close ⟨"m", 4, 1, 0⟩ (.cons ev .nil) rfl rfl body
+    .close ⟨"m.f4", 1⟩ (.cons ev .nil) rfl rfl body
   .call (.prim .requestCommand effArgs rfl) (.cons handle (.cons (.bin .add ev (.int k)) (.cons clo .nil)))
 
 def fanE : Expr [] [] (.fn [Ty.reactionCtx recordsT, .int] (.list (.dsl .effect [.int]))) :=
@@ -2108,7 +2108,7 @@ def fanSvc : ServiceV := { writeSvc with name := "f", reactions := [fanR] }
 def fanShapes : List (PendingShape fanSvc.event) := shapes fanSvc
 
 def fanLayout (slots : Nat) : Layout :=
-  Layout.addTys (fun _ => slots) { effects := [sendKey ⟨"m", 3, 7, 0⟩, sendKey ⟨"m", 4, 1, 0⟩] }
+  Layout.addTys (fun _ => slots) { effects := [sendKey ⟨"m.f3", 7⟩, sendKey ⟨"m.f4", 1⟩] }
     (reactTys ++ [.tuple [.int], .tuple [], pendingTable fanShapes] ++ Tazuna.Smt.Expr.tys insertE ++
       Tazuna.Smt.Expr.tys invariantsE ++ Tazuna.Smt.Expr.tys wrapIntE ++ Tazuna.Smt.Expr.tys fanE)
 
@@ -2598,15 +2598,15 @@ read at place 1 (`queueAt`) must hold input 6, not the head's 4, and place 2 mus
 def putHandleE {Γ : List Ty} : Expr [] Γ (.dsl .command [recordsT, .int, .str, .int, .str]) :=
   .call (.prim .command [recordsT, .int, .str, .int, .str] rfl)
     (.cons (.str (str! "put")) (.cons aliceOwnE
-      (.cons (.close ⟨"m", 20, 1, 0⟩ .nil rfl rfl acceptsE)
-        (.cons (.close ⟨"m", 20, 2, 0⟩ .nil rfl rfl twiceDecideE)
-          (.cons (.close ⟨"m", 20, 3, 0⟩ .nil rfl rfl (.lam (.list .nil) : E (.fn [cctxT, recordsT] Ty.rules))) .nil)))))
+      (.cons (.close ⟨"m.f20", 1⟩ .nil rfl rfl acceptsE)
+        (.cons (.close ⟨"m.f20", 2⟩ .nil rfl rfl twiceDecideE)
+          (.cons (.close ⟨"m.f20", 3⟩ .nil rfl rfl (.lam (.list .nil) : E (.fn [cctxT, recordsT] Ty.rules))) .nil)))))
 
 def mixPutE (k : Int) : Expr [] [Ty.reactionCtx recordsT, .int] (.dsl .effect [.int]) :=
   let ev : Expr [] [Ty.reactionCtx recordsT, .int] .int := .var (.there .here)
   let body : Expr [] [.int] (.fn [Ty.result Ty.nil .str] (.list .int)) := .lam (.list (.cons (.var (.there .here)) .nil))
   let clo : Expr [] [Ty.reactionCtx recordsT, .int] (.dsl .closure [.fn [Ty.result Ty.nil .str] (.list .int)]) :=
-    .close ⟨"m", 21, 1, 0⟩ (.cons ev .nil) rfl rfl body
+    .close ⟨"m.f21", 1⟩ (.cons ev .nil) rfl rfl body
   .call (.prim .sendCommand [recordsT, .int, .str, .int, .str] rfl)
     (.cons putHandleE (.cons (.bin .add ev (.int k)) (.cons clo .nil)))
 
@@ -2617,11 +2617,11 @@ def mixSvc : ServiceV := { writeSvc with name := "x", reactions := [⟨"mix", .c
 
 def mixShapes : List (PendingShape mixSvc.event) := shapes mixSvc
 
-def putKey : OwnKey := .command .int "put" .str .int .str ⟨⟨"m", 21, 1, 0⟩, [.int]⟩
+def putKey : OwnKey := .command .int "put" .str .int .str ⟨⟨"m.f21", 1⟩, [.int]⟩
 
 def mixLayout (slots : Nat) : Layout :=
   let lits := Tazuna.Smt.Expr.lits acceptsE ++ Tazuna.Smt.Expr.lits twiceDecideE ++ Tazuna.Smt.Expr.lits mixE
-  Layout.addTys (listSlots (fun _ => slots) lits) { effects := [sendKey ⟨"m", 3, 7, 0⟩, sendKey ⟨"m", 4, 1, 0⟩], owns := [putKey] }
+  Layout.addTys (listSlots (fun _ => slots) lits) { effects := [sendKey ⟨"m.f3", 7⟩, sendKey ⟨"m.f4", 1⟩], owns := [putKey] }
     (reactTys ++ [.tuple [.int], .tuple [], .list .int, cctxT, Ty.result (.list .int) .str, pendingTable mixShapes] ++
       Tazuna.Smt.Expr.tys insertE ++ Tazuna.Smt.Expr.tys invariantsE ++ Tazuna.Smt.Expr.tys wrapIntE ++
       Tazuna.Smt.Expr.tys mixE ++ Tazuna.Smt.Expr.tys acceptsE ++ Tazuna.Smt.Expr.tys twiceDecideE)
@@ -2729,7 +2729,7 @@ instance table, next id and new wire ids read from the model must be what `Step.
 
 def answerFiveE : Expr [] [.int] (.fn [Ty.result Ty.nil .str] (.list .int)) := .lam (.list (.cons (.var (.there .here)) .nil))
 
-def answerFive : Site [.int] (.fn [Ty.result Ty.nil .str] (.list .int)) := ⟨⟨"m", 22, 1, 0⟩, [], .nil, rfl, rfl, answerFiveE⟩
+def answerFive : Site [.int] (.fn [Ty.result Ty.nil .str] (.list .int)) := ⟨⟨"m.f22", 1⟩, [], .nil, rfl, rfl, answerFiveE⟩
 
 def internalLayoutOf (slots : Nat) : Layout := svcLayout twiceSvc slots (siteParts answerFive)
 
@@ -2832,9 +2832,9 @@ def nextQ : QueryV recordsT .str :=
 
 def answerIsEventE : Expr [] [] (.fn [.int] (.list .int)) := .lam (.list (.cons (.var .here) .nil))
 
-def answerIsEvent : Site [] (.fn [.int] (.list .int)) := ⟨⟨"m", 23, 1, 0⟩, [], .nil, rfl, rfl, answerIsEventE⟩
+def answerIsEvent : Site [] (.fn [.int] (.list .int)) := ⟨⟨"m.f23", 1⟩, [], .nil, rfl, rfl, answerIsEventE⟩
 
-def answerNone : Site [] (.fn [.int] (.list .int)) := ⟨⟨"m", 23, 2, 0⟩, [], .nil, rfl, rfl, .lam (.list .nil)⟩
+def answerNone : Site [] (.fn [.int] (.list .int)) := ⟨⟨"m.f23", 2⟩, [], .nil, rfl, rfl, .lam (.list .nil)⟩
 
 def ownQueryLayout : Layout :=
   Layout.addTys (fun _ => 3) twiceLayout (Tazuna.Smt.Expr.tys nextResolveE)
@@ -2932,7 +2932,7 @@ def dispSites : List AnySite := writeSites ++ [⟨[.int], _, answerFive⟩, ⟨[
 
 def twiceKey : OwnKey := .command .int "twice" .str .int .str ⟨answerFive.site, [.int]⟩
 def nextKey : OwnKey := .query .int "next" .str .int .int ⟨answerIsEvent.site, []⟩
-def deadKey : OwnKey := .command .int "twice" .str .int .str ⟨⟨"m", 77, 77, 0⟩, [.int]⟩
+def deadKey : OwnKey := .command .int "twice" .str .int .str ⟨⟨"m.f77", 77⟩, [.int]⟩
 
 /-- The service `o`'s layout, in a program that writes the `on_answer` sites the effects name, with the own kinds
 `twice` and `next` added by hand: the effects are terms of the case, not of a function the service keeps, so
@@ -3183,12 +3183,12 @@ With bound 0 the queued `put` is past the bound, and the model must name `Fault.
 
 def onceBodyE : Expr [] [] (.fn [Ty.result Ty.nil .str] (.list .int)) := .lam (.list .nil)
 
-def onceSite : Site [] (.fn [Ty.result Ty.nil .str] (.list .int)) := ⟨⟨"m", 24, 1, 0⟩, [], .nil, rfl, rfl, onceBodyE⟩
+def onceSite : Site [] (.fn [Ty.result Ty.nil .str] (.list .int)) := ⟨⟨"m.f24", 1⟩, [], .nil, rfl, rfl, onceBodyE⟩
 
 def oncePutE : Expr [] [Ty.reactionCtx recordsT, .int] (.dsl .effect [.int]) :=
   let ev : Expr [] [Ty.reactionCtx recordsT, .int] .int := .var (.there .here)
   let clo : Expr [] [Ty.reactionCtx recordsT, .int] (.dsl .closure [.fn [Ty.result Ty.nil .str] (.list .int)]) :=
-    .close ⟨"m", 24, 1, 0⟩ .nil rfl rfl onceBodyE
+    .close ⟨"m.f24", 1⟩ .nil rfl rfl onceBodyE
   .call (.prim .sendCommand [recordsT, .int, .str, .int, .str] rfl)
     (.cons putHandleE (.cons (.bin .add ev (.int 10)) (.cons clo .nil)))
 
@@ -3203,7 +3203,7 @@ def cascShapes (cascade : Int) : List (PendingShape (cascSvc cascade).event) := 
 
 def cascSites : List AnySite := writeSites ++ [⟨[], _, onceSite⟩]
 
-def onceKey : OwnKey := .command .int "put" .str .int .str ⟨⟨"m", 24, 1, 0⟩, []⟩
+def onceKey : OwnKey := .command .int "put" .str .int .str ⟨⟨"m.f24", 1⟩, []⟩
 
 def cascLayout (cascade : Int) (slots : Nat) : Layout := svcLayout (cascSvc cascade) slots
 
@@ -3228,11 +3228,11 @@ def cmdHandleTy : Ty := .dsl .command [recordsT, .int, .str, .int, .str]
 def namedHandleE {G : List Ty} (n : Str) (line : Nat) : Expr G [] (.fn [] cmdHandleTy) :=
   .lam (.call (.prim .command [recordsT, .int, .str, .int, .str] rfl)
     (.cons (.str n) (.cons aliceOwnE
-      (.cons (.close ⟨"m", line, 1, 0⟩ .nil rfl rfl (.lam (.list .nil) : Expr G [] (.fn [.int] Ty.rules)))
-        (.cons (.close ⟨"m", line, 2, 0⟩ .nil rfl rfl
+      (.cons (.close ⟨s!"m.f{line}", 1⟩ .nil rfl rfl (.lam (.list .nil) : Expr G [] (.fn [.int] Ty.rules)))
+        (.cons (.close ⟨s!"m.f{line}", 2⟩ .nil rfl rfl
           (.lam (.ctor (vs := [[.list .int], [.str]]) ⟨0, by decide⟩ (.cons (.list .nil) .nil)) :
             Expr G [] (.fn [cctxT] (Ty.result (.list .int) .str))))
-          (.cons (.close ⟨"m", line, 3, 0⟩ .nil rfl rfl (.lam (.list .nil) : Expr G [] (.fn [cctxT, recordsT] Ty.rules)))
+          (.cons (.close ⟨s!"m.f{line}", 3⟩ .nil rfl rfl (.lam (.list .nil) : Expr G [] (.fn [cctxT, recordsT] Ty.rules)))
             .nil))))))
 
 abbrev bothG : List Ty := [.fn [] cmdHandleTy, .fn [] cmdHandleTy]
@@ -3243,7 +3243,7 @@ def sendFromE (h : Var bothG (.fn [] cmdHandleTy)) (line : Nat) :
     Expr bothG [Ty.reactionCtx recordsT, .int] (.dsl .effect [.int]) :=
   .call (.prim .sendCommand [recordsT, .int, .str, .int, .str] rfl)
     (.cons (.call (.global h) .nil) (.cons (.int 1)
-      (.cons (.close ⟨"m", line, 1, 0⟩ .nil rfl rfl (.lam (.list .nil) :
+      (.cons (.close ⟨s!"m.f{line}", 1⟩ .nil rfl rfl (.lam (.list .nil) :
         Expr bothG [] (.fn [Ty.result Ty.nil .str] (.list .int)))) .nil)))
 
 def bothE : Expr bothG [] (.fn [Ty.reactionCtx recordsT, .int] (.list (.dsl .effect [.int]))) :=
@@ -3251,12 +3251,12 @@ def bothE : Expr bothG [] (.fn [Ty.reactionCtx recordsT, .int] (.list (.dsl .eff
 
 def bothSvc : ServiceV :=
   { cascSvc 1 with commands := [{ twiceC with name := "dbl" }, { twiceC with name := "inc" }],
-                   reactions := [⟨"both", ⟨⟨"m", 33, 1, 0⟩, _, bothDefs, [], (), rfl, rfl, bothE⟩⟩] }
+                   reactions := [⟨"both", ⟨⟨"m.f33", 1⟩, _, bothDefs, [], (), rfl, rfl, bothE⟩⟩] }
 
 def perSendCheck : IO Bool := do
   let owns := (svcLayout bothSvc 2).owns
-  let dbl : OwnKey := .command .int "dbl" .str .int .str ⟨⟨"m", 34, 1, 0⟩, []⟩
-  let inc : OwnKey := .command .int "inc" .str .int .str ⟨⟨"m", 35, 1, 0⟩, []⟩
+  let dbl : OwnKey := .command .int "dbl" .str .int .str ⟨⟨"m.f34", 1⟩, []⟩
+  let inc : OwnKey := .command .int "inc" .str .int .str ⟨⟨"m.f35", 1⟩, []⟩
   if owns.length == 2 && owns.any (·.same dbl) && owns.any (·.same inc) then return true
   IO.println s!"smt-check: own kinds per send: {owns.length} kinds, not dbl and inc each at its send's site"
   return false
@@ -3362,7 +3362,7 @@ def tickEffectE : Expr [] [] (.fn [tickCtxT] (Ty.option (.dsl .effect [.int]))) 
   let ctx : Expr [] [tickCtxT] tickCtxT := .var .here
   let key : Expr [] [tickCtxT] .int := .field (ft := .int) "key" 0 (by simp) ctx
   let clo : Expr [] [tickCtxT] (.dsl .closure [.fn [Ty.result Ty.nil .str] (.list .int)]) :=
-    .close ⟨"m", 24, 1, 0⟩ .nil rfl rfl onceBodyE
+    .close ⟨"m.f24", 1⟩ .nil rfl rfl onceBodyE
   let put : Expr [] [tickCtxT] (.dsl .effect [.int]) :=
     .call (.prim .sendCommand [recordsT, .int, .str, .int, .str] rfl)
       (.cons putHandleE (.cons (.bin .add key (.int 10)) (.cons clo .nil)))
@@ -3641,7 +3641,7 @@ fails after the row `ins` adds), so those are sat, and the model's state and eff
 not commute: the first effect runs, and the second faults after it while it did not first, or the two orders end with
 different records. -/
 
-def pairOnAnswer : Site [] (.fn [Ty.result Ty.nil .str] (.list evT)) := ⟨⟨"m", 31, 1, 0⟩, [], .nil, rfl, rfl, .lam (.list .nil)⟩
+def pairOnAnswer : Site [] (.fn [Ty.result Ty.nil .str] (.list evT)) := ⟨⟨"m.f31", 1⟩, [], .nil, rfl, rfl, .lam (.list .nil)⟩
 
 /-- `Ok([#(key, input)])`, the key from the input. -/
 def rowDecideE (key : Expr [] [cctxT] .int) : E (.fn [cctxT] (Ty.result (.list evT) .str)) :=
@@ -3797,7 +3797,7 @@ def reqSendE (input : Expr [] [reqCtxT, evT] .int) : Expr [] [reqCtxT, evT] (.ds
   let handle : Expr [] [reqCtxT, evT] (.dsl .externalCommand [.int, Ty.nil, Ty.nil]) :=
     .call (.prim .externalCommand [.int, Ty.nil, Ty.nil] rfl) (.cons (.str (str! "send")) .nil)
   let clo : Expr [] [reqCtxT, evT] (.dsl .closure [.fn [Ty.result Ty.nil Ty.nil] (.list evT)]) :=
-    .close ⟨"m", 32, 1, 0⟩ (.cons key .nil) rfl rfl reqAnswerE
+    .close ⟨"m.f32", 1⟩ (.cons key .nil) rfl rfl reqAnswerE
   .call (.prim .requestCommand [evT, .int, Ty.nil, Ty.nil] rfl) (.cons handle (.cons input (.cons clo .nil)))
 
 def echoE : Expr [] [] (.fn [reqCtxT, evT] (.list (.dsl .effect [evT]))) :=

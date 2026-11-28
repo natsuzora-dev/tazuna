@@ -517,7 +517,7 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) (c
       some (Illegal.unknownHandle, s!"{v.name} sends the {h.kind} {n}, which it does not declare with these types; add it to {v.name}'s declares")
     | none => none
   let capturedKeys := captures.filterMap fun (site, Γ) => if (Ty.tuple Γ).plainKeys then none else
-    some (Illegal.tableKey, s!"{site.module}:{site.line}:{site.col}: a function a structure value keeps captures a table whose key is no plain value; {tableKeyAdvice}")
+    some (Illegal.tableKey, s!"{site.global}#{site.ordinal}: a function a structure value keeps captures a table whose key is no plain value; {tableKeyAdvice}")
   -- Each service's `declared` is checked as its wire types read it (`ServiceV.wireTys`); what an external's own entry
   -- reports already is dropped as a duplicate.
   let declaredTypes := s.services.flatMap fun v => (v.declared.filter fun (_, d) => !d.wireTypes.all Ty.wire).map

@@ -26,7 +26,7 @@ variable {v : ServiceV}
 section Terms
 variable (σ τ : Nat → Nat) (fn : {t : Ty} → Fun t → Erl)
 
-def siteTerm (s : SiteId) : Erl := .tuple [.bin s.module, .int s.line, .int s.col, .int s.index]
+def siteTerm (s : SiteId) : Erl := .tuple [.bin s.global, .int s.ordinal]
 
 /-- A kept function by its site and captured values. -/
 def funTerm {t : Ty} (f : Fun t) : Erl := .tuple [siteTerm f.site, Ty.canonBy σ (.tuple f.Γ) f.env]
