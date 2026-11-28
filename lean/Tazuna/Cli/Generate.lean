@@ -12,7 +12,7 @@ model is played back in Lean: its inputs are decoded and written with the trace 
 whose lines read as the spec, so verify replays them as passed unless it runs out of tries, and the trace is written
 only when its last step shows the target (`generate_reaches`). A target whose cubes have no model at any depth is
 unreached within the steps (`noModel_cubes`). A cube needs no question where the code rules out every kind its last
-step takes (`mayShow`), or, at the last depth, where prove's dead-target question (`showsAsk`) of each kind of its last
+step takes (`mayShow`), or, from depth 2 on, where prove's dead-target question (`showsAsk`) of each kind of its last
 pick is unsat. The targets of a service share each depth's run (`unrollBase`) and its cubes' prefixes, built once; only the goal differs, so an answer is looked up under a key read off the shared prefix's digest and the goal
 (`ScriptPrefix.ask`), and a script's text is printed only for the solver.
 
@@ -21,8 +21,8 @@ only where some input kind's step question whether its step breaks it is not uns
 step breaks it (`brk`, `BreakCover`), and its last step only takes those kinds. One question per kind first asks
 whether its step breaks any such target (`breakAnyT`), so most kinds need no question per target (`breakT`). A run
 found is run in Lean and replayed by verify (`generate_breaks`); none within the steps leaves the target unsettled
-(`noModel_breaks`). A behavior target every kind's dead-target question rules out at the last depth is unreachable at
-every depth (`unshown_within`). -/
+(`noModel_breaks`). A behavior target every kind's dead-target question rules out is unreachable at every depth
+(`unshown_within`). -/
 
 namespace Tazuna.Cli
 
@@ -261,7 +261,7 @@ def generate (root dir path : String) (opts : Options) : Cmd Unit := do
           anyDead.resolve r)
       for g in gs do
         -- The picks some kind of which has a dead-target question that is not unsat: a step of any other pick never shows
-        -- the target, so the last depth asks no cube whose last step takes one, and none at all where no pick is left.
+        -- the target, so no depth from the second asks a cube whose last step takes one, nor any where no pick is left.
         let live : IO (Except String (Option (List Nat))) :=
           if g.byQuery v then pure (.ok none) else do
             match asks.get with

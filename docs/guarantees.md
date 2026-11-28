@@ -112,7 +112,7 @@ Nor does any target of a service whose initial state breaks an invariant or one 
 
 Both rest on `run_invariants` and `run_supp`: every state such a run reaches has the shape the question assumes, whether or not the invariants were proved.
 The line exits 0, like a compiler warning, because a defensive branch may be meant never to run.
-`generate` asks the same questions at its last length and prints `Generate.unreachable` for such a target.
+`generate` asks the same questions from its second length on and prints `Generate.unreachable` for such a target.
 A target whose question has a model, from a state no run reaches, gets no `Prove.unreachable` line, and `generate` may still find no run of at most `steps` inputs to it (`Generate.unreached`).
 
 ## prove: order of own steps and timers (T5)
@@ -173,11 +173,11 @@ For each target, `generate` searches runs from the initial state, one input long
 It splits each length into cubes that fix the input kinds of the last steps: one cube per kind of the last step, and a cube the solver leaves undecided splits again on the step before (cube and conquer).
 Before it splits, such a cube is asked once more with four times the resource limit, and only an unsat answer is read, so the split is skipped where the cube has no model and the run found is the one the split finds.
 Cubes are asked a fixed number at a time, and the first in order with a model wins, so the questions and the trace do not depend on `--jobs`.
-A cube needs no question where the code rules out that its last step's kinds show the target, or, at the last length, where `prove`'s dead-target question of each kind of its last step is unsat.
+A cube needs no question where the code rules out that its last step's kinds show the target, or, from the second length on, where `prove`'s dead-target question of each kind of its last step is unsat.
 
 - `Generate.reached` writes the trace of the shortest run it found to `<dir>/<service>/<target>.jsonl`. `generate_reaches` (T6): the written trace reads as the spec from the initial state, so `verify` replays it as passed unless it runs out of tries, and the last step of its run shows the target. `generate_sound`: every model the solver gives decodes to inputs that satisfy `validInputs` whose run faults nowhere and reaches the target. `targetFile_inj`: two targets never share a file, so no written trace overwrites another's.
 - `Generate.unreached`: `noModel_cubes` (T6b): no run of at most `steps` inputs within the slots, on which the line's `assumes` hold, shows the target's class at any step. Every input's kind is one a split lists, so cubes with no model at a length leave no run of that length.
-- `Generate.unreachable`: at the last length, every input kind's dead-target question is unsat, as for `Prove.unreachable` (`unshown_within`), so no run of any length shows the class.
+- `Generate.unreachable`: every input kind's dead-target question is unsat, as for `Prove.unreachable` (`unshown_within`), so no run of any length shows the class.
 
 For each target a fault breaks whose `Prove.unproved` lines some input kind has, `generate` searches runs the same way, for a run whose steps fault nowhere until the last, which faults by a fault the target covers.
 The last step of every cube takes only the input kinds whose step question, whether a step from a state where every invariant holds breaks the target, is not unsat.

@@ -58,7 +58,7 @@ inductive Tazuna.GenerateKind : Type
   | unreached
   /-- Every input kind's dead-target question is unsat, as prove's line of the same name says: no run within the slots
   the line names, on which its `assumes` hold, shows the target's class, at any length. generate asks these questions
-  at its last depth, once no shorter run reached the target. -/
+  from its second depth on, once no run of one step reached the target. -/
   | unreachable
   /-- A run from the initial state on valid inputs whose steps before the last fault nowhere, and whose last step
   faults by a fault the target covers: prove's target is broken in a state a run reaches. Its trace is written, and

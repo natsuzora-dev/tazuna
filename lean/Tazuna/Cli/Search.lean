@@ -362,8 +362,8 @@ variable (solver : Solver) (cache : System.FilePath) {c : CheckedSpec} (s : Chec
 for a model of the goal each depth's steps give, stopping at the first, whose decoded run `play` reads. A depth is
 asked as cubes (`CubesCover`): one per pick of its last step, and a cube with no answer, which its second question
 (`Solver.retry`) does not find unsat, splits on the step before its fixed ones, in pick order. A cube whose last step
-takes only kinds `ruledOut` rules out needs no question, nor, at the last depth, the costliest, one whose last pick is
-not among those `live` gives. The cubes are asked
+takes only kinds `ruledOut` rules out needs no question, nor, from depth 2 on, once depth 1 found no model, one whose
+last pick is not among those `live` gives. The cubes are asked
 `cubeChunk` at a time, and the first in order with a model is the one taken, so the questions and the run found do not
 depend on timing. A depth whose cubes all have no model is unreached; a cube with every step fixed and no answer
 leaves the depth undecided. A refused encoding of the run or of the goal ends the search undecided; a refused input
@@ -397,17 +397,20 @@ def searchDepths {α : Type} (what : String) (ds : Array (Task (Option (Depth s.
     | .error m => return .error m
     | .ok ks => pure ks
     else pure none
+  let mut liveFrom2 : Option (Option (List Nat)) := none
   for d in List.range' 1 (ds.size - 1) do
     let rd ← match ← depth d with
       | .error e => return e
       | .ok r => pure r
     if refused.isNone then refused := rd.refused.head?
     let livePicks ← if brk.isSome then pure liveAll
-      else if d + 1 == ds.size then
-        match ← live with
-        | .error m => return .error m
-        | .ok ks => pure ks
-      else pure none
+      else if d < 2 then pure none
+      else match liveFrom2 with
+        | some ks => pure ks
+        | none =>
+          match ← live with
+          | .error m => return .error m
+          | .ok ks => liveFrom2 := some ks; pure ks
     if livePicks == some [] then return .ok .dead
     -- A cube's question: its fixed steps after the run of its unfixed ones, and its goal; none where the goal is
     -- false by its shape, which needs no solver.
