@@ -1,9 +1,9 @@
 #!/bin/sh
 # Measures a bench spec against the performance budget in its directory's `performance-budget` file: check, prove from
-# an empty cache and again from the cache, and search, which runs prove, explore and search, from an empty cache, as a
-# user runs them. A z3 wrapper first on PATH counts the scripts the solver runs and their sizes. Exits 1 when a "check" line is
-# exceeded; "report" lines (wall time) are only printed. A performance budget never cuts work: it judges counts that do
-# not depend on the machine and reports wall time.
+# an empty cache and again from the cache, explore from prove's cache, and search, which runs prove, explore and search,
+# from an empty cache, as a user runs them. A z3 wrapper first on PATH counts the scripts the solver runs and their
+# sizes. Exits 1 when a "check" line is exceeded; "report" lines (wall time) are only printed. A performance budget
+# never cuts work: it judges counts that do not depend on the machine and reports wall time.
 # Usage: test/bench/performance-budget <spec directory, e.g. shop> [jobs, default 4]
 # Needs the engine and the launcher built (scripts/check builds both) and z3 on PATH.
 set -eu
@@ -38,14 +38,24 @@ run() {
 run check check m
 run prove.cold prove m --jobs "$jobs"
 run prove.cached prove m --jobs "$jobs"
+run explore explore m inputs --jobs "$jobs"
 rm -rf "$work/build/tazuna/prove-cache"
 run search search m inputs --jobs "$jobs"
 
 value() {
   case $1 in
+    explore.seconds) awk -v e="$(sed -n 1p "$work/explore.seconds")" -v p="$(sed -n 1p "$work/prove.cached.seconds")" \
+      'BEGIN { print e - p }' ;;
     *.seconds) sed -n 1p "$work/$1" ;;
     prove.questions) wc -l <"$work/prove.cold.scripts" | tr -d ' ' ;;
-    search.questions) wc -l <"$work/search.scripts" | tr -d ' ' ;;
+    # The search run asks prove's questions first, the same ones as the cold prove run.
+    search.questions) echo $(($(wc -l <"$work/search.scripts") - $(wc -l <"$work/prove.cold.scripts"))) ;;
+    explore.transitions)
+      grep '"kind":"Explore\.covered"' "$work/search.jsonl" | sed 's/.*"transitions":\([0-9]*\).*/\1/' |
+        awk '{ s += $1 } END { print s + 0 }' ;;
+    explore.states)
+      grep '"kind":"Explore\.covered"' "$work/search.jsonl" | sed 's/.*"states":\[\([0-9,]*\)\].*/\1/' | tr ',' '\n' |
+        awk '{ s += $1 } END { print s + 0 }' ;;
     prove.undecided) grep -c '"kind":"Undecided\.' "$work/prove.cold.jsonl" || true ;;
     search.undecided) grep -c '"kind":"Undecided\.' "$work/search.jsonl" || true ;;
     script.max_bytes) sort -n "$work/prove.cold.scripts" "$work/search.scripts" | tail -1 | tr -d ' ' ;;

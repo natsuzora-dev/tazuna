@@ -1,12 +1,15 @@
-# The shop bench's performance budget, fixed before the first measurement (run-log 235). test/bench/performance-budget
-# reads this file. It never cuts work: "check" lines judge counts that do not depend on the machine.
-# A "check" line fails the run when the value is over; a "report" line is printed against its budget only, since wall
-# time depends on the machine (these were set for an Apple M2 laptop, z3 on PATH, --jobs 4, an empty cache).
+# The shop bench's performance budget, each line fixed before its first measurement (run-log 235; explore's and
+# search's lines, run-log 279). test/bench/performance-budget reads this file. It never cuts work: "check" lines judge
+# counts that do not depend on the machine. A "check" line fails the run when the value is over; a "report" line is
+# printed against its budget only, since wall time depends on the machine (these were set for an Apple M2 laptop, z3 on
+# PATH, --jobs 4, an empty cache).
 #
 # Questions: the scripts the solver ran from an empty cache. 120 s of prove at --jobs 4 is 480 solver-seconds; the
 # 3-service bench's questions average 0.12 s of wall time each at --jobs 4, so about 1500 questions fit.
 check prove.questions 1500
-check search.questions 1500
+# search's own questions: the search run's scripts less prove's. Of the 300 s a commit's run gets, prove takes 120 s
+# and explore 90 s, which leaves search 90 s, so about 1100 questions at the rate above.
+check search.questions 1100
 # Every question decides at the default resource limit.
 check prove.undecided 0
 check search.undecided 0
@@ -15,8 +18,16 @@ check search.undecided 0
 # --jobs 4.
 check script.max_bytes 16777216
 check prove.script_bytes 536870912
+# explore runs one service after another on one core. 3-services' explore ran 70,000 to 72,000 transitions a second
+# (run-log 279), so its 90 s is about 6.3 million transitions. Its states stay in memory: 3-services' take 1.6 KB each,
+# and a shop state holds several tables of records, so take 4 times that; 150,000 states then keep about 1 GB.
+check explore.transitions 6300000
+check explore.states 150000
 # Wall time in seconds.
 report check.seconds 5
 report prove.cold.seconds 120
 report prove.cached.seconds 10
+# explore alone: the explore run, from prove's cache, less the cached prove run.
+report explore.seconds 90
+# prove, explore and search from an empty cache.
 report search.seconds 300
