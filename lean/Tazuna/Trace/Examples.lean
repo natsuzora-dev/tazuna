@@ -1,7 +1,7 @@
 import Tazuna.Trace.Verify
 import Tazuna.Semantics.StepExamples
 
-/-! The trace writer and verify agree: a trace written from inputs (`traceOf`, what generate writes), printed as text
+/-! The trace writer and verify agree: a trace written from inputs (`traceOf`, what explore and search write), printed as text
 and read back as verify reads a file, replays as passed. -/
 
 namespace Tazuna.Trace.Examples
@@ -25,7 +25,7 @@ def replays (xs : List (Input svc)) : Bool :=
 -- and sending `ping`, and the answer to it.
 #guard replays [cmd 1 5, cmd 2 5, cmd 1 0, .query ⟨0, by decide⟩ (1 : Int) (0 : Int), .event ⟨0, by decide⟩ (2 : Int),
   .clock 10, .answer 0 ⟨Ty.result .int .str, .inl ((0 : Int), ())⟩]
--- A trace stops where the spec faults, after the faulting step's in line: generate writes such a trace only for a run
+-- A trace stops where the spec faults, after the faulting step's in line: explore and search write such a trace only for a run
 -- that breaks one of prove's targets.
 #guard match traceOf prelude svc [cmd 1 60] with
   | .error (.fault 1 _ [_]) => true

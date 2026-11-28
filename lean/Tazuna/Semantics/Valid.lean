@@ -428,7 +428,7 @@ def Assumption.Holds : Assumption → State v → List (Input v) → Prop
   | .timelyClock => TimelyRun T
   | .noFault => NoFaultRun T
 
-/-- What a search over the runs from the initial state assumes of them: generate's unreached targets rest on it. -/
+/-- What a search over the runs from the initial state assumes of them: search's and explore's unreached targets rest on it. -/
 def Assumption.ofRuns : List Assumption := [.validInputs, .noFault]
 
 

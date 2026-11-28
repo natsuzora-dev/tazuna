@@ -411,7 +411,7 @@ fn restocking_adds_up() -> tazuna.Scenario(Records, Event, Caller) {
   ])
 }
 
-/// How far prove and generate look in this service.
+/// How far prove, explore and search look in this service.
 pub fn scope() -> tazuna.Scope {
   tazuna.scope(
     service: service(),

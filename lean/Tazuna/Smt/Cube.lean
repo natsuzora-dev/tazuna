@@ -1,6 +1,6 @@
 import Tazuna.Smt.Dead
 
-/-! generate's split of a depth into cubes (cube and conquer, Heule, Kullmann, Wieringa and Biere 2011). A cube fixes
+/-! search's split of a depth into cubes (cube and conquer, Heule, Kullmann, Wieringa and Biere 2011). A cube fixes
 the input kinds of the last steps of a depth-`d` run (`cubeFilters`); its steps encode only those kinds
 (`unrollOne`'s pick), so its script is smaller and easier than the whole depth's. A cube the solver leaves undecided
 splits on the step before it, one cube per pick (`pickCount`), until the first step. A cube is asked as the run of
@@ -243,7 +243,7 @@ theorem SymInput.pick_of_decode {shs : List (PendingShape v.event)} {n : Nat} {M
   | event => obtain ⟨_, rfl, -⟩ := decode_event h; rfl
   | clock => obtain ⟨_, rfl, -⟩ := decode_clock h; rfl
 
-/-- What generate's search shows of the cube `ps` at depth `d` (`ps.length` at most `d`): it has no model, as an unsat
+/-- What search shows of the cube `ps` at depth `d` (`ps.length` at most `d`): it has no model, as an unsat
 answer to its question (`cubeAsk`) or a goal false by its shape says, and refuses no input kind; or the code rules out
 that any kind its last step takes shows the target (`mayShow`), or prove's dead-target question (`showsAsk`) of every
 kind of its last step's pick is unsat; or it splits on the step before its fixed ones, into
@@ -288,9 +288,9 @@ theorem picksFit_cube {d : Nat} {ps : List Nat} {xs : List (Input v)} (hlen : xs
   rw [cubeFilters, ← hl]
   exact forall2_append (picksFit_none _) (picksFit_some _)
 
-/-- T6b at depth `d`: where generate's cubes cover the depth (`CubesCover` from no fixed step) with no model, no run from
+/-- T6b at depth `d`: where search's cubes cover the depth (`CubesCover` from no fixed step) with no model, no run from
 the initial state of `d` inputs that fit the slots and are valid, whose steps stay within the slots and fault
-nowhere, answers at its last step in a class the target aims at. generate's "unreached within k steps" is this at
+nowhere, answers at its last step in a class the target aims at. search's "unreached within k steps" is this at
 every depth up to k, so no such run of at most k inputs answers in that class at any step. -/
 theorem noModel_cubes (chk : Checked P E T v) (senv : StepEnv L (shapes v)) (hL : SortedLayout L)
     {rules : RuleNames} {g : GenTarget} {d : Nat} (hc : CubesCover (T := T) (P := P) senv rules g d [])

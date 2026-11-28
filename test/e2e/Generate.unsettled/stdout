@@ -1,3 +1,0 @@
-{"file":"counter/add accepted.jsonl","kind":"Generate.reached","service":"counter","steps":1,"target":"add accepted"}
-{"file":"counter/event Added.jsonl","kind":"Generate.reached","service":"counter","steps":1,"target":"event Added"}
-{"assumes":["ids the service made are used only after they appeared on an out line","no step before the last faults"],"kind":"Generate.unsettled","scope":{"bounds":[{"bound":"longest literal","slots":1,"type":"List(tazuna.Origin(m.Caller))"},{"bound":"longest literal","slots":1,"type":"List(#(String, Bool))"},{"bound":"longest literal","slots":1,"type":"List(m.Event)"}],"model":"model","steps":3},"service":"counter","target":"invariant not seven"}

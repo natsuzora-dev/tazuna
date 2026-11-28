@@ -280,7 +280,7 @@ def Run.finish' (run : Run v) (input : Input v) (inLines : List Line) (answerTo 
   let some outs := outs | throw (.badStep k "an output has no wire form")
   pure { run with state := r.state, names := ns, lines := run.lines ++ inLines ++ outs }
 
-/-- One input, written as its in line, run, and its out lines: what scenarios and generate's traces share, so the two
+/-- One input, written as its in line, run, and its out lines: what scenarios and the traces explore and search write share, so the two
 cannot write an input differently. A request's id is the count of requests so far; an answer names the request by the
 name the trace gave its wire id. -/
 def Run.input (run : Run v) (k : Nat) : Input v → Except Stop (Run v)
@@ -379,7 +379,7 @@ def outsideNames (T : List TypeDecl) {v : ServiceV} (s : State v) (xs : List (In
     | .named s => some s.1
     | .fresh .. => none
 
-/-- The trace of a run of the inputs from the initial state: what generate writes, in the format of snapshots, or why
+/-- The trace of a run of the inputs from the initial state: what explore and search write, in the format of snapshots, or why
 a step stopped. Its names avoid every outside id's name the run writes, so a fresh id is never called like an outside
 id the run names later (`Names.bind_ok`). -/
 def traceOf (T : List TypeDecl) (v : ServiceV) (xs : List (Input v)) : Except Stop TraceFile := do

@@ -155,13 +155,13 @@ def loadModel (root path : String) (name? : Option String) : Cmd (Option (Checke
       if models.contains n then pure n
       else return ← usage s!"{root} defines no model function {n}() -> tazuna.Model; its models: {", ".intercalate models}"
     | none, [n] => pure n
-    | none, [] => return ← usage s!"{root} defines no model: prove and generate need a function <name>() -> tazuna.Model"
+    | none, [] => return ← usage s!"{root} defines no model: prove, explore and search need a function <name>() -> tazuna.Model"
     | none, ms => return ← usage s!"{root} defines the models {", ".intercalate ms}: name one with --model <name>"
   return (← loadNamedModel j name).map (·, name)
 
 /-- Loads the IR at `path`, which the launcher converted from the root module `root`, printing one line per
 finding, or one line per service when there is none. Every model function of the root module is checked too, so a
-model that prove or generate would refuse shows here. -/
+model that prove, explore or search would refuse shows here. -/
 def check (root path : String) : Cmd Unit := do
   if let some c ← loadSpec root path then
     let some j ← readIr root path | return

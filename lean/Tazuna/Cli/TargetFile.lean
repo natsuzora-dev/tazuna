@@ -1,6 +1,6 @@
 import Tazuna.Semantics.GenTarget
 
-/-! The file generate writes a target's trace to: `<service>/<target words>.jsonl`, where the words read as the target's
+/-! The file explore and search write a target's trace to: `<service>/<target words>.jsonl`, where the words read as the target's
 text (`place accepted`, `event Created`, `request mail.send`, `open+tasks answered`) and each name in them is
 form-encoded as HTML forms encode a URL's query: a space is `+`, and every other byte but an ASCII letter, digit, `_` or
 `-` is percent-encoded, so a name holds no space, dot or slash. Distinct targets of distinct
@@ -230,7 +230,7 @@ theorem _root_.Tazuna.Ir.GenTarget.words_spaceless (g : GenTarget) : ∀ w ∈ g
   | event k => cases k <;> simp (config := {decide := true}) [GenTarget.words, e]
   | _ => simp (config := {decide := true}) [GenTarget.words, e, l]
 
-/-- Where generate writes a target's trace, relative to its directory: the service's escaped name, a slash, and the
+/-- Where explore and search write a target's trace, relative to its directory: the service's escaped name, a slash, and the
 target's words, `.jsonl`. Distinct services' distinct targets get distinct files (`targetFile_inj`). -/
 def targetFile (service : String) (g : GenTarget) : String :=
   String.ofList (escName service ++ '/' :: joinWords g.words ++ ".jsonl".toList)
@@ -243,7 +243,7 @@ theorem targetFile_inj {s s' : String} {g g' : GenTarget} (h : targetFile s g = 
   have ne : ∀ g : GenTarget, g.words ≠ [] := fun g => by cases g <;> simp [GenTarget.words] <;> split <;> simp
   exact joinWords_inj g.words_spaceless g'.words_spaceless (ne g) (ne g') (List.append_cancel_right h2)
 
-/-- Where generate writes the trace of a run that breaks one of prove's targets, relative to its directory: the service's
+/-- Where explore and search write the trace of a run that breaks one of prove's targets, relative to its directory: the service's
 escaped name, `/violated/`, and the target's text escaped, `.jsonl`. No behavior target's file is under a directory,
 so none is overwritten. -/
 def breakFile (service target : String) : String :=

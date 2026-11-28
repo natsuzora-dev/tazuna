@@ -6,7 +6,7 @@ import Tazuna.Semantics.Response
 scope generates (`Tazuna.Explore.Inputs`), as TLC searches a TLA+ spec (Specifying Systems, sec 14.3.1). Each state
 reached is kept once per key (`Tazuna.Explore.Key`), the first time, so at its least depth. Every transition from a
 state of a complete level is checked: the classes of out line its step shows, the fault it ends in, and each response
-it breaks. A faulted step ends its run, as generate's runs end at their first fault. The search stops at the scope's
+it breaks. A faulted step ends its run, as search's runs end at their first fault. The search stops at the scope's
 depth or once its state cap is reached, never by wall time, so what it covers is a function of the spec and the
 model. -/
 
@@ -55,7 +55,7 @@ def IdV.isNamed : IdV → Bool
   | .named _ => true
   | .fresh .. => false
 
-/-- The first outside id whose name the ids do not use: the code names generate gives outside ids. -/
+/-- The first outside id whose name the ids do not use: the code names search gives outside ids. -/
 def newId (held : List IdV) : IdV :=
   let used := held.filterMap IdV.nameOf
   let rec go : Nat → Nat → IdV

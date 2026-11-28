@@ -54,7 +54,7 @@ inductive LayoutGap where
   | instanceSlots (t : Ty)
 deriving Repr
 
-/-- A case the loaded program's types rule out but the IR's types do not. Prove and generate report it as
+/-- A case the loaded program's types rule out but the IR's types do not. Prove and search report it as
 Internal.engine (exit 4), never as a spec's line. It stays a refusal rather than a theorem: each variant is excluded by
 a fact the loader or check establishes about the whole program, and the encoders' no-gap theorems (`Sound`) take every
 non-layout refusal as allowed, so ruling these out would thread those facts through every builder's theorem (est.

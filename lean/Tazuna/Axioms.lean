@@ -3,8 +3,7 @@ import Lean.Util.CollectAxioms
 import Lean.Meta.Tactic.Simp.SimpTheorems
 import Tazuna.Cli.Test
 import Tazuna.Cli.Prove
-import Tazuna.Cli.Generate
-import Tazuna.Cli.Explore
+import Tazuna.Cli.Search
 import Tazuna.Explore.Sound
 import Tazuna.Cli.Explain
 import Tazuna.Semantics.After
@@ -81,7 +80,7 @@ elab "#check_tazuna_reach" : command => do
     -- What the engine runs: each command, and the lists the e2e harness and gen-dsl print, which hold every output
     -- kind, built-in and DSL type.
     ``Tazuna.Cli.check, ``Tazuna.Cli.test, ``Tazuna.Cli.verify, ``Tazuna.Cli.prove, ``Tazuna.Cli.optionsOf,
-    ``Tazuna.Cli.generate, ``Tazuna.Cli.explore, ``Tazuna.Cli.explain,
+    ``Tazuna.Cli.explore, ``Tazuna.Cli.search, ``Tazuna.Cli.explain,
     ``Tazuna.Kind.mem_all, ``Tazuna.Ir.Prim.mem_all, ``Tazuna.Ir.Dsl.mem_all,
     -- Gleam's meaning where languages differ, and literals: reading back a printed literal gives it back.
     ``Tazuna.Gleam.div_zero, ``Tazuna.Gleam.mod_zero, ``Tazuna.Gleam.div_add_mod, ``Tazuna.Gleam.mod_neg_left,
@@ -95,10 +94,10 @@ elab "#check_tazuna_reach" : command => do
     ``Tazuna.Trace.replay_iff,
     -- A counterexample's `after` is the state the step reaches before its invariant check.
     ``Tazuna.Ir.step_settled,
-    -- generate's targets, from the checked IR's rule names and the rejections each `decide`'s source may return, miss
+    -- The behavior targets, from the checked IR's rule names and the rejections each `decide`'s source may return, miss
     -- no class of out line a step can show.
     ``Tazuna.Ir.targets_cover,
-    -- generate writes distinct targets of distinct services to distinct files, so none overwrites or removes another's.
+    -- explore and search write distinct targets of distinct services to distinct files, so none overwrites or removes another's.
     ``Tazuna.Cli.targetFile_inj,
     -- The layout's roots read every kept function of a service: its structures are matched whole, field by field.
     ``Tazuna.Ir.rootUses_eq,
@@ -146,7 +145,7 @@ elab "#check_tazuna_reach" : command => do
     -- (`run_within`, by induction over the run).
     ``Tazuna.Smt.proved_sound,
     -- Dead targets: where every input kind's question whether its step, from a state of the right shape whose
-    -- invariants hold, shows a generate target's class is unsat, no step of a run on valid inputs that faults nowhere
+    -- invariants hold, shows a behavior target's class is unsat, no step of a run on valid inputs that faults nowhere
     -- shows it: within the slots (Prove.unreachableWithinBounds), and at any depth where the bound questions read
     -- proved and every input and the initial state fit (Prove.unreachable).
     ``Tazuna.Smt.unshown_within, ``Tazuna.Smt.unshown_sound,
@@ -174,24 +173,24 @@ elab "#check_tazuna_reach" : command => do
     -- of their sorts decodes to the state, input, effects or instance context the report shows, so prove's "does not
     -- decode" lines are unreachable.
     ``Tazuna.Smt.questions_decode, ``Tazuna.Smt.pair_decode, ``Tazuna.Smt.timer_decode, ``Tazuna.Smt.resp_decode,
-    -- A model generate finds is a run to its target: every model's steps decode to inputs whose run from the
+    -- A model search finds is a run to its target: every model's steps decode to inputs whose run from the
     -- initial state takes the kinds the model picks and faults nowhere, each input carrying only ids from outside or
     -- ones an earlier out line showed (`unroll_decode`, `Step.ShownRun`), and its last step answers in the target's
     -- class.
-    ``Tazuna.Smt.generate_sound,
-    -- T6: a trace generate writes reaches its target: its lines read as the spec, so verify replays them as passed
+    ``Tazuna.Smt.search_sound,
+    -- T6: a trace explore or search writes reaches its target: its lines read as the spec, so verify replays them as passed
     -- unless out of tries, and its last step answers in the target's class. Its chain: `traceOf_reads` (Trace/ReplayOk),
     -- on `dec_enc` and `Step.step_same`.
-    ``Tazuna.Cli.generate_reaches,
-    -- T6b: generate's "unreached within k steps": where its cubes at a depth cover it and have no model, no run of
+    ``Tazuna.Cli.reach_trace,
+    -- T6b: search's "unreached within k steps": where its cubes at a depth cover it and have no model, no run of
     -- that many valid inputs within the slots that faults nowhere answers at its last step in the target's class
     -- (`generate_unreached` per cube, from `runs_covered`: every such run of the cube's kinds is a model of every
     -- assertion but the goal; `extendBase_ok`: a cube's script is the run on its picks).
     ``Tazuna.Smt.noModel_cubes,
-    -- A run generate reports as breaking one of prove's targets does (Generate.violated): run in Lean, it faults
+    -- A run explore or search reports as breaking one of prove's targets does (Explore.violated, Search.violated): run in Lean, it faults
     -- nowhere before its last step and faults there by a fault the target covers, and verify replays the written
     -- trace to such a fault at its last line.
-    ``Tazuna.Cli.generate_breaks,
+    ``Tazuna.Cli.break_trace,
     -- A run explore reports as breaking a response does (Explore.violated): its trace reads as the spec, its clock
     -- lines pass no waiting timer, and its steps violate the response as `ResponseV.Violated` defines it.
     ``Tazuna.Explore.response_trace,
@@ -201,7 +200,7 @@ elab "#check_tazuna_reach" : command => do
     -- `key_link` (equal keys give a renaming that keeps the counters' order), `link_move` (such nodes move alike,
     -- through `step_ren`), `levels_spec` (the breadth-first levels), `watchBreaks_of` (the watch misses no violation).
     ``Tazuna.Explore.explore_sound, ``Tazuna.Explore.explore_response_sound,
-    -- generate's "unsettled within k steps" (Generate.unsettled): where its break cubes at a depth cover it with no
+    -- search's "unsettled within k steps" (Search.unsettled): where its break cubes at a depth cover it with no
     -- model, or the step question whether a step breaks the target is unsat for every kind of a cube's last pick, no
     -- run of that many valid inputs within the slots whose steps before the last fault nowhere faults at its last step
     -- by a fault the target covers (`breakOne_covers`: the break step of such a run holds its assertions).

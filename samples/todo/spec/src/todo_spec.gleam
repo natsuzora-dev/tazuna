@@ -316,9 +316,9 @@ pub fn spec() -> tazuna.Spec {
   ])
 }
 
-/// How far prove and generate look: at most two open tasks, two items in every
-/// other collection, and runs of up to three inputs. explore tries an empty
-/// title and one other for `add`, and searches six inputs deep.
+/// How far prove, explore and search look: at most two open tasks, two items
+/// in every other collection, and search's runs of up to three inputs. explore
+/// tries an empty title and one other for `add`, and looks six inputs deep.
 pub fn model() -> tazuna.Model {
   tazuna.model(spec: spec(), resource_limit: 50_000_000, scopes: [
     tazuna.scope(

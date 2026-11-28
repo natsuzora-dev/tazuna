@@ -43,7 +43,7 @@ def fromField : Field := ⟨"from", "init: from the initial state; validState: f
 def state : Field := ⟨"state", "the state before the step, as wire values"⟩
 def input : Field := ⟨"input", "the input of the step"⟩
 def after : Field := ⟨"after", "the state the step reaches before its invariant check"⟩
-def outcome : Field := ⟨"outcome", "how the step ended; for generate, the last step of the trace"⟩
+def outcome : Field := ⟨"outcome", "how the step ended; for explore and search, the last step of the trace"⟩
 def out : Field := ⟨"out", "the out lines of the step"⟩
 def violated : Field := ⟨"violated", "the rules broken"⟩
 def inst : Field := ⟨"instance", "a timer machine's instance: its key and state"⟩
@@ -83,7 +83,7 @@ open Field
 /-- Where a line of a pair question shows the two orders. -/
 def pairFields : List Field := [fromField, state, first, second, firstThenSecond, secondThenFirst, widened]
 
-/-- The fields of a prove line or a generate line before its own. -/
+/-- The fields of a prove line or a search line before its own. -/
 def questionFields : List Field := [service, target, step]
 
 def InternalKind.explanation : InternalKind → Explanation
@@ -91,7 +91,7 @@ def InternalKind.explanation : InternalKind → Explanation
   | .convert => ⟨docOf% InternalKind.convert, [], [file, line, col, message]⟩
   | .engine => ⟨docOf% InternalKind.engine,
     [`Tazuna.Smt.questions_decode, `Tazuna.Smt.pair_decode, `Tazuna.Smt.timer_decode, `Tazuna.Smt.resp_decode,
-      `Tazuna.Smt.generate_sound], [message]⟩
+      `Tazuna.Smt.search_sound], [message]⟩
 
 def UsageKind.explanation : UsageKind → Explanation
   | .arguments => ⟨docOf% UsageKind.arguments, [], [message]⟩
@@ -178,24 +178,21 @@ def ProveKind.explanation : ProveKind → Explanation
   | .unreachableWithinBounds => ⟨docOf% ProveKind.unreachableWithinBounds, [`Tazuna.Smt.unshown_within],
     [service, target, assumes, scope]⟩
 
-def GenerateKind.explanation : GenerateKind → Explanation
-  | .reached => ⟨docOf% GenerateKind.reached,
-    [`Tazuna.Cli.generate_reaches, `Tazuna.Ir.targets_cover, `Tazuna.Cli.targetFile_inj],
+def SearchKind.explanation : SearchKind → Explanation
+  | .reached => ⟨docOf% SearchKind.reached,
+    [`Tazuna.Cli.reach_trace, `Tazuna.Ir.targets_cover, `Tazuna.Cli.targetFile_inj],
     [service, target, written, steps]⟩
-  | .unreached => ⟨docOf% GenerateKind.unreached, [`Tazuna.Smt.noModel_cubes],
+  | .unreached => ⟨docOf% SearchKind.unreached, [`Tazuna.Smt.noModel_cubes],
     [service, target, scope, assumes]⟩
-  | .unreachable => ⟨docOf% GenerateKind.unreachable, [`Tazuna.Smt.unshown_sound], [service, target, assumes]⟩
-  | .unreachableWithinBounds => ⟨docOf% GenerateKind.unreachableWithinBounds, [`Tazuna.Smt.unshown_within],
-    [service, target, assumes, scope]⟩
-  | .violated => ⟨docOf% GenerateKind.violated, [`Tazuna.Cli.generate_breaks], [service, target, written, steps, outcome]⟩
-  | .unsettled => ⟨docOf% GenerateKind.unsettled, [`Tazuna.Smt.noModel_breaks],
+  | .violated => ⟨docOf% SearchKind.violated, [`Tazuna.Cli.break_trace], [service, target, written, steps, outcome]⟩
+  | .unsettled => ⟨docOf% SearchKind.unsettled, [`Tazuna.Smt.noModel_breaks],
     [service, target, scope, assumes]⟩
 
 def ExploreKind.explanation : ExploreKind → Explanation
-  | .reached => ⟨docOf% ExploreKind.reached, [`Tazuna.Cli.generate_reaches, `Tazuna.Ir.targets_cover,
+  | .reached => ⟨docOf% ExploreKind.reached, [`Tazuna.Cli.reach_trace, `Tazuna.Ir.targets_cover,
     `Tazuna.Cli.targetFile_inj], [service, target, written, steps]⟩
   | .unreached => ⟨docOf% ExploreKind.unreached, [`Tazuna.Explore.explore_sound], [service, target, scope, assumes]⟩
-  | .violated => ⟨docOf% ExploreKind.violated, [`Tazuna.Cli.generate_breaks, `Tazuna.Explore.response_trace],
+  | .violated => ⟨docOf% ExploreKind.violated, [`Tazuna.Cli.break_trace, `Tazuna.Explore.response_trace],
     [service, target, written, steps, outcome]⟩
   | .notViolated => ⟨docOf% ExploreKind.notViolated,
     [`Tazuna.Explore.explore_sound, `Tazuna.Explore.explore_response_sound], [service, target, scope, assumes]⟩
@@ -222,7 +219,7 @@ def explanation : Kind → Explanation
   | verifyDiffers => ⟨docOf% Kind.verifyDiffers, [`Tazuna.Trace.replay_iff], [trace, line, expected, actual]⟩
   | traceInvalid => ⟨docOf% Kind.traceInvalid, [`Tazuna.Trace.replay_iff], [trace, line, message]⟩
   | prove k => k.explanation
-  | generate k => k.explanation
+  | search k => k.explanation
   | explore k => k.explanation
   | undecided k => k.explanation
   | explain => ⟨docOf% Kind.explain, [], [Field.name, Field.means, Field.exit, Field.backedBy, Field.fields]⟩

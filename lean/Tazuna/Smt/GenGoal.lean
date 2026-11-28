@@ -1,7 +1,7 @@
 import Tazuna.Smt.UnrollCover
 import Tazuna.Semantics.GenTarget
 
-/-! generate's goal on an unrolled run: the last step shows a class of out line the target aims at (`genGoal`). An
+/-! search's goal on an unrolled run: the last step shows a class of out line the target aims at (`genGoal`). An
 answer's class is read off the step's terms: a command's admission, `decide` and `ensures`, a query's admission, and
 the names of the rules a request breaks. A rule's name term is compared as SMT-LIB strings compare (`nameIsT`), which
 holds of every value exactly when its string is the name, so the goal misses no run. An event's class is read off the
@@ -9,7 +9,7 @@ event slots of the step's end and a request's off its news slots (`Finished` rel
 the requests written), where the step reaches its end. With
 `runs_covered` this gives T6b (`generate_unreached`): steps with no model have no run of that many valid inputs,
 each of the kind its step fixes, within the slots and faulting nowhere, whose last step shows the target's class. The goal reads the kind the step
-takes, the one decoding reads, so it holds only of runs that show that class (`generate_sound`). -/
+takes, the one decoding reads, so it holds only of runs that show that class (`search_sound`). -/
 
 namespace Tazuna.Smt
 
@@ -128,7 +128,7 @@ def kindHitT {n : Nat} (inp : SymInput v (shapes v) n) (out : StepOut v) : Term 
   | .request e n => endHitT out fun fo => requestHitT L v fo.news e n
   | _ => answerHitT L T rules g inp out
 
-/-- generate's goal: the kind the last step takes answers in a class the target aims at. -/
+/-- search's goal: the kind the last step takes answers in a class the target aims at. -/
 def genGoal {n : Nat} (sts : List (UnrollStep v n)) : Term :=
   match sts.getLast? with
   | some st => st.takenT fun k => kindHitT L T rules g k.1 k.2.out
@@ -1039,7 +1039,7 @@ theorem unrollRun_last {M : Model} {hc : v.caller.isData = true} {n : Nat} (x : 
     | nil => cases ys <;> exact h.elim
     | cons a l => simpa [List.getLast?_cons_cons] using hl
 
-/-- T6b: where generate's script for the target on the steps `fs` (each fixing an input kind or not) has no input kind
+/-- T6b: where search's script for the target on the steps `fs` (each fixing an input kind or not) has no input kind
 refused and no model, no run from the initial state of one input per step, each of the kind its step fixes, that fit
 the slots and are valid, whose steps stay within the slots and fault nowhere, answers at its last step in a class the
 target aims at. With no step fixed this is depth `fs.length` (`noModel_cubes` gathers the fixed ones). -/
@@ -1069,11 +1069,11 @@ theorem unrollRun_decode {M : Model} {hc : v.caller.isData = true} {n : Nat} :
   | s, st :: sts, x :: xs, ⟨hd, _, h⟩ => by
     simp only [List.mapM_cons, hd, unrollRun_decode _ sts xs h]; rfl
 
-/-- Goal soundness: in every model of generate's script for the target at depth `d` whose variables hold values of
+/-- Goal soundness: in every model of search's script for the target at depth `d` whose variables hold values of
 their sorts, the steps decode to inputs that `validInputs` allows (`Step.ShownRun`) whose run from the initial state
-answers at its last step in a class the target aims at. So a found model always replays to its target; generate's
+answers at its last step in a class the target aims at. So a found model always replays to its target; search's
 check of that is never the one that fails. -/
-theorem generate_sound (chk : Checked P E T v) (senv : StepEnv L (shapes v)) (hL : SortedLayout L) {M : Model}
+theorem search_sound (chk : Checked P E T v) (senv : StepEnv L (shapes v)) (hL : SortedLayout L) {M : Model}
     {rules : RuleNames} {g : GenTarget} {fs : List (Option Nat)} {B : UnrollBase v senv.nT}
     (hB : unrollBase L T P v senv fs = .ok B)
     (hM : ∀ n (h : n < B.tys.length), VarSorted L B.tys[n] (M.vars n))

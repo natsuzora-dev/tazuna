@@ -41,7 +41,7 @@ fn counter() -> tazuna.Service {
     declares: [tazuna.declare_command(add())],
     machines: [],
     reactions: [],
-    invariants: fn(r: Records) { [#("below three", r.total < 3)] },
+    invariants: fn(r: Records) { [#("not seven", r.total != 7)] },
     responses: [
       tazuna.response(
         name: "acknowledged",

@@ -2,8 +2,8 @@ import Tazuna.Smt.GenGoal
 import Tazuna.Smt.Reached
 import Tazuna.Smt.Cone
 
-/-! Dead targets: prove asks of each of generate's targets whether a step of each input kind, from a state of the right
-shape whose invariants hold, shows a class the target aims at (`showsAsk`), the T4 step question with generate's goal
+/-! Dead targets: prove asks of each behavior target whether a step of each input kind, from a state of the right
+shape whose invariants hold, shows a class the target aims at (`showsAsk`), the T4 step question with search's goal
 for one step (`kindHitT`) in place of a broken rule. Every state a run on valid inputs reaches is such a state
 (`run_invariants`, `Step.run_supp`), so where every kind's question has no model, no step of such a run that faults
 nowhere shows the class: within the slots where some step can leave them (`unshown_within`), at any depth where none

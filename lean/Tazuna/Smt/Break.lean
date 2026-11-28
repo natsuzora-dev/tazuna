@@ -1,6 +1,6 @@
 import Tazuna.Smt.Cube
 
-/-! generate's search for a run that breaks one of prove's targets that a fault falls under (an invariant, an `ensures`
+/-! search's search for a run that breaks one of prove's targets that a fault falls under (an invariant, an `ensures`
 rule, an own effect's acceptance, the cascade bound): steps from the initial state that fault nowhere, then one step
 that faults by a fault the target covers. Its depths are cubes as `noModel_cubes` splits them, but the last step of a
 cube is a break step (`breakOne`): an unrolled step whose assertion says the step breaks the target (`breakT`) in place
@@ -29,7 +29,7 @@ theorem Target.meets_of_covers {g g' : Target} {f : Fault} (h : g.covers f = tru
 theorem Target.covers_unmatched (g : Target) : g.covers .answerUnmatched = false := by
   cases g <;> simp [Target.covers]
 
-/-- Whether a fault breaks the target, so generate searches for a run that breaks it: an invariant, an `ensures` rule,
+/-- Whether a fault breaks the target, so explore and search look for a run that breaks it: an invariant, an `ensures` rule,
 an own effect's acceptance, the cascade bound. A response's, a timer machine's and a pair's line is about deadlines and
 orders, which no fault of one step shows. -/
 def Target.byFault : Target → Bool
@@ -346,7 +346,7 @@ end
 section
 variable {L : Layout} {T : List TypeDecl} {P : List AnySite} {v : ServiceV} {E : List AnyEffectSite}
 
-/-- What generate's search shows of the break cube `ps` (its picks in step order, the break step's last, `ps.length`
+/-- What search shows of the break cube `ps` (its picks in step order, the break step's last, `ps.length`
 at most `d`) at depth `d` for the target `g`: it has no model, as an unsat answer to its question (`cubeAsk` with
 `breakGoal`) or a goal false by its shape says, and refuses no input kind; or for every kind of its last pick, the step
 question (`stepAsk`) whether its step breaks `g` (`breakT`), or any target a fault breaks (`breakAnyT`), is unsat, or
@@ -400,9 +400,9 @@ theorem unrollBase_tys_succ (senv : StepEnv L (shapes v)) {fs : List (Option Nat
 
 -- With no step before the break step, it starts at the initial state `S0`.
 set_option linter.tazuna.silentDefault false in
-/-- T6b for a break target at depth `d`: where generate's break cubes cover the depth (`BreakCover` from no fixed step),
+/-- T6b for a break target at depth `d`: where search's break cubes cover the depth (`BreakCover` from no fixed step),
 no run from the initial state of `d` inputs that fit the slots and are valid, whose steps stay within the slots and
-whose steps before the last fault nowhere, faults at its last step by a fault `g` covers. generate's "unsettled within
+whose steps before the last fault nowhere, faults at its last step by a fault `g` covers. search's "unsettled within
 k steps" is this at every depth up to k. -/
 theorem noModel_breaks (chk : Checked P E T v) (senv : StepEnv L (shapes v)) (hL : SortedLayout L)
     {g : Target} {d : Nat} (hc : BreakCover (T := T) (P := P) senv g d [])

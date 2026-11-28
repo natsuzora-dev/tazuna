@@ -43,8 +43,8 @@ def decl : Dsl → String × List String × String
       "A request to an external or to a command or query of the same service; its answer becomes events.")
   | .subscription => ("Subscription", ["event"], "Another service's event, received as one of this service's.")
   | .model => ("Model", [],
-      "A spec with the scope prove and generate check it in. The scope changes which answers they can give, never what the spec means.")
-  | .scope => ("Scope", [], "How far prove and generate look in one service: slots, run length, explore caps, values.")
+      "A spec with the scope prove, explore and search check it in. The scope changes which answers they can give, never what the spec means.")
+  | .scope => ("Scope", [], "How far prove, explore and search look in one service: slots, run length, explore caps, values.")
   | .values => ("Values", [], "The Ints and Strings `explore` tries for one input kind.")
   | .create => ("Create", ["records"], "At most how many records one table of the records holds at any time.")
   | .response => ("Response", ["records", "event"], "After one event, another within a time, by a deadline the records keep.")
@@ -301,7 +301,7 @@ def Ty.never : Ty := .adt 11 [] []
 def Ty.rules : Ty := .list (.tuple [.str, .bool])
 
 /-- Whether a definition of the type builds a model's values (a model, a scope or a value set), or is a function that
-returns one: they choose how far prove and generate look, and no service reads them. -/
+returns one: they choose how far prove, explore and search look, and no service reads them. -/
 def Ty.ofModel : Ty → Bool
   | .fn _ r => r.ofModel
   | .dsl k _ => k == .model || k == .scope || k == .values

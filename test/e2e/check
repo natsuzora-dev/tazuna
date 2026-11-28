@@ -3,7 +3,7 @@
 # a case names no kind, and runs each case as a user would: the launcher, run in a copy of the case's
 # src/ (and snapshots/ and traces/, when the case has them) with the arguments in its args file, must print the case's
 # stdout and exit with the code in its exit file. A case with written/ must leave a directory written/ equal to it,
-# as generate writes its traces there. A kind
+# as explore and search write their traces there. A kind
 # no spec can reach (a converter or launcher bug) has an ir.json instead of src/, which the engine reads directly.
 # Every line a case expects names a kind and carries only the fields explain names for it.
 # Usage: test/e2e/check <the kinds executable> <engine> <the Gleam package's build/dev directory>

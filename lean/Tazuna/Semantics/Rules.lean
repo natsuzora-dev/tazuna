@@ -64,7 +64,7 @@ inductive Illegal where
   /-- A model gives a service no scope or more than one, or a scope to a service its spec does not have; a scope's
   create bounds read records of another type than its service's; a value set names no input kind of its service, or
   one input kind twice; or the resource limit, `explore_states` or a wait is below 1, or `explore_depth` below 0. The
-  scope is what prove and generate check a service in, so each service has exactly one, and every value it holds is
+  scope is what prove, explore and search check a service in, so each service has exactly one, and every value it holds is
   one they can use. -/
   | model
 deriving Repr, DecidableEq

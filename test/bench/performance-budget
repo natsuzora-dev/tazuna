@@ -1,7 +1,7 @@
 #!/bin/sh
 # Measures a bench spec against the performance budget in its directory's `performance-budget` file: check, prove from
-# an empty cache and again from the cache, and generate from an empty cache, as a user runs them. A z3 wrapper first
-# on PATH counts the scripts the solver runs and their sizes. Exits 1 when a "check" line is
+# an empty cache and again from the cache, and search, which runs prove, explore and search, from an empty cache, as a
+# user runs them. A z3 wrapper first on PATH counts the scripts the solver runs and their sizes. Exits 1 when a "check" line is
 # exceeded; "report" lines (wall time) are only printed. A performance budget never cuts work: it judges counts that do
 # not depend on the machine and reports wall time.
 # Usage: test/bench/performance-budget <spec directory, e.g. shop> [jobs, default 4]
@@ -39,16 +39,16 @@ run check check m
 run prove.cold prove m --jobs "$jobs"
 run prove.cached prove m --jobs "$jobs"
 rm -rf "$work/build/tazuna/prove-cache"
-run generate generate m inputs --jobs "$jobs"
+run search search m inputs --jobs "$jobs"
 
 value() {
   case $1 in
     *.seconds) sed -n 1p "$work/$1" ;;
     prove.questions) wc -l <"$work/prove.cold.scripts" | tr -d ' ' ;;
-    generate.questions) wc -l <"$work/generate.scripts" | tr -d ' ' ;;
+    search.questions) wc -l <"$work/search.scripts" | tr -d ' ' ;;
     prove.undecided) grep -c '"kind":"Undecided\.' "$work/prove.cold.jsonl" || true ;;
-    generate.undecided) grep -c '"kind":"Undecided\.' "$work/generate.jsonl" || true ;;
-    script.max_bytes) sort -n "$work/prove.cold.scripts" "$work/generate.scripts" | tail -1 | tr -d ' ' ;;
+    search.undecided) grep -c '"kind":"Undecided\.' "$work/search.jsonl" || true ;;
+    script.max_bytes) sort -n "$work/prove.cold.scripts" "$work/search.scripts" | tail -1 | tr -d ' ' ;;
     prove.script_bytes) awk '{ s += $1 } END { print s + 0 }' "$work/prove.cold.scripts" ;;
     *) echo "unknown performance budget line $1" >&2; exit 3 ;;
   esac
@@ -64,7 +64,7 @@ while read -r how name limit; do
   fi
   printf '%s %s: %s (performance budget %s, %s)\n' "$how" "$name" "$v" "$limit" "$verdict"
 done <"$spec/performance-budget"
-for name in prove.cold generate; do
+for name in prove.cold search; do
   printf '%s kinds:\n' "$name"
   grep -o '"kind":"[^"]*"' "$work/$name.jsonl" | sort | uniq -c
 done

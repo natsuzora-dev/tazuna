@@ -939,7 +939,7 @@ variable {L : Layout} {T : List TypeDecl} {v : ServiceV} {P : List AnySite} {E :
 step from the initial state, each of the kind its step fixes (`PicksFit`), whose inputs fit the slots and are valid, whose steps stay within the slots and do not fault, gives a
 model whose variables hold values of their sorts, whose steps are that run, and which satisfies every assertion of the
 run. So the run with a goal has no model exactly when no such run satisfies the goal (`UnrollBase.holds_withGoal`):
-generate's "unreached within `d` steps" rests on this. -/
+search's "unreached within `d` steps" rests on this. -/
 theorem runs_covered (hL : SortedLayout L) {fs : List (Option Nat)} {B : UnrollBase v senv.nT}
     (hB : unrollBase L T P v senv fs = .ok B) (hnr : B.refused = [])
     {xs : List (Input v)} (hpk : PicksFit fs xs) (hfits : RunFits L T P v chk.callerData [] (Step.State.init v) xs) :

@@ -69,10 +69,10 @@ pub type Effect(event)
 /// Another service's event, received as one of this service's.
 pub type Subscription(event)
 
-/// A spec with the scope prove and generate check it in. The scope changes which answers they can give, never what the spec means.
+/// A spec with the scope prove, explore and search check it in. The scope changes which answers they can give, never what the spec means.
 pub type Model
 
-/// How far prove and generate look in one service: slots, run length, explore caps, values.
+/// How far prove, explore and search look in one service: slots, run length, explore caps, values.
 pub type Scope
 
 /// The Ints and Strings `explore` tries for one input kind.
@@ -340,7 +340,7 @@ pub fn subscribe(
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// A model: the spec, the scope prove and generate check each of its services in, and the solver's resource limit per question, z3's deterministic `rlimit`, which decides the same answers on every machine. A model function is a function of the root module that takes nothing and returns a `Model`; `--model <name>` picks one, and with a single one it is the one. Each line whose verdict rests on the scope names the model and the values it rests on.
+/// A model: the spec, the scope prove, explore and search check each of its services in, and the solver's resource limit per question, z3's deterministic `rlimit`, which decides the same answers on every machine. A model function is a function of the root module that takes nothing and returns a `Model`; `--model <name>` picks one, and with a single one it is the one. Each line whose verdict rests on the scope names the model and the values it rests on.
 pub fn model(
   spec _spec: Spec,
   scopes _scopes: List(Scope),
@@ -349,7 +349,7 @@ pub fn model(
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// How far prove and generate look in `service`: records per table (`creates`); items per bag and per table no create bounds (`others_at_most`), which covers bags in records and values, tables in values, each machine's table of instances and the pending requests; and inputs per run that generate's solver search unrolls (`steps`, at least 1). The rest is `explore`'s, which stops after `explore_depth` inputs or once it keeps `explore_states` states, and moves the clock by each of the durations `waits` and to each deadline a state holds and the millisecond after it, and tries the Ints and Strings of `values` for an input kind's Int and String fields. prove and generate name each bag and table type a bound gave slots, a machine's table by the machine.
+/// How far prove, explore and search look in `service`: records per table (`creates`); items per bag and per table no create bounds (`others_at_most`), which covers bags in records and values, tables in values, each machine's table of instances and the pending requests; and inputs per run that search unrolls (`steps`, at least 1). The rest is `explore`'s, which stops after `explore_depth` inputs or once it keeps `explore_states` states, and moves the clock by each of the durations `waits` and to each deadline a state holds and the millisecond after it, and tries the Ints and Strings of `values` for an input kind's Int and String fields. prove and search name each bag and table type a bound gave slots, a machine's table by the machine.
 pub fn scope(
   service _service: Service,
   creates _creates: List(Create(records)),

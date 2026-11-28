@@ -39,7 +39,7 @@ gleam run -m tazuna -- prove todo_spec
 ```
 
 `prove` checks the spec in the model that `model()` returns, beside `spec()`.
-`spec()` says what the service means; the model says how far `prove` and `generate` look: at most two open tasks, two items in every other collection, and runs of up to three inputs.
+`spec()` says what the service means; the model says how far `prove`, `explore` and `search` look: at most two open tasks, two items in every other collection, explore runs of up to six inputs, and search runs of up to three.
 A root module can define more models, such as a larger one for a nightly run, and `--model <name>` picks one.
 
 `prove` prints one line per target and input kind.
@@ -75,33 +75,15 @@ Later runs compare the trace with that snapshot:
 In the snapshot, `open tasks` answers `1` after the completion.
 After the clock line at 3600000 it shows one `ReminderDue` event and one request to `mailer`, for the task that is still open.
 
-## Generate inputs for an implementation
+## Write inputs for an implementation
 
 ```sh
-gleam run -m tazuna -- generate todo_spec inputs
+gleam run -m tazuna -- search todo_spec inputs
 ```
 
-`generate` writes one trace to `inputs/todo/` for each class of output it reaches, such as `add accepted` or `request mailer.send`:
-
-```json
-{"file":"todo/add accepted.jsonl","kind":"Generate.reached","service":"todo","steps":1,"target":"add accepted"}
-```
-
-Every target is reached.
-`add` rejects with `TooManyOpenTasks` once two tasks are open.
-Tasks added at one time come due at one time, and each due reminder takes one internal step of the clock line that reaches it, so the cap is what keeps a clock line within the service's `cascade` of 2.
-The model's `others_at_most` of 2 lets the reminder's two instances fit, so `generate` reaches the rejection too.
-
-`remind` lists only `tazuna.Own` in `callers`, so only the service itself runs it, through the `reminder` machine.
-Its one target, `remind invalid callers`, is an outside request that the implementation must refuse.
-
-## Explore the states
-
-```sh
-gleam run -m tazuna -- explore todo_spec found
-```
-
-`explore` searches the states the service reaches from its initial state breadth first, as TLC does, trying every input from each state.
+`search` runs three stages, and each stage takes only the targets the stages before it left open.
+First it prints the `prove` lines above.
+Then `explore` searches the states the service reaches from its initial state breadth first, as TLC does, trying every input from each state.
 `add` takes the titles the model's `values` list, `""` and `"Buy milk"`; every id field takes the ids the state holds and one new one.
 A clock line moves time by the model's wait of an hour, and to each deadline the state holds and the millisecond after it.
 The search stops at `explore_depth`, six inputs:
@@ -110,17 +92,32 @@ The search stops at `explore_depth`, six inputs:
 {"kind":"Explore.covered","scope":{"capped":false,"depth":6,"exhausted":false,"exploreDepth":6,"exploreStates":10000,"model":"model","othersAtMost":2,"values":[{"input":"command add","ints":[],"strings":["","Buy milk"]}],"waits":[3600000]},"service":"todo","states":[1,1,3,10,21,37,58],"transitions":845}
 ```
 
-It reaches every target `generate` reaches and writes its runs to `found/todo/`.
-The seven targets a fault or a late answer breaks read `Explore.notViolated` for runs of up to six inputs.
+`explore` reaches every class of output, such as `add accepted` or `request mailer.send`, and writes one trace for each to `inputs/todo/`:
+
+```json
+{"file":"todo/add accepted.jsonl","kind":"Explore.reached","service":"todo","steps":1,"target":"add accepted"}
+```
+
+`add` rejects with `TooManyOpenTasks` once two tasks are open.
+Tasks added at one time come due at one time, and each due reminder takes one internal step of the clock line that reaches it, so the cap is what keeps a clock line within the service's `cascade` of 2.
+
+`remind` lists only `tazuna.Own` in `callers`, so only the service itself runs it, through the `reminder` machine.
+Its one target, `remind invalid callers`, is an outside request that the implementation must refuse.
+
+The seven targets a fault or a late answer breaks read `Prove.withinBounds`, so `explore` also looks for runs past the slots that break them, and reads `Explore.notViolated` for runs of up to six inputs.
 Without the cap on open tasks, the `cascade bound` line reads `Explore.violated` instead: three tasks added at one time come due at one clock line, and their three reminders take more internal steps than the `cascade` of 2 allows.
 `prove` reads that bound `Prove.withinBounds`, as it looks at two tasks only.
+
+The third stage asks the solver for runs of up to `steps` inputs within the slots, for the targets `explore` did not reach and `prove` did not settle.
+Here no target is left for it, so `search` prints no `Search` line.
+`explore todo_spec found` runs the first two stages only.
 
 ## Verify an implementation's log
 
 `web/todo.mjs` is the service as an implementation writes it, with its own names for tasks (`task-1`) and mail requests (`mail-1`).
 `web/replay.mjs` reads the `in` lines of each trace in a directory, feeds them to the implementation, and writes the implementation's own trace.
 
-1. Replay the generated inputs and the snapshot:
+1. Replay the inputs and the snapshot:
 
    ```sh
    node ../web/replay.mjs inputs/todo traces
@@ -140,7 +137,7 @@ Without the cap on open tasks, the `cascade bound` line reads `Explore.violated`
    ```
 
 The trace keeps the implementation's names, as [Traces](../../docs/concepts.md#traces) allows.
-The replay script maps names the other way, because a generated input refers to tasks and requests by the spec's names.
+The replay script maps names the other way, because an input `search` wrote refers to tasks and requests by the spec's names.
 
 To see a failure, change `state.dueAt <= now` to `state.dueAt < now` in `web/todo.mjs`, which fires the reminder only after its deadline, and run both steps again.
 Two traces fail, because their clock line reaches the deadline exactly:

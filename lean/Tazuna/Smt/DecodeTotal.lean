@@ -3,7 +3,7 @@ import Tazuna.Smt.Unroll
 
 /-! Decoding never fails on a model the solver may give: for every question family whose models `prove` reads
 back (an input kind's step and bound questions, a timer machine's, a pair of own kinds'), and for the unrolled run
-generate reads (`unroll_inputs_decode`), every model whose variables
+search reads (`unroll_inputs_decode`), every model whose variables
 hold values of their sorts and that satisfies the family's context decodes. The context asserts the well-formedness
 of each value it reads (`SymState.wf`, `SymInput.wf`, `wfT`, `ownWf`), and for values of the right sort
 well-formedness is exactly decoding (`wf_iff`). So the CLI's "does not decode" lines are unreachable while the solver

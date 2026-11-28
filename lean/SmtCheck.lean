@@ -10,7 +10,7 @@ import Tazuna.Smt.PairOrders
 import Tazuna.Smt.Unroll
 import Tazuna.Semantics.StepExamples
 import Tazuna.Cli.Prove
-import Tazuna.Cli.Generate
+import Tazuna.Cli.Search
 
 -- Test scaffolding: a value the model leaves out reads as a default that the checks then reject.
 set_option linter.tazuna.silentDefault false
@@ -3967,12 +3967,12 @@ def unrollCheck (solver : Solver) : IO Bool := do
   | .error r => ok ← fail s!"no run of tagging: {repr r}"
   return ok
 
-/-! generate's event and request goals on `sum`: an event is first applied at one input (add), the request `ping` first
+/-! search's event and request goals on `sum`: an event is first applied at one input (add), the request `ping` first
 sent at three (two adds start the machine and set its timer, a clock line at the deadline fires it), so the request
 goal is unsat at depth 2 and sat at 3, and each model's run, played back in Lean, shows the target at its last step. -/
 
 def genGoalCheck (solver : Solver) : IO Bool := do
-  let fail (m : String) : IO Bool := do IO.println s!"smt-check: generate goal: {m}"; return false
+  let fail (m : String) : IO Bool := do IO.println s!"smt-check: search goal: {m}"; return false
   let v := StepExamples.svc
   let L := svcLayout v 3
   let P := (svcParts v).sites

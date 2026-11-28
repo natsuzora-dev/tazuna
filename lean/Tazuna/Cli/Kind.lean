@@ -38,11 +38,11 @@ inductive Tazuna.ProveKind : Type
   /-- A state of the right shape whose invariants hold, and an input whose step from it breaks the target; for a
   response, also the trigger whose deadline the step breaks and which part it breaks. A counterexample to induction,
   not a violation: no run may reach the state. For a target a fault breaks (an invariant, an `ensures` rule, an own
-  effect's acceptance, the cascade bound), generate searches for a run that does. A pair's or a timer machine's state
+  effect's acceptance, the cascade bound), explore and then search look for a run that does. A pair's or a timer machine's state
   is any state of the right shape, invariants or not. -/
   | unproved
   /-- No step from a state of the right shape whose invariants hold, of any input kind, shows the class of out line
-  the generate target aims at unless it faults, no step of any kind goes past the slots the model's scope gives, and every
+  the behavior target aims at unless it faults, no step of any kind goes past the slots the model's scope gives, and every
   input and the initial state fit them: no run on valid inputs that faults nowhere ever shows it, at any depth. A fact
   about the spec, not a violation: a defensive branch may be meant never to run. A target only a query's answer shows
   gets no line, nor does a target whose question has a model, which may be a state no run reaches. -/
@@ -53,28 +53,21 @@ inductive Tazuna.ProveKind : Type
   | unreachableWithinBounds
 deriving DecidableEq
 
-/-- What `generate` found for one target. -/
-inductive Tazuna.GenerateKind : Type
+/-- What `search` found for one target explore left to it. -/
+inductive Tazuna.SearchKind : Type
   /-- A run from the initial state whose last step shows the target's class of out line: its trace is written. -/
   | reached
   /-- No run of at most the scope's steps within the slots, on which its `assumes` hold (valid inputs, no step faults),
   shows the target's class at any step. Not "unreachable": a longer run or larger slots may reach it. -/
   | unreached
-  /-- Every input kind's dead-target question is unsat, no step goes past the slots and every input and the initial
-  state fit them, as prove's line of the same name says: no run on which its `assumes` hold shows the target's class,
-  at any length. generate asks the dead-target questions from its second depth on, once no run of one step reached the
-  target, and prove's bound questions once a target is dead. -/
-  | unreachable
-  /-- As `unreachable`, but only within the slots the line names, as prove's line of the same name says: a step can go
-  past them, or an input or the initial state does not fit them. A run past them may show the class. -/
-  | unreachableWithinBounds
   /-- A run from the initial state on valid inputs whose steps before the last fault nowhere, and whose last step
   faults by a fault the target covers: prove's target is broken in a state a run reaches. Its trace is written, and
   verify replays it to that fault at its last line. -/
   | violated
-  /-- prove found a step that breaks the target from a state whose invariants hold (`Prove.unproved`), and no run of at
-  most the scope's steps within the slots, on valid inputs, whose steps before the last fault nowhere, faults by it at
-  its last step. Not settled: a longer run or larger slots may break the target, or no run may. -/
+  /-- prove left the target open (a step breaks it from a state whose invariants hold, or a question has no answer),
+  explore broke it in no run it covered, and no run of at most the scope's steps within the slots, on valid inputs,
+  whose steps before the last fault nowhere, faults by it at its last step. Not settled: a longer run or larger slots
+  may break the target, or no run may. -/
   | unsettled
 deriving DecidableEq
 
@@ -161,7 +154,7 @@ inductive Tazuna.Kind : Type
   /-- A trace line does not read as a line of the service, or breaks the order of time. -/
   | traceInvalid
   | prove (k : Tazuna.ProveKind)
-  | generate (k : Tazuna.GenerateKind)
+  | search (k : Tazuna.SearchKind)
   | explore (k : Tazuna.ExploreKind)
   | undecided (k : Tazuna.UndecidedKind)
   /-- What a kind of line means, as `explain` prints it. -/
@@ -258,16 +251,13 @@ def ProveKind.name : ProveKind → String
   | .unreachable => "unreachable"
   | .unreachableWithinBounds => "unreachableWithinBounds"
 
-def GenerateKind.all : List GenerateKind :=
-  [.reached, .unreached, .unreachable, .unreachableWithinBounds, .violated, .unsettled]
+def SearchKind.all : List SearchKind := [.reached, .unreached, .violated, .unsettled]
 
-theorem GenerateKind.mem_all (k : GenerateKind) : k ∈ GenerateKind.all := by cases k <;> simp [GenerateKind.all]
+theorem SearchKind.mem_all (k : SearchKind) : k ∈ SearchKind.all := by cases k <;> simp [SearchKind.all]
 
-def GenerateKind.name : GenerateKind → String
+def SearchKind.name : SearchKind → String
   | .reached => "reached"
   | .unreached => "unreached"
-  | .unreachable => "unreachable"
-  | .unreachableWithinBounds => "unreachableWithinBounds"
   | .violated => "violated"
   | .unsettled => "unsettled"
 
@@ -307,7 +297,7 @@ def name : Kind → String
   | verifyDiffers => "Verify.differs"
   | traceInvalid => "Trace.invalid"
   | prove k => "Prove." ++ k.name
-  | generate k => "Generate." ++ k.name
+  | search k => "Search." ++ k.name
   | explore k => "Explore." ++ k.name
   | undecided k => "Undecided." ++ k.name
   | explain => "Explain.kind"
@@ -317,7 +307,7 @@ def name : Kind → String
 def all : List Kind :=
   InternalKind.all.map internal ++ UsageKind.all.map usage ++ Restricted.all.map restricted ++ Ir.Illegal.all.map illegal ++ [checkPassed] ++ FaultKind.all.map fault ++ TestKind.all.map test ++
     [verifyPassed, verifyDiffers, traceInvalid] ++ ProveKind.all.map prove ++
-    GenerateKind.all.map generate ++ ExploreKind.all.map explore ++ UndecidedKind.all.map undecided ++ [explain, version, unfinished]
+    SearchKind.all.map search ++ ExploreKind.all.map explore ++ UndecidedKind.all.map undecided ++ [explain, version, unfinished]
 
 theorem mem_all (k : Kind) : k ∈ all := by
   cases k with
@@ -328,7 +318,7 @@ theorem mem_all (k : Kind) : k ∈ all := by
   | fault k => simp [all, FaultKind.mem_all]
   | test k => simp [all, TestKind.mem_all]
   | prove k => simp [all, ProveKind.mem_all]
-  | generate k => simp [all, GenerateKind.mem_all]
+  | search k => simp [all, SearchKind.mem_all]
   | explore k => simp [all, ExploreKind.mem_all]
   | undecided k => simp [all, UndecidedKind.mem_all]
   | _ => simp [all]
@@ -339,7 +329,7 @@ past the wall clock none that reaches it on every machine. -/
 def e2e : Kind → Bool
   | restricted _ | internal .convert | internal .engine | undecided .timeout => false
   | internal .invalidIr | usage _ | illegal _ | checkPassed | fault _ | test _ | verifyPassed | verifyDiffers | traceInvalid | prove _
-  | generate _ | explore _ | undecided .unknown | undecided .limit | undecided .upToRenaming
+  | search _ | explore _ | undecided .unknown | undecided .limit | undecided .upToRenaming
   | explain | version | unfinished => true
 
 /-- The outcome a line of the kind gives its command; the command exits with its worst line's (`Exit.max`). -/
@@ -353,9 +343,9 @@ def exit : Kind → Exit
   | prove .proved | prove .withinBounds | prove .unreachable | prove .unreachableWithinBounds => .ok
   | prove .violated => .violation
   | prove .unproved => .undecided
-  | generate .reached | generate .unreached | generate .unreachable | generate .unreachableWithinBounds => .ok
-  | generate .violated => .violation
-  | generate .unsettled => .undecided
+  | search .reached | search .unreached => .ok
+  | search .violated => .violation
+  | search .unsettled => .undecided
   | explore .reached | explore .unreached | explore .notViolated | explore .covered => .ok
   | explore .violated => .violation
   | undecided _ => .undecided

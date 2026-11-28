@@ -12,7 +12,7 @@ namespace Tazuna.Smt
 
 structure Solver where
   path : String
-  /-- z3's deterministic resource limit, so the same script gets the same verdict on any machine. prove and generate
+  /-- z3's deterministic resource limit, so the same script gets the same verdict on any machine. prove and search
   take it from the model (`resource_limit`); this default is smt-check's. -/
   rlimit : Nat := 50000000
   /-- z3's random seeds, fixed so the same script gets the same answer, model included, on every run (Boogie sets
@@ -232,7 +232,7 @@ def Solver.ask (s : Solver) (dir : System.FilePath) (direct : String) (ids : Opt
     return .ok a
 
 /-- A script's text parts with their shared definitions found, the definitions' sorts and the SHA-256 of the framed
-parts: what scripts that add one goal assertion share (the goals of generate's targets and of a service's responses at
+parts: what scripts that add one goal assertion share (the goals of behavior targets and of a service's responses at
 one depth). The assertions are to be merged into one object per equal subterm first (`shareCommon'`), with whatever
 builds the goals, so finding a goal's shared terms among them stops at equal objects. -/
 structure ScriptPrefix where

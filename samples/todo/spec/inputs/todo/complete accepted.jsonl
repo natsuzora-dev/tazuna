@@ -1,7 +1,7 @@
 {"service":"todo","trace":1}
-{"caller":{"tag":"User"},"id":"1","in":"request","input":"every title is not empty","name":"add","time":0}
+{"caller":{"tag":"User"},"id":"1","in":"request","input":"Buy milk","name":"add","time":0}
 {"out":"answer","outcome":"accepted","time":0,"to":"1"}
-{"out":"event","time":0,"value":{"tag":"Added","task":"id1","title":"every title is not empty"}}
+{"out":"event","time":0,"value":{"tag":"Added","task":"id1","title":"Buy milk"}}
 {"caller":{"tag":"User"},"id":"2","in":"request","input":"id1","name":"complete","time":0}
 {"out":"answer","outcome":"accepted","time":0,"to":"2"}
 {"out":"event","time":0,"value":{"tag":"Completed","task":"id1"}}

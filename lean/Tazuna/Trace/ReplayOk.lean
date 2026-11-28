@@ -1504,7 +1504,7 @@ theorem init_same (hc : v.records.comparable = true) : StateSame (State.init v) 
   | nil => trivial
   | cons m ms ih => exact ⟨trivial, ih⟩
 
-/-- A trace generate writes for a run from the initial state reads as the spec, so verify replays it as passed unless
+/-- A trace explore or search writes for a run from the initial state reads as the spec, so verify replays it as passed unless
 it runs out of tries (`replay_iff`): where no step of the run faults and each input carries only ids from outside and
 ids an earlier out line showed. -/
 theorem traceOf_reads (chk : Smt.Checked P E T v) (ho : Ordered T v) {xs : List (Input v)}

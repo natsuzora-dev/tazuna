@@ -1,4 +1,4 @@
-// Feeds the in lines of each trace in a directory (generate's inputs or a scenario's snapshot) to the implementation
+// Feeds the in lines of each trace in a directory (search's inputs or a scenario's snapshot) to the implementation
 // and writes the implementation's own trace of the run to another directory, for `verify`.
 // Usage: node replay.mjs <traces to replay> <directory to write>
 

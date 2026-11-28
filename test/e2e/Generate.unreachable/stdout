@@ -1,6 +1,0 @@
-{"file":"counter/add accepted.jsonl","kind":"Generate.reached","service":"counter","steps":1,"target":"add accepted"}
-{"file":"counter/add invalid positive.jsonl","kind":"Generate.reached","service":"counter","steps":1,"target":"add invalid positive"}
-{"file":"counter/check accepted.jsonl","kind":"Generate.reached","service":"counter","steps":1,"target":"check accepted"}
-{"assumes":["ids the service made are used only after they appeared on an out line","no step of the run faults"],"kind":"Generate.unreachable","service":"counter","target":"check rejected Negative"}
-{"file":"counter/event Added.jsonl","kind":"Generate.reached","service":"counter","steps":1,"target":"event Added"}
-{"assumes":["ids the service made are used only after they appeared on an out line","no step of the run faults"],"kind":"Generate.unreachable","service":"counter","target":"event Reset"}

@@ -2,7 +2,7 @@ import Tazuna.Semantics.PendingInv
 import Tazuna.Semantics.Rejects
 import Tazuna.Semantics.Start
 
-/-! What `generate` aims at. verify judges an implementation by its out lines, so a test input is worth writing when
+/-! What explore and search aim at. verify judges an implementation by its out lines, so a test input is worth writing when
 it makes the service show a class of out line: an answer's outcome to a command or query, an event by its variant, a
 request to an external's command or query (`OutClass`). Machine states show in no out line, so they are no targets.
 The targets are enumerated from the spec's declarations (`targets`), a command's rejections from what its `decide`'s
@@ -138,7 +138,7 @@ inductive OutClass where
   | request (external name : String)
 deriving DecidableEq, Repr, Hashable
 
-/-- What generate aims at: one class of out line, except that `invalid` names a literal rule or, with none, any rule
+/-- What explore and search aim at: one class of out line, except that `invalid` names a literal rule or, with none, any rule
 whose name is no literal. -/
 inductive GenTarget where
   | accepted (command : String)
@@ -891,8 +891,8 @@ theorem classes_covered (T : List TypeDecl) {P : List AnySite} {E : List AnyEffe
       ((mem_dedupBy (fun _ _ => beq_iff_eq) _ _).2 (List.mem_map.2 ⟨sh, hsh, rfl⟩)),
       by simp [GenTarget.covers, Step.Pending.line, hx, hn]⟩
 
-/-- generate's targets miss no class: every class of out line a step from a state the step invariant holds of shows is
-aimed at by one of the targets generate makes from the checked IR (`ruleNamesOf`, `rejectionsOf`). -/
+/-- The behavior targets miss no class: every class of out line a step from a state the step invariant holds of shows is
+aimed at by one of the targets explore and search make from the checked IR (`ruleNamesOf`, `rejectionsOf`). -/
 theorem targets_cover (T : List TypeDecl) {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV}
     (hv : v.Reach P E) {s : State v} (hs : Step.Inv P s) (x : Input v) :
     ∀ c ∈ classes T v x (step T v s x), ∃ g ∈ targets T v (ruleNamesOf v), g.covers (ruleNamesOf v) c = true :=

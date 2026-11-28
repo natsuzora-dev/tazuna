@@ -162,7 +162,7 @@ structure CreateV (r : Ty) where
   atMost : Int
 
 /-- The slots and run length a model's scope gives a service whose records are `r`, in Gleam's Int: what prove and
-generate read beside the service, which holds only its meaning (`ScopeV.boundsOf`). -/
+search read beside the service, which holds only its meaning (`ScopeV.boundsOf`). -/
 structure BoundsV (r : Ty) where
   creates : List (CreateV r)
   /-- `others_at_most`: the items of each bag and of each table no create bounds. -/
@@ -212,7 +212,7 @@ structure ValuesV where
   ints : List Int
   strings : List Str
 
-/-- How far prove and generate look in one service, as its model writes it, in Gleam's Int: `service` is the
+/-- How far prove, explore and search look in one service, as its model writes it, in Gleam's Int: `service` is the
 service's name, and `creates` reads records of the type `records`, which check requires to be the service's. -/
 structure ScopeV where
   service : String

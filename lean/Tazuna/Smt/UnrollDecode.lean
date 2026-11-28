@@ -707,7 +707,7 @@ theorem unrollSteps_run (hL : SortedLayout L) : (fs : List (Option Nat)) → (S 
 /-- A model of an unrolled run is a run: in every model of the script whose variables hold values of their sorts,
 the steps decode to inputs whose run from the initial state takes, at each step, a kind whose terms say what the step
 is, faults nowhere, and leaves the state the step's end terms denote; and every id an input carries that the service
-made appeared on an earlier step's out line (`Step.ShownRun`, what `validInputs` names). So generate's playback of a
+made appeared on an earlier step's out line (`Step.ShownRun`, what `validInputs` names). So search's playback of a
 model always replays, its "does not decode" line is unreachable, and a found run is one the assumption allows. -/
 theorem unroll_decode (hL : SortedLayout L) {fs : List (Option Nat)} {B : UnrollBase v senv.nT}
     (hB : unrollBase L T P v senv fs = .ok B)

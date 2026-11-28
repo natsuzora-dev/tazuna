@@ -4,7 +4,7 @@ import Tazuna.Semantics.Valid
 import Tazuna.Semantics.GenTarget
 
 /-! Examples of what runs mean beyond one step, on hand-written steps and on runs of the example service `sum`:
-responses, the timely-clock assumption, and generate's targets. -/
+responses, the timely-clock assumption, and the behavior targets. -/
 
 namespace Tazuna.Ir.RunExamples
 

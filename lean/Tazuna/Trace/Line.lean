@@ -1,7 +1,7 @@
 import Lean.Data.Json
 import Tazuna.Trace.Wire
 
-/-! The lines of a trace. Snapshots, generate's output and verify's input share one format: a header line
+/-! The lines of a trace. Snapshots, the traces explore and search write, and verify's input share one format: a header line
 `{"trace":1,"service":...}`, then one line per input (`"in"`) or output (`"out"`) of the service, each with the
 service's time in ms. Inputs: a clock line, which fires the timers due; a request to a command or query, with an `id`
 the trace chooses; an answer to a request the service sent, naming it in `to`; an event the service subscribes to.

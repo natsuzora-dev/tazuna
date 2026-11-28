@@ -3,7 +3,7 @@ import Tazuna.Smt.Unroll
 import Tazuna.Smt.Timer
 import Tazuna.Smt.Pair
 
-/-! The layout boundary: every script builder prove and generate call, run in a checked service's layout, refuses only
+/-! The layout boundary: every script builder prove and search call, run in a checked service's layout, refuses only
 for the spec's reasons, never for a gap of the layout (`Sound`). One fact about the layout carries most of it: every
 datatype the layout holds has a sort for each field, so `datatypes?` is found (`datatypes_ofParts`). Each lookup a
 builder makes at a type refuses with that type's own limit where it has no term (`lacks`, `lacksData`), so a gap is

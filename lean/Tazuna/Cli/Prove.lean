@@ -1,4 +1,4 @@
-import Tazuna.Cli.Search
+import Tazuna.Cli.Run
 import Tazuna.Trace.Run
 import Tazuna.Smt.Prove
 import Tazuna.Semantics.After
@@ -9,7 +9,6 @@ import Tazuna.Smt.PairOrders
 import Tazuna.Smt.Pair
 import Tazuna.Smt.Dead
 import Tazuna.Smt.RespStep
-import Tazuna.Cli.Generate
 
 /-! The `prove` command: for each target of each service, the base case by evaluating the initial state and one
 question per input kind for the step, one line per question. A response is a target too: its question per input kind
@@ -86,7 +85,7 @@ inductive Item where
   /-- A question `--only` leaves out: it prints nothing, and its target is not proved. -/
   | skipped (service : String) (target : Target)
 
-/-- A dead-target question family: one of generate's targets and, per input kind, its place (`SymInput.place`) and the
+/-- A dead-target question family: one of the behavior targets and, per input kind, its place (`SymInput.place`) and the
 question whether its step shows a class the target aims at (`showsAsk`), none where the code or the kind's terms rule
 it out. The question is built only when its family's job needs it, so a cached answer builds none. -/
 structure ShowsItem where
@@ -534,125 +533,188 @@ def Placed.target : Placed → Option String
   | .skipped _ g => some g.text
   | .asked _ g _ => if g.isEmpty then none else some g
 
+/-- What prove's lines leave of a target to explore and search. -/
+inductive Leaves where
+  /-- Its lines settle it: proved, violated by the initial state, or unreachable. -/
+  | settled
+  /-- It holds, or no step shows it, within the slots: explore looks past them, and search, whose runs stay within
+  them, has nothing to add. -/
+  | pastSlots
+  /-- A step from a state of the right shape breaks it or may show it, or a question about it has no answer: explore,
+  then search. -/
+  | open
+deriving BEq
+
+/-- What the prove stage gives the later stages of a run. -/
+structure Proven where
+  /-- How prove leaves a behavior target of a service. -/
+  behavior : String → GenTarget → Leaves
+  /-- How prove leaves a target a fault or a late answer breaks, by its text. -/
+  fault : String → Target → Leaves
+  /-- The services a question the deadline cut off kept from printing, whose targets are listed as unfinished. -/
+  cut : List String
+  unfinished : List String
+  /-- What the direct keys of the run's questions are built from, and the answer cache, which search shares. -/
+  inputs : List String
+  cache : System.FilePath
+
 -- Every service a report names has a scope, so the empty list is never read.
 set_option linter.tazuna.silentDefault false in
-def prove (root path : String) (opts : Options) : Cmd Unit := do
-  let start ← IO.monoMsNow
-  match ← loadModel root path opts.model with
-  | none => pure ()
-  | some (cm, name) =>
-    let c := cm.checked
-    let model := cm.model
-    let rm : RunModel := ⟨name, model⟩
-    let solver := { (← Solver.find) with rlimit := model.rlimit.toNat, deadline := opts.timeout.map (start + 1000 * ·) }
-    -- The engine's own digest names this build in the direct keys; it is read while the questions are built.
-    let engine ← IO.asTask (prio := .dedicated) do return Sha256.hex (← IO.FS.readBinFile (← IO.appPath))
-    let mut items : List Item := []
-    let mut scopes : List (String × ServiceItems) := []
-    for sv in cm.services do
-      let r := serviceItems c sv opts.keeps
-      if let some m := r.internal then return ← internal m
-      items := items ++ r.items
-      scopes := scopes ++ [(sv.v.name, { r with items := [] })]
-    let version ← solver.version
-    let cache := opts.cache / Sha256.hex version.toUTF8
-    -- What builds every question's script, for the direct keys: the IR is the whole spec.
-    let ir := Sha256.hex (← IO.FS.readBinFile path)
-    let inputs := [← IO.ofExcept (← IO.wait engine), version] ++ solver.header ++ [ir]
-    let mut names : Std.HashSet (List String) := {}
-    let mut questions : Array Job := #[]
-    let mut placed : Array Placed := #[]
-    let mut deads : Array (String × GenTarget × IO.Ref (Option (Except String Bool))) := #[]
-    for (s, sc) in scopes do
-      let ids := (cm.services.find? (·.v.name == s)).bind (·.L.ids)
-      for it in sc.shows do
-        let mut asks := []
-        for (step, q) in it.asks do
-          let name := ["shows", s, it.target.text, step]
-          if names.contains name then return ← internal s!"two questions are named {name}"
-          names := names.insert name
-          asks := asks ++ [(name, q)]
-        let (j, r) ← Job.of (allUnsat solver cache inputs ids asks)
-        questions := questions.push j
-        deads := deads.push (s, it.target, r)
-    for it in items do
-      match it with
-      | .ready r => placed := placed.push (.ready r)
-      | .skipped s g => placed := placed.push (.skipped s g)
-      | .ask o =>
-        if names.contains o.name then return ← internal s!"two questions are named {o.name}"
-        names := names.insert o.name
-        let (j, r) ← Job.of do pure ((← solver.ask cache (directKey inputs o.name) o.ids o.script) >>= o.read)
-        questions := questions.push j
-        placed := placed.push (.asked (o.name[1]?.getD "") (o.name[2]?.getD "") r)
-    runAll solver opts.jobs questions
-    -- A line reads every question of its service (the bound questions and which targets are proved), so a service
-    -- with a question the run's deadline cut off prints none, and its targets are listed as unfinished.
-    let cut ← solver.past
-    let mut unfinished : List String := []
-    for p in placed do
-      if let .asked s _ r := p then
-        if (← r.get).isNone && cut && !unfinished.contains s then unfinished := unfinished ++ [s]
-    for (s, _, r) in deads do
+/-- The prove stage: its lines, and what they leave of each target. -/
+def proveStage (cm : CheckedModel) (name path : String) (opts : Options) (deadline : Option Nat) :
+    Cmd (Option Proven) := do
+  let c := cm.checked
+  let model := cm.model
+  let rm : RunModel := ⟨name, model⟩
+  let solver := { (← Solver.find) with rlimit := model.rlimit.toNat, deadline }
+  -- The engine's own digest names this build in the direct keys; it is read while the questions are built.
+  let engine ← IO.asTask (prio := .dedicated) do return Sha256.hex (← IO.FS.readBinFile (← IO.appPath))
+  let mut items : List Item := []
+  let mut scopes : List (String × ServiceItems) := []
+  for sv in cm.services do
+    let r := serviceItems c sv opts.keeps
+    if let some m := r.internal then return ← stop m
+    items := items ++ r.items
+    scopes := scopes ++ [(sv.v.name, { r with items := [] })]
+  let version ← solver.version
+  let cache := opts.cache / Sha256.hex version.toUTF8
+  -- What builds every question's script, for the direct keys: the IR is the whole spec.
+  let ir := Sha256.hex (← IO.FS.readBinFile path)
+  let inputs := [← IO.ofExcept (← IO.wait engine), version] ++ solver.header ++ [ir]
+  let mut names : Std.HashSet (List String) := {}
+  let mut questions : Array Job := #[]
+  let mut placed : Array Placed := #[]
+  let mut deads : Array (String × GenTarget × IO.Ref (Option (Except String Bool))) := #[]
+  for (s, sc) in scopes do
+    let ids := (cm.services.find? (·.v.name == s)).bind (·.L.ids)
+    for it in sc.shows do
+      let mut asks := []
+      for (step, q) in it.asks do
+        let name := ["shows", s, it.target.text, step]
+        if names.contains name then return ← stop s!"two questions are named {name}"
+        names := names.insert name
+        asks := asks ++ [(name, q)]
+      let (j, r) ← Job.of (allUnsat solver cache inputs ids asks)
+      questions := questions.push j
+      deads := deads.push (s, it.target, r)
+  for it in items do
+    match it with
+    | .ready r => placed := placed.push (.ready r)
+    | .skipped s g => placed := placed.push (.skipped s g)
+    | .ask o =>
+      if names.contains o.name then return ← stop s!"two questions are named {o.name}"
+      names := names.insert o.name
+      let (j, r) ← Job.of do pure ((← solver.ask cache (directKey inputs o.name) o.ids o.script) >>= o.read)
+      questions := questions.push j
+      placed := placed.push (.asked (o.name[1]?.getD "") (o.name[2]?.getD "") r)
+  runAll solver opts.jobs questions
+  -- A line reads every question of its service (the bound questions and which targets are proved), so a service
+  -- with a question the run's deadline cut off prints none, and its targets are listed as unfinished.
+  let cut ← solver.past
+  let mut unfinished : List String := []
+  for p in placed do
+    if let .asked s _ r := p then
       if (← r.get).isNone && cut && !unfinished.contains s then unfinished := unfinished ++ [s]
-    let mut reports : List Report := []
-    let mut skipped : List (String × Target) := []
-    for p in placed do
-      if unfinished.contains p.service then continue
-      match p with
-      | .ready r => reports := reports ++ [r]
-      | .skipped s g => skipped := skipped ++ [(s, g)]
-      | .asked _ _ r =>
-        match ← r.get with
-        | some (.ok r) => reports := reports ++ [r]
-        | some (.error m) => return ← internal m
-        | none => return ← internal "a question's job never ran"
-    let targets := (placed.toList.filterMap fun
-      | .ready r => (targetOf r).map (r.service, ·)
-      | .skipped s g => some (s, g)
-      | .asked .. => none) ++ reports.filterMap fun r => (targetOf r).map (r.service, ·)
-    let skips (s : String) (g : Target) : Bool := skipped.any fun (s', g') => s' == s && g' == g
-    let unproved (s : String) : List Target :=
-      (targets.filterMap fun (s', g) => if s' == s && (reports.any (blocks s g) || skips s g) then some g else none).foldl
-        (fun acc g => if acc.contains g then acc else acc ++ [g]) []
-    -- A bound question with no verdict leaves its kind's lines within the bounds too.
-    let left (s : String) (at? : String → Bool) : Bool := reports.any fun
-      | .boundReached s' step' | .undecided _ s' step' none _ => s' == s && at? step'
-      | _ => false
-    let scope (s : String) : List Json := ((scopes.lookup s).map (·.scope)).getD []
-    let inputScope (s : String) : List Json := ((scopes.lookup s).map (·.inputScope)).getD []
-    let steps (s : String) : List String := ((scopes.lookup s).map (·.steps)).getD []
-    let fits (s : String) : Bool := ((scopes.lookup s).map (·.fits)).getD false
-    if let some (s, step) := reports.findSome? (fun r => match r with
-        | .boundReached s step => if (scope s).isEmpty then some (s, step) else none
-        | _ => none) then
-      return ← internal s!"service {s}, {step}: a step left the slots of a layout with no collection"
-    -- A line rests on the states runs reach. They stay within the slots only where no input kind's step leaves them,
-    -- every input fits and the initial state does (`run_within`); the initial state's line rests on no input.
-    let reach (s : String) (here : Bool) : Option (List Json) :=
-      runScope (here || left s (steps s).contains) (fits s) (scope s) (inputScope s)
-    let past (s step : String) : Option (List Json) :=
-      if step == "init" then none else reach s (left s (· == step))
-    for r in reports do
-      if let some (kind, fields) := lineOf rm unproved past r then printLine kind fields
-    -- A dead target is a fact, not a verdict: only where every kind's question is unsat (`unshown_sound` at any depth,
-    -- else `unshown_within`); a model or no answer says nothing, and stops its family's questions.
-    for (s, g, r) in deads do
-      if unfinished.contains s then continue
-      let dead ← match ← r.get with
-        | some (.ok dead) => pure dead
-        | some (.error m) => return ← internal m
-        | none => return ← internal "a question's job never ran"
-      if dead then
-        let fields := [("service", Json.str s), ("target", Json.str g.text),
-          ("assumes", Json.arr (Step.Assumption.ofRuns.map (Json.str ·.text)).toArray)]
-        match reach s false with
-        | none => printLine (.prove .unreachable) fields
-        | some bs => printLine (.prove .unreachableWithinBounds) (fields ++ [rm.field [("bounds", Json.arr bs.toArray)]])
-    unless unfinished.isEmpty do
-      let left := unfinished.flatMap fun s =>
-        ((placed.toList.filter (·.service == s)).filterMap (·.target) ++
-          (deads.toList.filter (·.1 == s)).map (·.2.1.text)).eraseDups.map (s ++ "/" ++ ·)
-      printLine .unfinished [("targets", Json.arr (left.map Json.str).toArray)]
+  for (s, _, r) in deads do
+    if (← r.get).isNone && cut && !unfinished.contains s then unfinished := unfinished ++ [s]
+  let mut reports : List Report := []
+  let mut skipped : List (String × Target) := []
+  for p in placed do
+    if unfinished.contains p.service then continue
+    match p with
+    | .ready r => reports := reports ++ [r]
+    | .skipped s g => skipped := skipped ++ [(s, g)]
+    | .asked _ _ r =>
+      match ← r.get with
+      | some (.ok r) => reports := reports ++ [r]
+      | some (.error m) => return ← stop m
+      | none => return ← stop "a question's job never ran"
+  let targets := (placed.toList.filterMap fun
+    | .ready r => (targetOf r).map (r.service, ·)
+    | .skipped s g => some (s, g)
+    | .asked .. => none) ++ reports.filterMap fun r => (targetOf r).map (r.service, ·)
+  let skips (s : String) (g : Target) : Bool := skipped.any fun (s', g') => s' == s && g' == g
+  let unproved (s : String) : List Target :=
+    (targets.filterMap fun (s', g) => if s' == s && (reports.any (blocks s g) || skips s g) then some g else none).foldl
+      (fun acc g => if acc.contains g then acc else acc ++ [g]) []
+  -- A bound question with no verdict leaves its kind's lines within the bounds too.
+  let left (s : String) (at? : String → Bool) : Bool := reports.any fun
+    | .boundReached s' step' | .undecided _ s' step' none _ => s' == s && at? step'
+    | _ => false
+  let scope (s : String) : List Json := ((scopes.lookup s).map (·.scope)).getD []
+  let inputScope (s : String) : List Json := ((scopes.lookup s).map (·.inputScope)).getD []
+  let steps (s : String) : List String := ((scopes.lookup s).map (·.steps)).getD []
+  let fits (s : String) : Bool := ((scopes.lookup s).map (·.fits)).getD false
+  if let some (s, step) := reports.findSome? (fun r => match r with
+      | .boundReached s step => if (scope s).isEmpty then some (s, step) else none
+      | _ => none) then
+    return ← stop s!"service {s}, {step}: a step left the slots of a layout with no collection"
+  -- A line rests on the states runs reach. They stay within the slots only where no input kind's step leaves them,
+  -- every input fits and the initial state does (`run_within`); the initial state's line rests on no input.
+  let reach (s : String) (here : Bool) : Option (List Json) :=
+    runScope (here || left s (steps s).contains) (fits s) (scope s) (inputScope s)
+  let past (s step : String) : Option (List Json) :=
+    if step == "init" then none else reach s (left s (· == step))
+  for r in reports do
+    if let some (kind, fields) := lineOf rm unproved past r then printLine kind fields
+  -- A dead target is a fact, not a verdict: only where every kind's question is unsat (`unshown_sound` at any depth,
+  -- else `unshown_within`); a model or no answer says nothing, and stops its family's questions.
+  let mut dead : List (String × GenTarget × Leaves) := []
+  for (s, g, r) in deads do
+    if unfinished.contains s then continue
+    let isDead ← match ← r.get with
+      | some (.ok d) => pure d
+      | some (.error m) => return ← stop m
+      | none => return ← stop "a question's job never ran"
+    if isDead then
+      let fields := [("service", Json.str s), ("target", Json.str g.text),
+        ("assumes", Json.arr (Step.Assumption.ofRuns.map (Json.str ·.text)).toArray)]
+      match reach s false with
+      | none =>
+        printLine (.prove .unreachable) fields
+        dead := dead ++ [(s, g, .settled)]
+      | some bs =>
+        printLine (.prove .unreachableWithinBounds) (fields ++ [rm.field [("bounds", Json.arr bs.toArray)]])
+        dead := dead ++ [(s, g, .pastSlots)]
+  let unfinishedTargets := unfinished.flatMap fun s =>
+    ((placed.toList.filter (·.service == s)).filterMap (·.target) ++
+      (deads.toList.filter (·.1 == s)).map (·.2.1.text)).eraseDups.map (s ++ "/" ++ ·)
+  -- A target's text names it: a fault target explore reads off the code is the one prove's questions name.
+  let about (s t : String) : Report → Bool
+    | .violated s' _ g _ | .undecided _ s' _ (some g) _ => s' == s && g.text == t
+    | .undecided _ s' _ none _ => s' == s
+    | _ => false
+  let fault (s : String) (g : Target) : Leaves :=
+    let t := g.text
+    if reports.any fun | .violated s' step g' _ => s' == s && step == "init" && g'.text == t | _ => false then .settled
+    else if reports.any (about s t) || skipped.any (fun (s', g') => s' == s && g'.text == t) then .open
+    else if reports.any fun | .unsat s' step (some g') => s' == s && g'.text == t && (past s' step).isSome | _ => false
+    then .pastSlots
+    else .settled
+  let behavior (s : String) (g : GenTarget) : Leaves :=
+    match dead.find? fun (s', g', _) => s' == s && g' == g with
+    | some (_, _, l) => l
+    | none => .open
+  return some { behavior, fault, cut := unfinished, unfinished := unfinishedTargets, inputs, cache }
+
+/-- Prints the run's `Run.unfinished` line where its deadline left targets, and ends a run with a deadline at once: a
+cut-off explore search is pure and cannot be stopped, and the deadline's timer sleeps on. -/
+def finish (deadline : Option Nat) (unfinished : List String) : Cmd Unit := do
+  unless unfinished.isEmpty do
+    printLine .unfinished [("targets", Json.arr (unfinished.eraseDups.map Json.str).toArray)]
+  if deadline.isSome then
+    (← IO.getStdout).flush
+    IO.Process.exit (← (← read).get).code.toUInt8
+
+/-- The model the run checks in, and when its wall clock ends: none where it does not load, and the lines are printed. -/
+def startRun (root path : String) (opts : Options) : Cmd (Option (CheckedModel × String × Option Nat)) := do
+  let start ← IO.monoMsNow
+  return (← loadModel root path opts.model).map fun (cm, name) => (cm, name, opts.timeout.map (start + 1000 * ·))
+
+/-- The `prove` command: the prove stage alone. -/
+def prove (root path : String) (opts : Options) : Cmd Unit := do
+  let some (cm, name, deadline) ← startRun root path opts | return
+  let some p ← proveStage cm name path opts deadline | return
+  finish deadline p.unfinished
 
 end Tazuna.Cli

@@ -1,285 +1,14 @@
-import Tazuna.Cli.Check
-import Tazuna.Smt.Break
-import Std.Sync.Semaphore
-import Lean.Util.ShareCommon
-import Tazuna.Smt.Bounds
-import Tazuna.Smt.PairOrders
-import Tazuna.Smt.Reached
-import Tazuna.Smt.Boundary
-import Tazuna.Trace.ReplayOk
+import Tazuna.Cli.Explore
 
-/-! What `prove` and `generate` share: their options, the solver pool, the lines of a refused encoding and of a
-service's scope, and the search of a service's unrolled run depth by depth for a model of a goal, each depth split into
-cubes (`CubesCover`), with each depth's run built once for every search over it. -/
+/-! The search stage and the `search` command, which runs the prove and explore stages and then this one: for each
+target explore left to it, the shortest run from the initial state that reaches or breaks it, found by deepening an
+unrolled run one step at a time up to the scope's `steps`, each depth split into cubes (`CubesCover`), with each
+depth's run built once for every search over it. -/
 
 namespace Tazuna.Cli
 
 open Lean (Json)
 open Tazuna.Ir Tazuna.Ir.Step Tazuna.Smt Tazuna.Trace
-
-/-- The `why` of a question the wall-clock safety net stopped. -/
-def timeoutWhy (ms : Nat) : String :=
-  s!"the solver ran past {ms} ms of wall clock before its resource limit, which decides every other answer"
-
-/-- A service of a checked spec with what its checks give the commands: its membership, so `c.checked` applies, the
-bounds its model's scope gives it, and its layout's step environment, which `stepEnv_ofService` proves is found. -/
-structure CheckedService (c : CheckedSpec) where
-  v : ServiceV
-  mem : v ∈ c.spec.services
-  b : BoundsV v.records
-  senv : StepEnv (Layout.ofService c.program.defs v b) (shapes v)
-
-/-- The step environment a found one proves exists. -/
-def stepEnvOf {L : Layout} {v : ServiceV} (h : ∃ senv, StepEnv.of L (shapes v) = .ok senv) : StepEnv L (shapes v) :=
-  match e : StepEnv.of L (shapes v) with
-  | .ok senv => senv
-  | .error _ => False.elim (by obtain ⟨_, h⟩ := h; rw [e] at h; cases h)
-
-/-- Each service of the model's spec, in order, within the bounds the model gives it. -/
-def CheckedModel.services (cm : CheckedModel) : List (CheckedService cm.checked) :=
-  cm.checked.spec.services.attach.map fun ⟨v, hv⟩ =>
-    ⟨v, hv, cm.bounds v hv, stepEnvOf (stepEnv_ofService (bnd := cm.bounds v hv) cm.checked.program.defs (cm.checked.checked v hv))⟩
-
-abbrev CheckedService.L {c : CheckedSpec} (s : CheckedService c) : Layout := Layout.ofService c.program.defs s.v s.b
-
-theorem CheckedService.callerData {c : CheckedSpec} (s : CheckedService c) : s.v.caller.isData = true :=
-  (c.checked s.v s.mem).callerData
-
-section
-variable {v : ServiceV} {shs : List (PendingShape v.event)} {n : Nat}
-
-def senderText : {ks : List Ty} → SenderShape ks → String
-  | _, .machine m _ => m
-  | _, .reaction r => r
-
-def _root_.Tazuna.Smt.SymInput.text : SymInput v shs n → String
-  | .command i .. => "command " ++ (v.commands.get i).name
-  | .query i .. => "query " ++ (v.queries.get i).name
-  | .answer k j .. => s!"answer {shs[k].external}.{shs[k].name} to {senderText shs[k].sender} at slot {(j : Nat)}"
-  | .unmatched .. => "unmatched answer"
-  | .event i _ => "event " ++ (v.subscribes.get i).name
-  | .clock _ => "clock"
-
-/-- The input kind by its place, which tells apart kinds whose text is the same (answers to two pending shapes with
-the same request and sender). -/
-def _root_.Tazuna.Smt.SymInput.place : SymInput v shs n → String
-  | .command i .. => s!"command {(i : Nat)}"
-  | .query i .. => s!"query {(i : Nat)}"
-  | .answer k j .. => s!"answer {(k : Nat)} {(j : Nat)}"
-  | .unmatched .. => "unmatched answer"
-  | .event i _ => s!"event {(i : Nat)}"
-  | .clock _ => "clock"
-
-end
-
--- A type the table does not declare shows by its index.
-set_option linter.tazuna.silentDefault false in
-/-- A type as Gleam writes it. -/
-def tyText (T : List TypeDecl) : Ty → String
-  | .int => "Int"
-  | .str => "String"
-  | .list t => s!"List({tyText T t})"
-  | .tuple ts => s!"#({", ".intercalate (ts.map (tyText T))})"
-  | .fn ps r => s!"fn({", ".intercalate (ps.map (tyText T))}) -> {tyText T r}"
-  | .adt i args _ =>
-    let name := (T[i]?.map (·.name)).getD s!"type {i}"
-    if args.isEmpty then name else s!"{name}({", ".intercalate (args.map (tyText T))})"
-  | .param k => s!"t{k}"
-  | .bag t => s!"Bag({tyText T t})"
-  | .table k v => s!"Table({tyText T k}, {tyText T v})"
-  | .point .day => "Date"
-  | .point .ms => "Instant"
-  | .id => "Id"
-  | .dsl k args =>
-    let name := k.decl.1
-    if args.isEmpty then name else s!"{name}({", ".intercalate (args.map (tyText T))})"
-
-def _root_.Tazuna.Smt.Limit.text (T : List TypeDecl) : Limit → String
-  | .function t => s!"a value of {tyText T t} is a function where a term is needed"
-  | .equality t => s!"== on {tyText T t} compares slots in their order, not values"
-  | .dynamicName => "a handle, command or query named by a value that is no literal"
-  | .builtin n => s!"the built-in {n} has no terms"
-  | .effectClosure => "a kept function returns effects"
-  | .unsortable t => s!"a value of {tyText T t} holds a type variable or a structure value"
-  | .slots t => s!"a value the spec writes of {tyText T t} holds more items than its bounds give"
-  | .renamings n => s!"the two steps sent {n} requests, more than the {wireSearchCap} whose renamings are searched"
-  | .keptFunctions => "the two orders end with the same data but keep different functions, whose results are not compared"
-  | .tableKey t => s!"a value of {tyText T t} holds a table whose key is no plain value"
-
-/-- Every bound of the service's layout among the types `keep` holds: each table, bag and list type, and the pending
-requests where the service has a request shape, with the bound its slots come from (`stepBound`), its slots as
-`Layout.count` gives them, the function every slot-fit premise (`StepFits`, `RunIn`, `RespFits`, `inputVals`) reads,
-and the machines whose table of instances has the type. -/
-def boundsOf (T : List TypeDecl) (L : Layout) (v : ServiceV) (b : BoundsV v.records) (keep : Ty → Bool) : List Json :=
-  L.types.filterMap fun (t, _) =>
-    let machines := (v.machines.filter fun m => (Ty.same m.table t).isSome).map (Json.str ·.name)
-    let line (name bound : String) : Option Json :=
-      some (Json.mkObj ([("type", Json.str name), ("bound", Json.str bound), ("slots", Lean.toJson (L.count t))] ++
-        if machines.isEmpty then [] else [("machines", Json.arr machines.toArray)]))
-    if !keep t then none
-    else if (Ty.same t (pendingTable (shapes v))).isSome then
-      if (shapes v).isEmpty then none else line "pending requests" (stepBound v b (L.count t) t)
-    else match t with
-      | .table .. | .bag _ => line (tyText T t) (stepBound v b (L.count t) t)
-      | .list _ => line (tyText T t) "longest literal"
-      | _ => none
-
-/-- Every bound a step of the service can go past: each bound of its layout. A list from an input can be longer than
-every literal of its type, so lists are named too. -/
-def scopeBounds (T : List TypeDecl) (L : Layout) (v : ServiceV) (b : BoundsV v.records) : List Json :=
-  boundsOf T L v b fun _ => true
-
-mutual
-/-- The lists, bags and tables a value of the type can hold, the type itself first. -/
-def Ty.collections : Ty → List Ty
-  | .list a => .list a :: Ty.collections a
-  | .bag a => .bag a :: Ty.collections a
-  | .table k w => .table k w :: Ty.collections k ++ Ty.collections w
-  | .tuple ts => Ty.collectionsOf ts
-  | .adt _ _ vs => Ty.collectionsOfAlts vs
-  | _ => []
-def Ty.collectionsOf : List Ty → List Ty
-  | [] => []
-  | t :: ts => Ty.collections t ++ Ty.collectionsOf ts
-def Ty.collectionsOfAlts : List (List Ty) → List Ty
-  | [] => []
-  | ts :: vs => Ty.collectionsOf ts ++ Ty.collectionsOfAlts vs
-end
-
-/-- The bounds an input of the service can go past: the lists, bags and tables its inputs carry. A verdict over runs
-covers every run only where every input fits them (`proved_sound`), so a line whose inputs may not fit names them. -/
-def inputBounds (T : List TypeDecl) (L : Layout) (v : ServiceV) (b : BoundsV v.records) : List Json :=
-  let held := Ty.collectionsOf (inputTys v)
-  boundsOf T L v b fun t => held.any fun u => (Ty.same t u).isSome
-
-/-- The bounds a line about runs is scoped to, from whether a step can go past the slots (`left`: a bound question is
-not unsat) and whether every input and the initial state fit them: none where neither can leave them, as every state
-a run reaches is then within them (`run_within`); else the bounds the inputs carry where only an input can, else the
-service's whole scope. -/
-def runScope (left fits : Bool) (scope inputScope : List Json) : Option (List Json) :=
-  if left then some scope
-  else if fits then none
-  else if inputScope.isEmpty then some scope else some inputScope
-
-/-- A builder's refusal as a line where it is the spec's; else an engine bug, a case the loaded program's types rule
-out. -/
-def refusedLine (T : List TypeDecl) : Refused → Except String (Kind × List (String × Json))
-  | .spec l => .ok (.undecided .limit, [("limit", Json.str (l.text T))])
-  | .unexpected u => .error s!"the encoding met a case the loaded program's types rule out: {reprStr u}"
-
-/-- The options of `prove` and `generate`: the model `--model` names, if any, the prefix `--only` keeps lines by, how
-many solvers run at once, the cache directory, and the wall-clock limit of the run in seconds, if any. -/
-structure Options where
-  model : Option String := none
-  only : Option String := none
-  jobs : Nat := 4
-  cache : System.FilePath := "prove-cache"
-  timeout : Option Nat := none
-
-/-- Whether `--only` keeps the line named `name`. -/
-def Options.keeps (o : Options) (name : String) : Bool := match o.only with
-  | some p => p.isPrefixOf name
-  | none => true
-
--- An IR path without a directory part is in the working directory.
-set_option linter.tazuna.silentDefault false in
-/-- The arguments of `prove` and `generate` after their own: `--model <name>`, `--only <prefix>`, `--jobs <n>` and
-`--timeout <seconds>` in any order, then `--ir <path>`. The cache lives beside the IR, in the user's build directory. -/
-def optionsOf : List String → Option (Options × String) :=
-  go {}
-where
-  go (o : Options) : List String → Option (Options × String)
-    | ["--ir", path] => some ({ o with cache := (System.FilePath.mk path).parent.getD "." / "prove-cache" }, path)
-    | "--model" :: m :: rest => go { o with model := some m } rest
-    | "--only" :: p :: rest => go { o with only := some p } rest
-    | "--jobs" :: n :: rest => n.toNat?.bind fun j => if j = 0 then none else go { o with jobs := j } rest
-    | "--timeout" :: n :: rest => n.toNat?.bind fun t => go { o with timeout := some t } rest
-    | _ => none
-
-/-- The model a run checks in: its name and its values the lines name. -/
-structure RunModel where
-  name : String
-  model : ModelV
-
-/-- The `scope` field of a line whose verdict rests on the model: its name and the values of it the verdict reads. -/
-def RunModel.field (m : RunModel) (values : List (String × Json)) : String × Json :=
-  ("scope", Json.mkObj (("model", Json.str m.name) :: values))
-
-/-- An undecided line with the resource limit it ran out of, where it is an unknown answer, which that limit decides. -/
-def RunModel.undecided (m : RunModel) (k : Kind) (fields : List (String × Json)) : List (String × Json) :=
-  match k with
-  | .undecided .unknown => fields ++ [m.field [("resourceLimit", Json.num m.model.rlimit)]]
-  | _ => fields
-
-/-- A job of the solver pool: its argument and its work. A job whose pure work is its point (building a depth) takes
-what it builds from as its argument: a job closed over it would have that work floated out of the job by the compiler,
-onto the thread that makes the jobs. -/
-abbrev Job := Nat × (Nat → IO Unit)
-
-/-- `f` as a job, and where its result lands; none once the pool has run means the job never ran, an engine bug. -/
-def Job.of {α : Type} (f : IO α) : IO (Job × IO.Ref (Option α)) := do
-  let r ← IO.mkRef none
-  pure ((0, fun _ => do r.set (some (← f))), r)
-
-/-- Every job, at most `jobs` at a time, each taken in order by the next free worker. Past the solver's deadline
-(`Solver.deadline`) no worker takes another job, and the call returns at once without waiting for the jobs that run:
-their solvers stop themselves, and a job waiting on one that never ran would never end. A job cut off so never writes
-its result. -/
-def runAll (solver : Solver) (jobs : Nat) (xs : Array Job) : IO Unit := do
-  let next ← IO.mkRef 0
-  let worker : IO Unit := do
-    repeat
-      if ← solver.past then break
-      let i ← next.modifyGet fun i => (i, i + 1)
-      if h : i < xs.size then
-        try xs[i].2 xs[i].1
-        catch e => if ← solver.past then break else throw e
-      else break
-  let tasks ← (List.range (max jobs 1)).mapM fun _ => IO.asTask worker (prio := .dedicated)
-  if solver.deadline.isSome then
-    while !(← tasks.allM fun t => IO.hasFinished t) && !(← solver.past) do
-      IO.sleep 20
-    if ← solver.past then
-      solver.drain
-      return
-  for t in tasks do
-    match ← IO.wait t with
-    | .ok () => pure ()
-    | .error e => throw e
-
-/-- `f` holding one of the pool's permits, which bound the jobs of a kind running at once. -/
-def withPermit {α : Type} (pool : Std.Semaphore) (f : IO α) : IO α := do
-  IO.wait (← pool.acquire).result!
-  try f finally pool.release
-
-/-- Whether every question of a dead-target family reads unsat, asked in order: the first answer that is not unsat
-settles that the target is not dead, so the rest are not asked. One job asks them all, so which run is a function of
-the spec and the solver, not of the schedule. A question's script is built only where its direct key has no answer:
-an entry is written only for a question asked from the same inputs, so the kind has that question. -/
-def allUnsat (solver : Solver) (cache : System.FilePath) (inputs : List String) (ids : Option Nat) :
-    List (List String × Thunk (Option TypedScript)) → IO (Except String Bool)
-  | [] => pure (.ok true)
-  | (name, q) :: rest => do
-    let key := directKey inputs name
-    let answer ← match ← Solver.cached cache key ids with
-      | some a => pure (some (.ok a))
-      | none => match q.get with
-        | some q => some <$> solver.ask cache key ids q.script
-        | none => pure none
-    match answer with
-    | none | some (.ok .unsat) => allUnsat solver cache inputs ids rest
-    | some (.ok _) => pure (.ok false)
-    | some (.error m) => pure (.error m)
-
-/-- Whether each question of a family is unsat, read as `allUnsat` reads one, all of them asked in order. -/
-def eachUnsat (solver : Solver) (cache : System.FilePath) (inputs : List String) (ids : Option Nat)
-    (qs : List (List String × Thunk (Option TypedScript))) : IO (Except String (List Bool)) := do
-  let mut us := #[]
-  for (name, q) in qs do
-    match ← allUnsat solver cache inputs ids [(name, q)] with
-    | .error m => return .error m
-    | .ok u => us := us.push u
-  return .ok us.toList
 
 /-- How many cubes a search asks at once, in their order, taking the first with a model: fixed, so the questions asked
 and the trace found are the same whatever the number of solvers. -/
@@ -328,57 +57,12 @@ def depthJobs (pool : Std.Semaphore) (k : Nat) :
 
 end
 
-/-- Whether an outcome is no fault. -/
-instance (o : Outcome) : Decidable (∀ f, o ≠ .fault f) :=
-  match o with
-  | .fault f => isFalse fun h => h f rfl
-  | .accepted | .answered _ | .rejected _ | .invalid _ => isTrue nofun
-
-/-- The trace of a run a search found; else an engine bug. A run that faults nowhere and whose inputs carry only ids
-from outside or ones an earlier out line showed, as `unroll_decode` proves of every model's run, always writes
-(`traceOf_ok`), and its trace reads as the spec (`foundTrace_reads`). -/
-def foundTrace {P : List AnySite} {E : List AnyEffectSite} {T : List TypeDecl} {v : ServiceV}
-    (chk : Smt.Checked P E T v) (xs : List (Input v)) : Except String TraceFile :=
-  if hnf : NoFaultRun T (State.init v) xs then
-    if knownRun T [] (State.init v) xs then
-      match h : traceOf T v xs with
-      | .ok tr => .ok tr
-      | .error _ => absurd h (by obtain ⟨tr, h'⟩ := traceOf_ok chk hnf; rw [h']; nofun)
-    else .error "carries an id no earlier out line showed, which unroll_decode rules out"
-  else
-    let k := (run T v (State.init v) xs).2.findIdx fun r => match r.outcome with
-      | .fault _ => true
-      | _ => false
-    .error s!"faults at step {k + 1}, which unroll_decode rules out"
-
-/-- A found run's trace reads as the spec from the initial state, so verify replays it as passed unless it runs out
-of tries (`replay_iff`). -/
-theorem foundTrace_reads {P : List AnySite} {E : List AnyEffectSite} {T : List TypeDecl} {v : ServiceV}
-    {chk : Smt.Checked P E T v} (hv : v.Equivariant) {xs : List (Input v)} {tr : TraceFile}
-    (h : foundTrace chk xs = .ok tr) : Reads T v (State.init v) {} tr.numbered := by
-  unfold foundTrace at h
-  split at h
-  · rename_i hnf
-    split at h
-    · rename_i hkn
-      split at h
-      · rename_i tr' htr
-        cases h
-        exact traceOf_reads chk ⟨hv, fun m hm => (chk.keys m hm).2⟩ hnf hkn htr
-      · rename_i htr
-        obtain ⟨tr'', h''⟩ := traceOf_ok chk hnf
-        rw [h''] at htr; cases htr
-    · cases h
-  · cases h
-
 /-- What a search over depths found. -/
 inductive SearchResult (α : Type) where
   /-- A model at depth `steps`, played back. -/
   | found (steps : Nat) (a : α)
   /-- No model at any depth up to `steps`. -/
   | noModel (steps : Nat)
-  /-- No pick is live (`live` gave none): no step of any kind can be the last, at any depth. -/
-  | dead
   | undecided (kind : Kind) (fields : List (String × Json))
 
 /-- What a cube's question gave. -/
@@ -396,18 +80,17 @@ variable (solver : Solver) (cache : System.FilePath) {c : CheckedSpec} (s : Chec
 /-- The search over the depths 1, 2, ... of the service's unrolled run (`ds`, each awaited when the search reaches it)
 for a model of the goal each depth's steps give, stopping at the first, whose decoded run `play` reads. A depth is
 asked as cubes (`CubesCover`): one per pick of its last step, and a cube with no answer splits on the step before its
-fixed ones, in pick order. A cube whose last step
-takes only kinds `ruledOut` rules out needs no question, nor, from depth 2 on, once depth 1 found no model, one whose
-last pick is not among those `live` gives. The cubes are asked
-`cubeChunk` at a time, and the first in order with a model is the one taken, so the questions and the run found do not
-depend on timing. A depth whose cubes all have no model is unreached; a cube with every step fixed and no answer
-leaves the depth undecided. A refused encoding of the run or of the goal ends the search undecided; a refused input
-kind (which the script then lacks) leaves it undecided unless a model is found. `what` names the search in an engine
-bug's message. With `brk`, a target a fault breaks, the search is for a run that breaks it (`BreakCover`): a cube's
-last fixed step is a break step (`breakAfter`) and `goal` is not read, and `live` gives at every depth the picks of
-the kinds whose step question whether the step breaks the target is not unsat. -/
+fixed ones, in pick order. A cube whose last step takes only kinds `ruledOut` rules out needs no question, nor one
+whose last pick is not among those `live` gives. The cubes are asked `cubeChunk` at a time, and the first in order
+with a model is the one taken, so the questions and the run found do not depend on timing. A depth whose cubes all
+have no model is unreached; a cube with every step fixed and no answer leaves the depth undecided. A refused encoding
+of the run or of the goal ends the search undecided; a refused input kind (which the script then lacks) leaves it
+undecided unless a model is found. `what` names the search in an engine bug's message. With `brk`, a target a fault
+breaks, the search is for a run that breaks it (`BreakCover`): a cube's last fixed step is a break step
+(`breakAfter`) and `goal` is not read, and `live` gives the picks of the kinds whose step question whether the step
+breaks the target is not unsat. -/
 def searchDepths {α : Type} (what : String) (ds : Array (Task (Option (Depth s.v s.senv.nT))))
-    (live : IO (Except String (Option (List Nat))) := pure (.ok none))
+    (live : Option (List Nat) := none)
     (ruledOut : SymInput s.v (shapes s.v) s.senv.nT → Bool := fun _ => false) (brk : Option Target := none)
     (goal : List (UnrollStep s.v s.senv.nT) → Except Refused Term) (play : List (Input s.v) → Except String α) :
     IO (Except String (SearchResult α)) := do
@@ -427,31 +110,16 @@ def searchDepths {α : Type} (what : String) (ds : Array (Task (Option (Depth s.
   let ids := L.ids
   let some S0 := initState L s.v | return fail "the initial state has no terms, which its depths' runs rule out"
   let mut refused : Option (SymInput s.v (shapes s.v) s.senv.nT × Refused) := none
-  let liveAll ← if brk.isSome then
-    match ← live with
-    | .error m => return .error m
-    | .ok ks => pure ks
-    else pure none
-  let mut liveFrom2 : Option (Option (List Nat)) := none
   for d in List.range' 1 (ds.size - 1) do
     let rd ← match ← depth d with
       | .error e => return e
       | .ok r => pure r
     if refused.isNone then refused := rd.refused.head?
-    let livePicks ← if brk.isSome then pure liveAll
-      else if d < 2 then pure none
-      else match liveFrom2 with
-        | some ks => pure ks
-        | none =>
-          match ← live with
-          | .error m => return .error m
-          | .ok ks => liveFrom2 := some ks; pure ks
-    if livePicks == some [] then return .ok .dead
     -- A cube's question: its fixed steps after the run of its unfixed ones, and its goal; none where the goal is
     -- false by its shape, which needs no solver.
     let prepare (ps : List Nat) :
         IO (Except (Except String (SearchResult α)) (Option (List Nat × List (UnrollStep s.v s.senv.nT) × Term))) := do
-      if let (some ks, some k) := (livePicks, ps.getLast?) then
+      if let (some ks, some k) := (live, ps.getLast?) then
         if !ks.contains k then return .ok none
       let rj ← match ← depth (d - ps.length) with
         | .error e => return .error e
@@ -530,5 +198,188 @@ def searchDepths {α : Type} (what : String) (ds : Array (Task (Option (Depth s.
   | none => return .ok (.noModel (ds.size - 1))
 
 end
+
+/-- Each input kind with its step question (`stepAsk`); none where the initial state breaks an invariant or does not
+fit the slots, or a kind's question is refused, as `BreakCover.deadLast` rests on every kind's question, the initial
+state's invariants and its fit. -/
+def stepAsks (c : CheckedSpec) (sv : CheckedService c) :
+    Option (List (SymInput sv.v (shapes sv.v) sv.senv.nT × StepAsk sv.v)) :=
+  if !(Step.invariants (Step.State.init sv.v)).isEmpty || !initFits sv.L sv.v then none
+  else (stepInputs sv.v (shapes sv.v) sv.senv.nT (stateWidth sv.v)).attach.mapM fun ⟨inp, hinp⟩ =>
+    match Sound.get (stepAsk sv.L c.T c.P sv.v sv.senv inp) (stepAsk_ofService sv.mem c.T sv.senv inp hinp) with
+    | .ok ⟨a, _⟩ => some (inp, a)
+    | .error _ => none
+
+/-- Whether each input kind's step breaks no target a fault breaks (its question with `breakAnyT` is unsat), all asked
+at once; every kind is asked, so which are asked does not depend on the schedule. -/
+def breakAnyDead {v : ServiceV} {n : Nat} (solver : Solver) (cache : System.FilePath) (inputs : List String)
+    (ids : Option Nat) (service : String) (xs : List (SymInput v (shapes v) n × StepAsk v)) :
+    IO (Except String (List (SymInput v (shapes v) n × StepAsk v × Bool))) := do
+  let ts ← xs.mapM fun (inp, a) => IO.asTask (prio := .dedicated) do
+    allUnsat solver cache inputs ids
+      [(["breaks", service, inp.place], Thunk.mk fun _ => some (a.ask (breakAnyT inp a.t.out)))]
+  let mut out := #[]
+  for ((inp, a), t) in xs.zip ts do
+    match ← IO.ofExcept (← IO.wait t) with
+    | .error m => return .error m
+    | .ok u => out := out.push (inp, a, u)
+  return .ok out.toList
+
+/-- What one target's job found: a behavior target's search, or a break target's, or that every kind's step question
+whether it breaks the break target is unsat. -/
+inductive Searched where
+  | reach (r : SearchResult TraceFile)
+  | brk (r : SearchResult (Except String (TraceFile × Fault)))
+  | settled
+
+/-- A target's job: its service, the target's text and file, the service's scope, and where its result lands. -/
+structure TargetJob where
+  service : String
+  target : String
+  file : String
+  scope : List Json
+  result : IO.Ref (Option (Except String Searched))
+
+/-- The search stage: for each target explore left to it (`Explored.left`), the search for the shortest run that
+reaches or breaks it, and one line per target; the targets the deadline left. -/
+def searchStage (cm : CheckedModel) (name dir : String) (opts : Options) (deadline : Option Nat) (p : Proven)
+    (e : Explored) : Cmd (Option (List String)) := do
+  let c := cm.checked
+  let model := cm.model
+  let rm : RunModel := ⟨name, model⟩
+  -- At most `jobs` solvers run at once, and at most `jobs` depth builds; a search builds its cubes' scripts while
+  -- others' solvers run.
+  let gate ← Std.Semaphore.new opts.jobs
+  let solver := { (← Solver.find) with gate := some gate, rlimit := model.rlimit.toNat, deadline }
+  let pool ← Std.Semaphore.new opts.jobs
+  let cache := p.cache
+  let inputs := p.inputs
+  -- Each target's search is one job; a service's depths are built once for all its targets (`depthJobs`). Lines and
+  -- files are written in target order once all are done.
+  let mut builds : Array Job := #[]
+  let mut searches : Array Job := #[]
+  let mut jobs : Array TargetJob := #[]
+  for sv in cm.services do
+    let v := sv.v
+    let L := sv.L
+    let rules := ruleNamesOf v
+    let takes (t : String) := opts.keeps (v.name ++ "/" ++ t) && e.left.contains (v.name ++ "/" ++ t)
+    -- Each target once (a rule named `callers` repeats admission's), so with `targetFile_inj` no two share a file.
+    let gs := dedupBy (· == ·) ((targets c.T v rules).filter (takes ·.text))
+    -- Each input kind's step question (`stepAsk`), and the targets a fault breaks among the kinds' targets whose break
+    -- term is not false by its terms, in the order prove's lines name them.
+    let kinds := (stepInputs v (shapes v) sv.senv.nT (stateWidth v)).attach.map fun ⟨inp, hinp⟩ =>
+      (inp, (Sound.get (stepAsk L c.T c.P v sv.senv inp) (stepAsk_ofService sv.mem c.T sv.senv inp hinp)).map
+        Subtype.val)
+    let bs := dedupBy (·.text == ·.text) ((kinds.flatMap fun (inp, r) => match r with
+      | .ok a => (a.t.out.targets inp.command?).filter fun g =>
+          (a.t.out.breaks inp.command? g).const?.map Val.toBool != some false
+      | .error _ => []).filter fun g => g.byFault && takes g.text)
+    if gs.isEmpty && bs.isEmpty then continue
+    let (bjs, ds) ← depthJobs solver sv pool sv.b.stepsNat
+    builds := builds ++ bjs
+    let scope := scopeBounds c.T L v sv.b
+    -- Whether each kind's step breaks no target a fault breaks (`breakAnyT` unsat), asked once for all of the
+    -- service's break targets by its own job; none where `BreakCover.deadLast` does not apply (`stepAsks`).
+    let anyDead : IO.Promise (Except String (Option (List (SymInput v (shapes v) sv.senv.nT × StepAsk v × Bool)))) ←
+      IO.Promise.new
+    if !bs.isEmpty then
+      builds := builds.push (0, fun _ => do
+        let r ← match stepAsks c sv with
+          | none => pure (.ok none)
+          | some xs => pure ((← breakAnyDead solver cache inputs L.ids v.name xs).map some)
+        anyDead.resolve r)
+    for g in gs do
+      -- `search_sound`: the decoded run's last step shows the target, so "misses the target" is unreachable unless
+      -- the goal read z3's values for division by zero or a selector on another constructor (`lastHits`).
+      let (j, r) ← Job.of do
+        return (← searchDepths solver cache sv g.text ds none (!mayShow c.P c.T g ·) none
+          (fun sts => .ok (genGoal L c.T rules g sts)) (reachTrace c.T v rules g (c.checked v sv.mem))).map .reach
+      searches := searches.push j
+      jobs := jobs.push ⟨v.name, g.text, targetFile v.name g, scope, r⟩
+    for g in bs do
+      -- The picks of the kinds whose step question whether the step breaks `g` is not unsat (`BreakCover.deadLast`);
+      -- every pick where `stepAsks` gives none.
+      let live : IO (Except String (Option (List Nat))) := do
+        match ← IO.wait anyDead.result? with
+        | none => return .error s!"service {v.name}: its break questions never ran"
+        | some (.error m) => return .error m
+        | some (.ok none) => pure (.ok none)
+        | some (.ok (some xs)) =>
+          -- Every open kind's question is asked, so which are asked does not depend on the schedule.
+          let open_ := xs.filterMap fun (inp, a, dead) =>
+            let goal := breakT g inp a.t.out
+            if dead || goal.const?.map Val.toBool == some false then none else some (inp, a.ask goal)
+          let ts ← open_.mapM fun (inp, q) => IO.asTask (prio := .dedicated) do
+            allUnsat solver cache inputs L.ids [(["break", v.name, g.text, inp.place], Thunk.mk fun _ => some q)]
+          let mut picks : Array Nat := #[]
+          for ((inp, _), t) in open_.zip ts do
+            match ← IO.ofExcept (← IO.wait t) with
+            | .error m => return .error m
+            | .ok true => pure ()
+            | .ok false => picks := picks.push inp.pick
+          pure (.ok (some picks.toList.eraseDups))
+      let (j, r) ← Job.of do
+        match ← live with
+        | .error m => pure (.error m)
+        | .ok (some []) => pure (.ok .settled)
+        | .ok ks => return (← searchDepths solver cache sv g.text ds ks (brk := some g)
+            (goal := fun _ => .ok ff) (play := breakTrace c.T v g)).map .brk
+      searches := searches.push j
+      jobs := jobs.push ⟨v.name, g.text, breakFile v.name g.text, scope, r⟩
+  -- One pool: the builds first, so a search waits only on a build some worker runs. Its workers mostly wait on
+  -- their cubes, so there are enough of them to keep every solver busy.
+  runAll solver (opts.jobs * cubeChunk) (builds ++ searches)
+  let cut ← solver.past
+  let mut unfinished : Array String := #[]
+  for job in jobs do
+    let common := [("service", Json.str job.service), ("target", Json.str job.target)]
+    let res ← match ← job.result.get with
+      | none =>
+        -- A target the run's deadline cut off keeps whatever file it had: no line speaks for it.
+        if cut then
+          unfinished := unfinished.push (job.service ++ "/" ++ job.target)
+          continue
+        return ← stop s!"service {job.service}, {job.target}: its search never ran"
+      | some (.error m) => return ← stop m
+      | some (.ok res) => pure res
+    match res with
+    | .reach (.found d tr) =>
+      writeTrace dir job.file tr
+      printLine (.search .reached) (common ++ [("file", Json.str job.file), ("steps", Lean.toJson d)])
+    -- T6b (`noModel_cubes`) at each depth up to `k`: no run of at most `k` inputs, within the bounds, shows the
+    -- target at its last step.
+    | .reach (.noModel k) =>
+      unwriteTrace dir job.file
+      printLine (.search .unreached) (common ++ [rm.field [("bounds", Json.arr job.scope.toArray),
+        ("steps", Lean.toJson k)], ("assumes", Json.arr (Step.Assumption.ofRuns.map (Json.str ·.text)).toArray)])
+    | .brk (.found d (.ok (tr, f))) =>
+      writeTrace dir job.file tr
+      printLine (.search .violated) (common ++ [("file", Json.str job.file), ("steps", Lean.toJson d),
+        ("outcome", Json.str (Outcome.fault f).summary)])
+    | .brk (.found d (.error why)) =>
+      unwriteTrace dir job.file
+      printLine (.undecided .limit) (common ++ [("limit", Json.str s!"the run of {d} steps found {why}")])
+    -- `noModel_breaks` at each depth up to `k`: no run of at most `k` inputs, within the bounds, whose steps before
+    -- the last fault nowhere, breaks the target at its last step.
+    | .brk (.noModel k) =>
+      unwriteTrace dir job.file
+      printLine (.search .unsettled) (common ++ [rm.field [("bounds", Json.arr job.scope.toArray),
+        ("steps", Lean.toJson k)],
+        ("assumes", Json.arr #[Json.str Step.Assumption.validInputs.text, Json.str "no step before the last faults"])])
+    | .reach (.undecided kind fields) | .brk (.undecided kind fields) =>
+      unwriteTrace dir job.file
+      printLine kind (rm.undecided kind (common ++ fields))
+    | .settled => unwriteTrace dir job.file
+  return some unfinished.toList
+
+/-- The `search` command: the prove stage, the explore stage for the targets prove left, then the search stage for the
+targets explore left. -/
+def search (root dir path : String) (opts : Options) : Cmd Unit := do
+  let some (cm, name, deadline) ← startRun root path opts | return
+  let some p ← proveStage cm name path opts deadline | return
+  let some e ← exploreStage cm name dir opts deadline p true | return
+  let some u ← searchStage cm name dir opts deadline p e | return
+  finish deadline (p.unfinished ++ e.unfinished ++ u)
 
 end Tazuna.Cli
