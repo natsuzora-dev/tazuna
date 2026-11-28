@@ -1,0 +1,48 @@
+{
+  "name": "shop-web",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "vite",
+    "dev:api": "node --watch src/server/main.ts",
+    "build": "vite build",
+    "start": "node src/server/main.ts",
+    "lint": "biome check .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "e2e": "playwright test",
+    "traces": "node tazuna/replay.ts ../spec/inputs traces/inputs && node tazuna/replay.ts ../spec/snapshots traces/snapshots",
+    "verify": "npm run traces && cd ../spec && gleam run -m tazuna -- verify shop_spec ../web/traces",
+    "verify:e2e": "cd ../spec && gleam run -m tazuna -- verify shop_spec ../web/e2e-traces",
+    "db:generate": "drizzle-kit generate --config drizzle.orders.config.ts && drizzle-kit generate --config drizzle.inventory.config.ts && drizzle-kit generate --config drizzle.payments.config.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "2.1.8",
+    "@hono/zod-validator": "0.9.1",
+    "@tanstack/react-query": "5.107.1",
+    "@tanstack/react-router": "1.170.46",
+    "better-sqlite3": "13.2.0",
+    "drizzle-orm": "0.45.4",
+    "hono": "4.13.18",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.7",
+    "@playwright/test": "1.65.1",
+    "@tanstack/router-plugin": "1.169.0",
+    "@types/better-sqlite3": "9.6.0",
+    "@types/node": "26.6.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.3.0",
+    "drizzle-kit": "0.31.11",
+    "typescript": "7.0.2",
+    "vite": "8.3.8",
+    "vitest": "5.1.0"
+  }
+}

@@ -1,0 +1,6 @@
+/data/
+/dist/
+/traces/
+/e2e-traces/
+/test-results/
+/playwright-report/
