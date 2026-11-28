@@ -229,13 +229,14 @@ theorem pair_model (hL : SortedLayout L) {s : State v} (hkeys : Step.KeysOk T s)
 step in progress whose state fits the slots, whose names are below its counter, whose pending requests and waiting
 effects are the program's, and whose two effects some value codes and some input kind's cascade can queue together,
 where every line reading within the bounds has the two orders fit the slots. -/
-theorem pairs_at {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (hL : SortedLayout L)
-    (senv : StepEnv L (shapes v))
+theorem pairs_at {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (hv : v.Equivariant)
+    (hL : SortedLayout L) (senv : StepEnv L (shapes v))
     {a0 : Step.Acc v} {x1 x2 : OwnEffectV v.event}
     (hall : ∀ p ∈ L.ownPairs v.event, PairOk L T P v senv (PairFits L.count T a0 x1 x2) p)
     (hkeys : Step.KeysOk T a0.state) (hW : Within L (shapes v) a0.state)
     (hinv : Step.Inv P a0.state) (hsupp : Step.StateSupp a0.state) (hqk : Step.QueueOk P a0)
-    (hsa : Step.Supp a0) (he1 : ∃ z, RelV L (.dsl .effect [v.event]) x1.effect z)
+    (hsa : Step.Supp a0) (hb1 : Below (fun P x => OwnEffectV.Rel P x x) a0.state.fresh x1)
+    (hb2 : Below (fun P x => OwnEffectV.Rel P x x) a0.state.fresh x2) (he1 : ∃ z, RelV L (.dsl .effect [v.event]) x1.effect z)
     (he2 : ∃ z, RelV L (.dsl .effect [v.event]) x2.effect z)
     (hreach1 : x1.effect.Reach P) (hreach2 : x2.effect.Reach P)
     (hl : ∃ inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v), ∀ l, inp.live P = some l → x1.site ∈ l ∧ x2.site ∈ l) :
@@ -243,7 +244,7 @@ theorem pairs_at {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E 
   obtain ⟨M, hM, hsel, hS, hx1, hx2⟩ := pair_model hL hkeys hW he1 he2
   obtain ⟨p, hp, ht1, ht2⟩ := pair_kinds senv hx1 hx2
   rcases hall p hp with hline | hap
-  · exact pair_sound chk hL senv hline hM hsel hS hinv.below hsupp hqk hsa hx1 hx2 hreach1 hreach2 ht1 ht2
+  · exact pair_sound chk hv hL senv hline hM hsel hS hinv.below hsupp hqk hsa hb1 hb2 hx1 hx2 hreach1 hreach2 ht1 ht2
   · obtain ⟨_, -, h1⟩ := own_key hx1 ht1 rfl
     obtain ⟨_, -, h2⟩ := own_key hx2 ht2 rfl
     rw [not_apart senv h1 h2 hl] at hap

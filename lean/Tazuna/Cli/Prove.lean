@@ -303,9 +303,11 @@ def orderWire (T : List TypeDecl) {v : ServiceV} : Except Fault (Acc v) → Show
     pure (.obj [("outcome", .str "accepted"), ("state", st), ("events", .arr evs), ("queued", .arr own)])
 
 /-- The report of a pair's target question (`pairQuestions`): a model is a state and two own effects whose two orders
-the solver finds different with each effect keeping the ids it made. Lean runs both orders from the model's state
-(`pairOrders`): where they agree up to renaming the ids the pair made, or differ only in the functions they keep, the
-line is undecided, else violated. -/
+the solver finds different under every renaming of the names the pair made. Lean runs both orders from the model's
+state (`pairOrders`): where they differ in data, or one faults, the line is violated (`pair_violates`); where they
+differ only in the functions they keep, or Lean cannot search the renamings, it is undecided. Lean finds them the same
+up to renaming only where an effect holds a name made from one of the pair's counters (`Limit.unmadeNames`); anywhere
+else that is an engine bug. -/
 def pairReport (L : Layout) (k1 k2 : OwnPlace L v.event) (g : Target) (step : String) (a : Smt.Answer) : Except String Report :=
   match a with
   | .unsat => .ok (.unsat v.name step (some g))
@@ -335,7 +337,10 @@ def pairReport (L : Layout) (k1 k2 : OwnPlace L v.event) (g : Target) (step : St
             .ok (.undecided (.undecided .limit) v.name step (some g) (shown [("limit", Json.str ((Limit.renamings n).text c.T))]))
           | .keptDiffer =>
             .ok (.undecided (.undecided .limit) v.name step (some g) (shown [("limit", Json.str (Limit.keptFunctions.text c.T))]))
-          | _ => .ok (.undecided (.undecided .upToRenaming) v.name step (some g) (shown []))
+          | _ =>
+            if holdsUnmade s.fresh e1 || holdsUnmade s.fresh e2 then
+              .ok (.undecided (.undecided .limit) v.name step (some g) (shown [("limit", Json.str (Limit.unmadeNames.text c.T))]))
+            else .error s!"a model of {step} ends the same in both orders up to renaming, which its question rules out"
     -- Unreachable while the solver answers as SMT-LIB says (`pair_decode`).
     | _, _, _ => .error s!"a model of {step} does not decode"
 

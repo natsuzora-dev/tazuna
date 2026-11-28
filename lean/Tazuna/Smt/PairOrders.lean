@@ -1,10 +1,9 @@
 import Tazuna.Semantics.PairCommute
 
 /-! Whether the two orders of a pair of own effects end the same once the names the pair made are renamed, run in
-Lean on a counterexample of a pair question. The solver compares the two orders with each effect keeping the names it
-made (the canonical order, `Step.canonPair`), which needs no search but is stricter than `Step.Same`: two effects
-that each write the id they made under one key end with different ids that a renaming would match.
-`sameUpToPair` searches the renamings `Same` allows from the pair's start, which are few: the two counters the pair
+Lean on a counterexample of a pair question. The solver compares A with the other order run with every counter kept
+and with the pair's two counters swapped (`sameT`), so its model is one Lean finds different under every renaming,
+except where an effect holds a name made from one of those counters (`holdsUnmade`). `sameUpToPair` searches the renamings `Same` allows from the pair's start, which are few: the two counters the pair
 used kept or swapped, and the wire ids it sent mapped one to one onto the other order's. Each step in progress is read
 as one term (`accTerm`) with collections as sorted lists, as `Ty.canon` reads bags and tables, so equal terms mean the
 same values up to the order of multisets.
@@ -130,6 +129,12 @@ inductive PairOrders where
   | sameUpToRenaming
   /-- The pair sent `sends` wire ids, more than `wireSearchCap`, so no renaming was searched. -/
   | capped (sends : Nat)
+
+/-- Whether the effect holds a name made from the counter `f` or `f + 1`, which a pair's steps make: a model may give
+an effect such a name, a waiting effect never holds one. Swapping the two counters changes exactly such an effect's
+term. -/
+def holdsUnmade {e : Ty} (f : Nat) (x : OwnEffectV e) : Bool :=
+  ownTerm (swapFn f) (funTerm (swapFn f)) x != ownTerm id (funTerm id) x
 
 /-- Whether the orders show that the pair does not commute (`pair_violates`): what makes a pair line violated. -/
 def PairOrders.violated : PairOrders → Bool

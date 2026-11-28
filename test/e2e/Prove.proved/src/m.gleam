@@ -1,5 +1,5 @@
-import gleam/option.{None}
-import tazuna.{type Ctx}
+import gleam/option.{type Option, None, Some}
+import tazuna.{type Ctx, type Id}
 import tazuna/duration
 
 pub type Records {
@@ -57,8 +57,79 @@ fn counter() -> tazuna.Service {
   )
 }
 
+/// Two `mark`s waiting together commute only with the counters they make swapped: `last` holds the second one's id.
+pub type MarkRecords {
+  MarkRecords(last: Option(Id))
+}
+
+pub type MarkEvent {
+  Went
+  Marked(id: Id)
+}
+
+fn apply_mark(ctx: tazuna.ApplyCtx(MarkRecords), e: MarkEvent) -> MarkRecords {
+  case e {
+    Went -> ctx.records
+    Marked(id) -> MarkRecords(last: Some(id))
+  }
+}
+
+fn go() -> tazuna.Command(MarkRecords, MarkEvent, Caller, Nil, tazuna.Never) {
+  tazuna.command(
+    name: "go",
+    callers: [tazuna.Outside(User)],
+    accepts: fn(_n: Nil) { [] },
+    decide: fn(_c: Ctx(MarkRecords, Nil, Caller)) { Ok([Went]) },
+    ensures: fn(_c: Ctx(MarkRecords, Nil, Caller), _r: MarkRecords) { [] },
+  )
+}
+
+fn mark() -> tazuna.Command(MarkRecords, MarkEvent, Caller, Nil, tazuna.Never) {
+  tazuna.command(
+    name: "mark",
+    callers: [tazuna.Outside(User), tazuna.Own],
+    accepts: fn(_n: Nil) { [] },
+    decide: fn(c: Ctx(MarkRecords, Nil, Caller)) {
+      Ok([Marked(tazuna.fresh(c.fresh, 0))])
+    },
+    ensures: fn(_c: Ctx(MarkRecords, Nil, Caller), _r: MarkRecords) { [] },
+  )
+}
+
+fn twice() -> tazuna.Reaction(MarkRecords, MarkEvent) {
+  tazuna.reaction(
+    name: "twice",
+    react: fn(_c: tazuna.ReactionCtx(MarkRecords), e: MarkEvent) {
+      case e {
+        Went -> [send_mark(), send_mark()]
+        Marked(_) -> []
+      }
+    },
+  )
+}
+
+fn send_mark() -> tazuna.Effect(MarkEvent) {
+  tazuna.send_command(command: mark(), input: Nil, on_answer: fn(_a) { [] })
+}
+
+fn marks() -> tazuna.Service {
+  tazuna.service(
+    name: "marks",
+    init: MarkRecords(last: None),
+    apply: apply_mark,
+    subscribes: [],
+    declares: [tazuna.declare_command(go()), tazuna.declare_command(mark())],
+    machines: [],
+    reactions: [twice()],
+    invariants: fn(_r: MarkRecords) { [] },
+    responses: [],
+    cascade: 2,
+    scenarios: [],
+  )
+}
+
 pub fn spec() -> tazuna.Spec {
-  tazuna.spec(services: [counter()], externals: [])
+  tazuna.spec(services: [counter(), marks()], externals: [])
 }
 
 pub fn model() -> tazuna.Model {
@@ -68,6 +139,16 @@ pub fn model() -> tazuna.Model {
       creates: [],
       others_at_most: 1,
       steps: 5,
+      explore_depth: 0,
+      explore_states: 1,
+      waits: [],
+      values: [],
+    ),
+    tazuna.scope(
+      service: marks(),
+      creates: [],
+      others_at_most: 2,
+      steps: 3,
       explore_depth: 0,
       explore_states: 1,
       waits: [],

@@ -31,6 +31,8 @@ theorem pair_queued {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P
   obtain ⟨_, -, henc⟩ := bind_ok.1 henc
   obtain ⟨_, -, henc⟩ := bind_ok.1 henc
   obtain ⟨_, -, henc⟩ := bind_ok.1 henc
+  obtain ⟨_, -, henc⟩ := bind_ok.1 henc
+  obtain ⟨_, -, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
   simp only [holds_allT, List.mem_cons, List.not_mem_nil, or_false, forall_eq_or_imp, forall_eq] at hcodes
   obtain ⟨hca, hy1, -, -, -⟩ := hcodes

@@ -203,7 +203,6 @@ def UndecidedKind.explanation : UndecidedKind → Explanation
   | .timeout => ⟨docOf% UndecidedKind.timeout, [], questionFields ++ [depth, why]⟩
   | .limit => ⟨docOf% UndecidedKind.limit, [`Tazuna.Trace.replay_iff],
     questionFields ++ [scenario, trace, line, Field.limit] ++ pairFields ++ [input, after, outcome, out, trigger]⟩
-  | .upToRenaming => ⟨docOf% UndecidedKind.upToRenaming, [`Tazuna.Smt.run_lines], questionFields ++ pairFields⟩
 
 namespace Kind
 

@@ -105,10 +105,12 @@ theorem cascade_lines (c : CheckedSpec) (hv : v ∈ c.spec.services) (hL : Sorte
         (fun p hp => (hall p hp).mono fun h => (h b hb.1).1 i hi)
         ⟨inp, hm, liveJ_site hb.2.2.2 _ (List.getElem_mem hi)⟩ hd,
       by simp only [Step.ownSys, List.getElem?_eq_getElem hi] at hd; exact liveJ_pick c.T chk.reach hb.2.2.2 hi hd⟩)
-    (fun b _ hb i j hi hj hij => ?_) fuel a ha.supp ⟨.refl, ha, hcoded, hlive⟩ hr
+    (fun b hsb hb i j hi hj hij => ?_) fuel a ha.supp ⟨.refl, ha, hcoded, hlive⟩ hr
   obtain ⟨hk, hs, hq, hsa, hr1, hr2⟩ := pair_pre hb.2.1 hi hj
-  exact pairs_at chk hL senv (fun p hp => (hall p hp).mono fun h => (h b hb.1).2 i j hi hj hij) hk (hfit b hb.1)
-    hb.2.1.inv hs hq hsa (hb.2.2.1 _ (List.getElem_mem hi)) (hb.2.2.1 _ (List.getElem_mem hj)) hr1 hr2
+  exact pairs_at chk he hL senv (fun p hp => (hall p hp).mono fun h => (h b hb.1).2 i j hi hj hij) hk (hfit b hb.1)
+    hb.2.1.inv hs hq hsa (fun P hP => (hsb P hP).2.2 _ (List.getElem_mem hi))
+    (fun P hP => (hsb P hP).2.2 _ (List.getElem_mem hj)) (hb.2.2.1 _ (List.getElem_mem hi))
+    (hb.2.2.1 _ (List.getElem_mem hj)) hr1 hr2
     ⟨inp, hm, fun l hl => ⟨liveJ_site hb.2.2.2 _ (List.getElem_mem hi) l hl,
       liveJ_site hb.2.2.2 _ (List.getElem_mem hj) l hl⟩⟩
 

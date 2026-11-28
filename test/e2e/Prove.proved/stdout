@@ -4,3 +4,8 @@
 {"assumes":["ids the service made are used only after they appeared on an out line"],"kind":"Prove.proved","service":"counter","step":"command add","target":"add ensures grows"}
 {"assumes":["ids the service made are used only after they appeared on an out line","no clock line moves time past a timer that waits"],"kind":"Prove.proved","service":"counter","step":"clock","target":"response an add shows its own amount"}
 {"assumes":["ids the service made are used only after they appeared on an out line"],"kind":"Prove.proved","service":"counter","step":"clock","target":"invariant not negative"}
+{"assumes":["ids the service made are used only after they appeared on an out line"],"kind":"Prove.proved","service":"marks","step":"command go","target":"effect mark accepted"}
+{"assumes":["ids the service made are used only after they appeared on an out line"],"kind":"Prove.proved","service":"marks","step":"command go","target":"cascade bound"}
+{"assumes":["ids the service made are used only after they appeared on an out line"],"kind":"Prove.proved","service":"marks","step":"command mark","target":"effect mark accepted"}
+{"assumes":["ids the service made are used only after they appeared on an out line"],"kind":"Prove.proved","service":"marks","step":"command mark","target":"cascade bound"}
+{"assumes":["ids the service made are used only after they appeared on an out line"],"kind":"Prove.proved","service":"marks","step":"own command mark then own command mark","target":"own command mark and own command mark commute"}

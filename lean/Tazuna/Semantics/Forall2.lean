@@ -229,15 +229,6 @@ theorem forall2_refl_of {α : Type} {r : α → α → Prop} : {xs : List α} �
   | [], _ => trivial
   | _ :: _, h => ⟨h _ List.mem_cons_self, forall2_refl_of fun y hy => h y (List.mem_cons_of_mem _ hy)⟩
 
-theorem forall2_eq {α : Type} : {xs ys : List α} → Forall2 (· = ·) xs ys → xs = ys
-  | [], [], _ => rfl
-  | _ :: _, _ :: _, ⟨rfl, h⟩ => by rw [forall2_eq h]
-  | [], _ :: _, h | _ :: _, [], h => h.elim
-
-theorem map_self {α : Type} {f : α → α} : {l : List α} → (∀ a ∈ l, f a = a) → l.map f = l
-  | [], _ => rfl
-  | a :: l, h => by rw [List.map_cons, h a List.mem_cons_self, map_self fun b hb => h b (List.mem_cons_of_mem _ hb)]
-
 end
 
 end Tazuna.Ir

@@ -1023,9 +1023,13 @@ theorem pairQuestions_ofService (k1 k2 : OwnPlace (Layout.ofService c.program.de
     refine sound_bind (step _ _ _ _ _ _ k2 _) fun ⟨⟨_, a2⟩, c2, x2⟩ _ => ?_
     refine sound_bind (step _ _ _ _ _ _ k2 _) fun ⟨⟨_, b1⟩, c3, x3⟩ _ => ?_
     refine sound_bind (step _ _ _ _ _ _ k1 _) fun ⟨⟨_, b2⟩, c4, x4⟩ _ => ?_
-    refine sound_bind (eqFn_sound hL v.records (avail_of_got h.records)) fun _ _ => ?_
-    exact sound_bind (tablesEqT_sound hL v.machines (fun m hm => avail_of_got (h.machines m hm).1.1.table) _ _)
-      fun _ _ => trivial
+    refine sound_bind (step _ _ _ _ _ _ k2 _) fun ⟨⟨_, d1⟩, c5, x5⟩ _ => ?_
+    refine sound_bind (step _ _ _ _ _ _ k1 _) fun ⟨⟨_, d2⟩, c6, x6⟩ _ => ?_
+    have same : ∀ o o' : EventsOut v, Sound (fun _ => True) (sameT (Layout.ofService c.program.defs v bnd) v o o') :=
+      fun o o' => sound_bind (eqFn_sound hL v.records (avail_of_got h.records)) fun _ _ =>
+        sound_bind (tablesEqT_sound hL v.machines (fun m hm => avail_of_got (h.machines m hm).1.1.table) _ _)
+          fun _ _ => trivial
+    exact sound_bind (same _ _) fun _ _ => sound_bind (same _ _) fun _ _ => trivial
   refine sound_bind (sound_need fun hn => by
     have := wf_ofService (bnd := bnd) c.program.defs chk (SymState.vars 0 : SymState v); rw [hn] at this; cases this) fun _ _ => ?_
   obtain ⟨b, hb⟩ := pendingBelowT_ofService c.program.defs chk (SymState.vars 0 : SymState v).pending

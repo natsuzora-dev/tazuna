@@ -106,6 +106,7 @@ def _root_.Tazuna.Smt.Limit.text (T : List TypeDecl) : Limit → String
   | .slots t => s!"a value the spec writes of {tyText T t} holds more items than its bounds give"
   | .renamings n => s!"the two steps sent {n} requests, more than the {wireSearchCap} whose renamings are searched"
   | .keptFunctions => "the two orders end with the same data but keep different functions, whose results are not compared"
+  | .unmadeNames => "an effect holds a name made from a counter the pair has not used yet, and the two orders end the same only with the pair's two counters swapped"
   | .tableKey t => s!"a value of {tyText T t} holds a table whose key is no plain value"
 
 /-- Every bound of the service's layout among the types `keep` holds: each table, bag and list type, and the pending

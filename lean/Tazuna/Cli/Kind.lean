@@ -103,12 +103,9 @@ inductive Tazuna.UndecidedKind : Type
   line whose verdict may depend on the machine. -/
   | timeout
   /-- The spec uses what the encoding has no terms for, or a pair's counterexample needs a search for a renaming
-  larger than prove runs or a comparison of the functions its two orders keep, or verify, or test replaying a
-  scenario's trace, ran out of tries to bind the trace's names to the spec's ids. -/
+  larger than prove runs, a comparison of the functions its two orders keep, or effects holding names not made yet, or
+  verify, or test replaying a scenario's trace, ran out of tries to bind the trace's names to the spec's ids. -/
   | limit
-  /-- Two own steps whose orders the solver found different, with each step keeping the ids it made, end the same
-  once those ids are renamed, as the oracle names ids by first appearance. The two orders are shown. -/
-  | upToRenaming
 deriving DecidableEq
 
 /-- A bug of tazuna's own: no spec reaches it. -/
@@ -272,7 +269,7 @@ def ExploreKind.name : ExploreKind → String
   | .notViolated => "notViolated"
   | .covered => "covered"
 
-def UndecidedKind.all : List UndecidedKind := [.unknown, .timeout, .limit, .upToRenaming]
+def UndecidedKind.all : List UndecidedKind := [.unknown, .timeout, .limit]
 
 theorem UndecidedKind.mem_all (k : UndecidedKind) : k ∈ UndecidedKind.all := by cases k <;> simp [UndecidedKind.all]
 
@@ -280,7 +277,6 @@ def UndecidedKind.name : UndecidedKind → String
   | .unknown => "unknown"
   | .timeout => "timeout"
   | .limit => "limit"
-  | .upToRenaming => "upToRenaming"
 
 namespace Kind
 
@@ -329,7 +325,7 @@ past the wall clock none that reaches it on every machine. -/
 def e2e : Kind → Bool
   | restricted _ | internal .convert | internal .engine | undecided .timeout => false
   | internal .invalidIr | usage _ | illegal _ | checkPassed | fault _ | test _ | verifyPassed | verifyDiffers | traceInvalid | prove _
-  | search _ | explore _ | undecided .unknown | undecided .limit | undecided .upToRenaming
+  | search _ | explore _ | undecided .unknown | undecided .limit
   | explain | version | unfinished => true
 
 /-- The outcome a line of the kind gives its command; the command exits with its worst line's (`Exit.max`). -/

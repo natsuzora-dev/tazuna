@@ -39,6 +39,11 @@ inductive Limit where
   values), and what functions do is not compared, so whether the orders end the same is not known. Never an encoder's
   refusal: prove reads it from a pair's counterexample. -/
   | keptFunctions
+  /-- A pair's counterexample whose two orders end the same once the pair's two counters are swapped. The question
+  compares A with the other order run both ways, which covers that renaming wherever the two effects hold no name made
+  from those counters; a model may give an effect such a name before it is made, a waiting effect never holds one.
+  Never an encoder's refusal: prove reads it from a pair's counterexample. -/
+  | unmadeNames
   /-- A value of the type, written or decoded as a whole, holds a table whose key is no plain value, so its
   well-formedness (distinct keys) has no term. -/
   | tableKey (t : Ty)

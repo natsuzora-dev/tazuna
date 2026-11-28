@@ -156,7 +156,8 @@ A target whose question has a solver model, from a state no run reaches, gets no
 
 Two kinds of line check that no outcome depends on the order in which the semantics runs own steps and timers ([Concepts](concepts.md#the-spec-writes-every-order)):
 
-- A pair line, `<first> and <second> commute`, asks for a state and two waiting own effects whose two orders end differently, with each effect keeping the ids it made.
+- A pair line, `<first> and <second> commute`, asks for a state and two waiting own effects whose two orders end differently under every renaming of the ids the pair made, as the semantics compares them.
+  The question compares the first order with the other order run twice, once with each effect making the ids it makes in the first order and once with the two effects' counters swapped, and reads events, requests and queued own effects as multisets, a request without its wire id. So it searches no renaming, and an unsat answer covers every renaming the semantics allows.
   Where no input kind's cascade can queue effects of both kinds, the two never wait together, so the line reads as if both questions were unsat and no question is asked.
   An input kind's cascade queues only the own effects whose `on_answer` the events it can apply, and the machine states it can enter, can write.
 - A timer line, `timers of <machine> fire forward`, asks whether the state a timer of the machine enters can wait for a timer before the one that fired. A timer is read off the instance's state and the records, so the question has no time in it.
@@ -305,7 +306,7 @@ Everything between them is proved or checked.
 ## Not guaranteed
 
 - A pair line that reads `Prove.proved` covers every run only where every order of a cascade stays within the slots. `run_within` keeps the states between inputs within them, but no theorem yet keeps the cascade's other orders there.
-- `Undecided.upToRenaming` says the two orders end the same once renamed. That rests on Lean's comparison of their terms under the renaming it found, and no theorem yet says such orders are the same as the oracle sees them. The line is undecided, so no verdict rests on it.
+- No theorem yet says that a pair question's counterexample is one Lean finds different under every renaming. Where Lean finds the two orders the same up to renaming, an effect of the counterexample holds an id made from one of the pair's counters, which no waiting effect holds, and the line reads `Undecided.limit`; anywhere else the engine reports a bug. A pair counterexample whose orders differ only in the functions they keep, or that sends more requests than Lean searches the renamings of, also reads `Undecided.limit`, and which of these a pair line reads can depend on the counterexample Z3 returns.
 - The `bounds` list in `scope` over-states lists. Every list type of the layout appears with its longest literal, though a list that only literals build cannot grow.
 - `Undecided.timeout` depends on the machine. Z3 ran past a 10-minute wall clock before its resource limit stopped it, though the limit takes about 6 seconds on a laptop. Every other answer, `Undecided.unknown` included, comes from Z3's fixed resource limit and seeds, so it is the same on every machine.
 - Ids that cannot be guessed, authentication, and anything else outside the spec's values are the implementation's concern.

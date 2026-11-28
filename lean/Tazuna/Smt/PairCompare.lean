@@ -5,91 +5,110 @@ import Tazuna.Smt.Verdict
 import Tazuna.Semantics.StepRename
 
 /-! What the pair questions compare, and what a comparison that holds says of the two results. Records and instance
-tables are compared by Gleam's `==` (`eqFn`), which reads bags and tables as multisets, so two results that hold the
-same rows in other slots compare equal; the events each effect applies, the requests it sends and the own effects it
-queues are compared slot by slot by their codes (`slotsCmpT`), requests at the same distance from the wire id their
-step starts at. Each comparison that holds gives the relation the results are compared by with every id renamed to
-itself (`PBij.refl`), so the solver searches for no renaming; a request or own effect keeps kept functions, which one
-code fixes only with the unique sites `P` they are records of (`eff_same`, `pendingOf_alike`). -/
+tables are compared by Gleam's `==` (`eqFn`), which reads bags and tables as multisets; the events two runs apply, the
+requests they send and the own effects they queue are compared as multisets of their codes (`bagEqT`), a request
+without its wire id, as `Step.Same` reads them. A comparison that holds gives the relation the results are compared by
+with every counter kept and the wire ids the runs sent matched one to one (`wire_match`); a request or own effect keeps
+kept functions, which one code fixes only with the unique sites `P` they are records of (`eff_same`,
+`pendingOf_alike`). -/
 
 namespace Tazuna.Smt
 
 open Tazuna.Ir
 
-/-- Two slot lists compared place by place: the same flags, and where flagged, `cmp` of the two slots' items. -/
-def slotsCmpT {w : Nat} (cmp : SlotItems w → SlotItems w → Term) : List (Slot w) → List (Slot w) → Term
-  | [], [] => tt
-  | (f, xs) :: S, (g, ys) :: S' => .and (.and (.eq f g) (.or (.not f) (cmp xs ys))) (slotsCmpT cmp S S')
-  | _, _ => .bool false
+/-- The slots with only each item's second term: a request's entry without its wire id, an own effect without its
+place in the queue. -/
+def seconds (S : List (Slot 2)) : List (Slot 1) := S.map fun sl => (sl.1, ⟨[sl.2[1]], rfl⟩)
 
-/-- The slots of two event lists hold the same events in the same places. -/
-def slotsEqT : List (Slot 1) → List (Slot 1) → Term := slotsCmpT fun xs ys => .eq xs[0] ys[0]
-
-/-- Two steps' news slots hold the same requests in the same places, each as far from its step's first wire id (`nA`,
-`nC`) as the other: a step sends the same requests at the same ids relative to where it starts, whichever step runs
-first. -/
-def newsEqT (nA nC : Term) (A C : List PendingSlot) : Term :=
-  slotsCmpT (fun xs ys => .and (.eq (.add xs[0] nC) (.add ys[0] nA)) (.eq xs[1] ys[1])) (A.map (·.slot)) (C.map (·.slot))
-
-/-- Two steps' own slots hold the same own commands and queries in the same places. Their queue places are not
-compared: the queue is a multiset to the comparison, and the other step's effects come first in one order. -/
-def ownsEqT (A C : List OwnSlot) : Term := slotsCmpT (fun xs ys => .eq xs[1] ys[1]) (A.map (·.slot)) (C.map (·.slot))
+/-- The slots with each flag and item shared: a multiset comparison reads each of them once for every slot. -/
+def shareSlots {w : Nat} (S : List (Slot w)) : List (Slot w) :=
+  S.map fun sl => (sl.1.share, ⟨sl.2.1.map Term.share, by simp [sl.2.2]⟩)
 
 section
 variable {M : Model} {L : Layout} {T : List TypeDecl}
 
-theorem holds_eq {a b : Term} (h : Holds M (.eq a b)) : a.denote M = b.denote M :=
-  Val.eq_of_beq _ _ (by simp only [Holds, Term.denote, Val.toBool] at h; exact h)
+theorem slotsDen_share {w : Nat} : {S : List (Slot w)} → {sv : List (Bool × List Val)} → SlotsDen M S sv →
+    SlotsDen M (shareSlots S) sv
+  | [], [], _ => trivial
+  | (f, xs) :: S, (b, vs) :: sv, ⟨hf, hx, h⟩ =>
+    ⟨by simp [hf], by rw [← hx]; simp [denotes_eq_map], slotsDen_share h⟩
 
-/-- Slots compared place by place hold, where occupied, items `cmp` relates. -/
-theorem occupied_cmp {w : Nat} {cmp : SlotItems w → SlotItems w → Term} {Rv : List Val → List Val → Prop}
-    (hcmp : ∀ xs ys : SlotItems w, Holds M (cmp xs ys) → Rv (Term.denotes M xs.1) (Term.denotes M ys.1)) :
-    {S S' : List (Slot w)} → {sv sv' : List (Bool × List Val)} → SlotsDen M S sv → SlotsDen M S' sv' →
-    Holds M (slotsCmpT cmp S S') → Forall2 Rv (occupied sv) (occupied sv')
-  | [], [], [], [], _, _, _ => trivial
-  | (f, xs) :: S, (g, ys) :: S', (b, vs) :: sv, (b', vs') :: sv', ⟨hf, hx, h⟩, ⟨hg, hy, h'⟩, he => by
-    simp only [slotsCmpT, holds_and, holds_or, holds_not] at he
-    obtain ⟨⟨hfg, hxy⟩, he⟩ := he
-    have hb : b = b' := by have := holds_eq hfg; rw [hf, hg] at this; cases this; rfl
-    subst hb
-    have ih := occupied_cmp hcmp h h' he
-    cases b with
-    | false => simpa [occupied] using ih
-    | true =>
-      have hfT : Holds M f := by simp [Holds, hf, Val.toBool]
-      have hr := hcmp xs ys (hxy.resolve_left (fun h => h hfT))
-      rw [hx, hy] at hr
-      simp only [occupied, List.filterMap_cons, ite_true] at ih ⊢
-      exact ⟨hr, ih⟩
-  | [], _ :: _, _, _, _, _, he | _ :: _, [], _, _, _, _, he => by simp [slotsCmpT, Holds, Term.denote, Val.toBool] at he
-  | [], [], _ :: _, _, h, _, _ | _ :: _, _ :: _, [], _, h, _, _ => nomatch h
-  | [], [], [], _ :: _, _, h', _ | _ :: _, _ :: _, _ :: _, [], _, h', _ => nomatch h'
+theorem seconds_den : {S : List (Slot 2)} → {sv : List (Bool × List Val)} → SlotsDen M S sv →
+    ∃ sv', SlotsDen M (seconds S) sv' ∧
+      Forall2 (fun vs vs' => ∃ a b, vs = [a, b] ∧ vs' = [b]) (occupied sv) (occupied sv')
+  | [], [], _ => ⟨[], trivial, trivial⟩
+  | (f, xs) :: S, (b, vs) :: sv, ⟨hf, hx, h⟩ => by
+    obtain ⟨sv', h1, h2⟩ := seconds_den h
+    obtain ⟨a, c, rfl⟩ := xs.two
+    refine ⟨(b, [c.denote M]) :: sv', ⟨hf, by simp [Term.denotes], h1⟩, ?_⟩
+    simp only [Term.denotes] at hx
+    cases b
+    · simpa [occupied] using h2
+    · simpa [occupied, Forall2, ← hx] using h2
 
-/-- Slots compared equal hold the same items where occupied. -/
-theorem occupied_of_slotsEq {S S' : List (Slot 1)} {sv sv' : List (Bool × List Val)} (h : SlotsDen M S sv)
-    (h' : SlotsDen M S' sv') (he : Holds M (slotsEqT S S')) : occupied sv = occupied sv' :=
-  forall2_eq (occupied_cmp (fun xs ys hxy => by
-    obtain ⟨x, rfl⟩ := xs.one
-    obtain ⟨y, rfl⟩ := ys.one
-    simp only [SlotItems.getElem_mk, List.getElem_cons_zero] at hxy
-    simp [Term.denotes, holds_eq hxy]) h h' he)
+/-- Items held one per slot, each a value `R` relates to its item. -/
+theorem forall2_ones {α : Type} {R : α → Val → Prop} : {ys : List α} → {os : List (List Val)} →
+    Forall2 (fun y vs => ∃ z, vs = [z] ∧ R y z) ys os →
+    ∃ zs, Forall2 R ys zs ∧ Forall2 (fun z vs => vs = [z]) zs os
+  | [], [], _ => ⟨[], trivial, trivial⟩
+  | _ :: _, _ :: _, ⟨⟨z, rfl, hz⟩, h⟩ => by
+    obtain ⟨zs, h1, h2⟩ := forall2_ones h
+    exact ⟨z :: zs, ⟨hz, h1⟩, ⟨rfl, h2⟩⟩
+  | [], _ :: _, h | _ :: _, [], h => h.elim
 
-/-- Event slots compared equal hold events that are the same value one by one. -/
-theorem events_of_slotsEq {v : ServiceV} {S S' : List (Slot 1)} {evs evs' : List v.event.den0}
-    (h : EventsRel M L S evs) (h' : EventsRel M L S' evs') (he : Holds M (slotsEqT S S')) :
-    Forall2 (Ty.rel0 PBij.refl v.event) evs evs' := by
+/-- Slots that `bagEqT` with SMT-LIB's `=` finds equal hold the same items as multisets. -/
+theorem bagEqT_perm {A B : List (Slot 1)} {svA svB : List (Bool × List Val)} {ysA ysB : List Val}
+    (hA : SlotsDen M A svA) (hB : SlotsDen M B svB) (hhA : Holds2 (fun z vs => vs = [z]) ysA svA)
+    (hhB : Holds2 (fun z vs => vs = [z]) ysB svB) (h : Holds M (bagEqT .eq A B)) : ysA.Perm ysB := by
+  have hc : ∀ {S : List (Slot 1)} {sv : List (Bool × List Val)} {ys : List Val} (x : Term), SlotsDen M S sv →
+      Holds2 (fun z vs => vs = [z]) ys sv → (countEqT .eq x S).denote M = .int (ys.filter (Val.beq (x.denote M))).length :=
+    fun x hS hh => countT_den (aligned_map (V := fun y v => v = .bool (Val.beq (x.denote M) y)) (fun xs => .eq x xs[0])
+      (fun y xs he => by
+        obtain ⟨t, rfl⟩ := xs.one
+        simp only [Term.denotes, List.cons.injEq] at he
+        simp only [SlotItems.getElem_mk, List.getElem_cons_zero, Term.denote, he.1]
+        rfl) hS hh)
+  have hq : Aligned M (fun z vs => vs = [z]) (fun z => countBy Val.beq z ysA == countBy Val.beq z ysB) A
+      (A.map fun sl => .eq (countEqT .eq sl.2[0] A) (countEqT .eq sl.2[0] B)) svA ysA :=
+    aligned_map (fun xs => .eq (countEqT .eq xs[0] A) (countEqT .eq xs[0] B)) (fun z xs he => by
+      obtain ⟨t, rfl⟩ := xs.one
+      simp only [Term.denotes, List.cons.injEq] at he
+      simp only [SlotItems.getElem_mk, List.getElem_cons_zero, Term.denote, hc t hA hhA, hc t hB hhB, he.1]
+      show Val.bool (Val.beq _ _) = _
+      simp only [Val.beq, countBy, natCast_beq]) hA hhA
+  have hb : bagBeq Val.beq ysA ysB = true := by
+    have := h
+    simp only [Holds, bagEqT, Term.denote, sizeT_den hA, sizeT_den hB, allSlotT_den hq, ← holds2_length hhA,
+      ← holds2_length hhB, Val.toBool, Bool.and_eq_true] at this
+    have h1 : Val.beq (.int ysA.length) (.int ysB.length) = true := this.1
+    simp only [Val.beq, natCast_beq] at h1
+    simp only [bagBeq, Bool.and_eq_true]
+    exact ⟨h1, this.2⟩
+  have hiff : ∀ x y, Val.beq x y = true ↔ id x = id y := fun x y =>
+    ⟨Val.eq_of_beq x y, fun e => by simp only [id] at e; subst e; exact Val.beq_refl x⟩
+  simpa using (bagBeq_iff hiff ysA ysB).1 hb
+
+/-- Items whose codes are the same as multisets relate as multisets, where items of one code relate. -/
+theorem multi_of_codes {α β : Type} {R : α → Val → Prop} {R' : β → Val → Prop} {r : α → β → Prop}
+    (hr : ∀ x y z, R x z → R' y z → r x y) {xs : List α} {ys : List β} {zs zs' : List Val}
+    (hx : Forall2 R xs zs) (hz : zs.Perm zs') (hy : Forall2 R' ys zs') : Multi r xs ys := by
+  obtain ⟨ys', hp, h'⟩ := forall2_perm hz.symm hy
+  exact ⟨ys', forall2_imp (fun x y ⟨z, h1, h2⟩ => hr x y z h1 h2) (forall2_comp hx (forall2_flip h')), hp⟩
+
+/-- Event slots `bagEqT` finds equal hold events that are the same as multisets. -/
+theorem events_multi {v : ServiceV} {S S' : List (Slot 1)} {evs evs' : List v.event.den0}
+    (h : EventsRel M L S evs) (h' : EventsRel M L S' evs')
+    (he : Holds M (bagEqT .eq (shareSlots S) (shareSlots S'))) :
+    Multi (Ty.rel0 PBij.refl v.event) evs evs' := by
   obtain ⟨sv, hS, hh⟩ := h
   obtain ⟨sv', hS', hh'⟩ := h'
-  have hocc := occupied_of_slotsEq hS hS' he
-  unfold Holds2 at hh hh'
-  rw [← hocc] at hh'
-  have hf := holds2_same (r := fun a b => Ty.rel0 PBij.refl v.event (Ty.down _ v.event_data a) (Ty.down _ v.event_data b))
-    (fun x y vs ⟨z, e1, h1⟩ ⟨z', e2, h2⟩ => by
-      rw [e1] at e2; cases e2
-      have := rel0_same v.event_data (x := Ty.down _ v.event_data x) (y := Ty.down _ v.event_data y)
-        (by rwa [Ty.up_down]) (by rwa [Ty.up_down])
-      exact this) hh hh'
-  exact forall2_imp (fun a b h => by simpa [Ty.down_up] using h) (forall2_map_iff.1 hf)
+  obtain ⟨zs, hz, hzo⟩ := forall2_ones hh
+  obtain ⟨zs', hz', hzo'⟩ := forall2_ones hh'
+  have hm := multi_of_codes (r := fun a b => Ty.rel0 PBij.refl v.event (Ty.down _ v.event_data a)
+      (Ty.down _ v.event_data b)) (fun x y z h1 h2 =>
+      rel0_same v.event_data (by rwa [Ty.up_down]) (by rwa [Ty.up_down])) hz
+      (bagEqT_perm (slotsDen_share hS) (slotsDen_share hS') hzo hzo' he) hz'
+  exact Multi.of_map (fun a b h => by simpa [Ty.down_up] using h) hm
 
 /-- Two stored values whose terms Gleam's `==` finds equal are the same value, read as `==` reads it. -/
 theorem rel0_of_eqFn {t : Ty} (hd : t.isData = true) (hc : t.comparable = true) {x y : t.den0} {a b : Term}
@@ -163,17 +182,81 @@ theorem pendingOf_alike {R : PBij} {e : Ty} : (shs : List (PendingShape e)) → 
   | _ :: shs, i, j, .inr _, .inr _, h => pendingOf_alike shs i j h
   | _ :: _, _, _, .inl _, .inr _, h | _ :: _, _, _, .inr _, .inl _, h => h.elim
 
-/-- The requests a step writes from the wire id `n0` have the ids from `n0` on. -/
-theorem writes_ids {ds : List (String × DeclaredV)} {e : Ty} : {effs : List (Sender × EffectV e)} → {n0 : Nat} →
+/-- The requests a step writes from the wire id `n0` have the ids from `n0` on, one each, in order. -/
+theorem writes_ids_range {ds : List (String × DeclaredV)} {e : Ty} : {effs : List (Sender × EffectV e)} → {n0 : Nat} →
     {ps : List (Step.Pending e)} → Forall2 (Step.Writes ds) (effs.zipIdx n0) ps →
-    ∀ p ∈ ps, n0 ≤ p.id ∧ p.id < n0 + ps.length
-  | [], _, [], _ => by simp
+    ps.map (·.id) = List.range' n0 ps.length
+  | [], _, [], _ => rfl
   | _ :: _, _, _ :: _, ⟨⟨_, _, _, _, rfl⟩, h⟩ => by
-    intro q hq
-    rcases List.mem_cons.1 hq with rfl | hq
-    · simp
-    · have := writes_ids h q hq; simp only [List.length_cons]; omega
+    simp only [List.map_cons, List.length_cons, List.range'_succ]
+    exact congrArg _ (writes_ids_range h)
   | [], _, _ :: _, h | _ :: _, _, [], h => h.elim
+
+/-- Pairs whose first components are distinct give each first component one second component. -/
+theorem fst_unique : {l : List (Nat × Nat)} → (l.map Prod.fst).Nodup → {a b b' : Nat} → (a, b) ∈ l → (a, b') ∈ l →
+    b = b'
+  | [], _, _, _, _, hb, _ => by simp at hb
+  | p :: l, h, a, b, b', hb, hb' => by
+    rw [List.map_cons, List.nodup_cons] at h
+    rcases List.mem_cons.1 hb with e | hb1 <;> rcases List.mem_cons.1 hb' with e' | hb1'
+    · exact (Prod.mk.inj (e.trans e'.symm)).2
+    · exact absurd (List.mem_map_of_mem (f := Prod.fst) hb1') (by rw [← e] at h; exact h.1)
+    · exact absurd (List.mem_map_of_mem (f := Prod.fst) hb1) (by rw [← e'] at h; exact h.1)
+    · exact fst_unique h.2 hb1 hb1'
+
+theorem forall2_zip_mem {α β : Type} {r : α → β → Prop} : {xs : List α} → {ys : List β} → Forall2 r xs ys →
+    Forall2 (fun x y => r x y ∧ (x, y) ∈ xs.zip ys) xs ys
+  | [], [], _ => trivial
+  | _ :: _, _ :: _, ⟨h, hs⟩ =>
+    ⟨⟨h, List.mem_cons_self⟩, forall2_imp (fun _ _ h => ⟨h.1, List.mem_cons_of_mem _ h.2⟩) (forall2_zip_mem hs)⟩
+  | [], _ :: _, h | _ :: _, [], h => h.elim
+
+/-- Requests alike as multisets, each list with distinct wire ids from `n0` on, relate one to one under a renaming of
+wire ids that keeps every id below `n0` and nothing else below it. -/
+theorem wire_match {e : Ty} {n0 : Nat} {xs ys : List (Step.Pending e)} (h : Multi (PendingAlike PBij.refl) xs ys)
+    (hx : (xs.map (·.id)).Nodup) (hy : (ys.map (·.id)).Nodup) (hxn : ∀ p ∈ xs, n0 ≤ p.id)
+    (hyn : ∀ p ∈ ys, n0 ≤ p.id) :
+    ∃ W : PBij, W.shift = none ∧ (∀ i < n0, W.rel i i) ∧ (∀ {i j}, W.rel i j → i < n0 → j = i) ∧
+      Multi (Step.Pending.Rel ⟨PBij.refl, W⟩) xs ys := by
+  obtain ⟨zs, hz, hzp⟩ := h
+  have hl := forall2_length hz
+  let ps : List (Nat × Nat) := (xs.zip zs).map fun pq => (pq.1.id, pq.2.id)
+  have hfst : ps.map Prod.fst = xs.map (·.id) := by
+    have := List.map_fst_zip (l₁ := xs) (l₂ := zs) (by omega)
+    simp only [ps, List.map_map]
+    conv => rhs; rw [← this, List.map_map]
+    rfl
+  have hsnd : (ps.map Prod.swap).map Prod.fst = zs.map (·.id) := by
+    have := List.map_snd_zip (l₁ := xs) (l₂ := zs) (by omega)
+    simp only [ps, List.map_map]
+    conv => rhs; rw [← this, List.map_map]
+    rfl
+  have hzn : (zs.map (·.id)).Nodup := (hzp.map _).nodup_iff.2 hy
+  have hpn : ∀ pr ∈ ps, n0 ≤ pr.1 ∧ n0 ≤ pr.2 := by
+    intro pr hpr
+    obtain ⟨⟨p, q⟩, hm, rfl⟩ := List.mem_map.1 hpr
+    exact ⟨hxn p (List.of_mem_zip hm).1, hyn q (hzp.mem_iff.1 (List.of_mem_zip hm).2)⟩
+  let W : PBij := {
+    rel := fun i j => (i < n0 ∧ j = i) ∨ (i, j) ∈ ps
+    func := by
+      rintro i j j' (⟨hi, rfl⟩ | h1) (⟨hi', rfl⟩ | h2)
+      · rfl
+      · have := (hpn _ h2).1; simp only at this; omega
+      · have := (hpn _ h1).1; simp only at this; omega
+      · exact fst_unique (hfst ▸ hx) h1 h2
+    inj := by
+      rintro i i' j (⟨hi, e⟩ | h1) (⟨hi', e'⟩ | h2)
+      · omega
+      · have := (hpn _ h2).2; simp only at this; omega
+      · have := (hpn _ h1).2; simp only at this; omega
+      · exact fst_unique (hsnd ▸ hzn) (List.mem_map_of_mem (f := Prod.swap) h1)
+          (List.mem_map_of_mem (f := Prod.swap) h2) }
+  refine ⟨W, rfl, fun i hi => .inl ⟨hi, rfl⟩, fun {i j} hij hi => ?_, zs, ?_, hzp⟩
+  · rcases hij with ⟨-, rfl⟩ | hij
+    · rfl
+    · have := (hpn _ hij).1; simp only at this; omega
+  · exact forall2_imp (fun p q ⟨ha, hm⟩ => ⟨.inr (List.mem_map_of_mem (f := fun pq : Step.Pending e × Step.Pending e =>
+      (pq.1.id, pq.2.id)) hm), ha⟩) (forall2_zip_mem hz)
 
 /-- Kept functions written at one site of the unique sites `P`, whose captured values have one code, relate. -/
 theorem fun_same {P : List AnySite} (hP : SitesUnique P) {t : Ty} {f g : Fun t} (hf : f.asSite ∈ P)
@@ -238,72 +321,67 @@ theorem eff_same {P : List AnySite} (hP : SitesUnique P) {e : Ty} {x y : EffectV
       | _ => exact hh'.elim
     | _ => exact hh.elim
 
-/-- Two steps' news slots compared equal hold requests written from their first wire ids `nA` and `nC` that are alike,
-each as far from its step's first id as the other. -/
-theorem news_same {e : Ty} {shs : List (PendingShape e)} {ds : List (String × DeclaredV)} {A C : List PendingSlot}
+/-- News slots `bagEqT` finds equal, read without their wire ids, hold requests written from the first wire ids `nA`
+and `nC` that are alike as multisets. -/
+theorem news_multi {e : Ty} {shs : List (PendingShape e)} {ds : List (String × DeclaredV)} {A C : List PendingSlot}
     {effsA effsC : List (Sender × EffectV e)} {nA nC : Nat} (hA : NewsRel M L shs ds A effsA nA)
-    (hC : NewsRel M L shs ds C effsC nC) {tA tC : Term} (htA : tA.denote M = .int nA) (htC : tC.denote M = .int nC)
-    (h : Holds M (newsEqT tA tC A C)) :
+    (hC : NewsRel M L shs ds C effsC nC)
+    (h : Holds M (bagEqT .eq (shareSlots (seconds (A.map (·.slot)))) (shareSlots (seconds (C.map (·.slot)))))) :
     ∃ psA psC, Forall2 (Step.Writes ds) (effsA.zipIdx nA) psA ∧ Forall2 (Step.Writes ds) (effsC.zipIdx nC) psC ∧
-      Multi (fun p q => p.id + nC = q.id + nA ∧ PendingAlike PBij.refl p q) psA psC := by
+      Multi (PendingAlike PBij.refl) psA psC := by
   obtain ⟨svA, zsA, hSA, -, hhA, xsA, hpA, hqA⟩ := hA
   obtain ⟨svC, zsC, hSC, -, hhC, xsC, hpC, hqC⟩ := hC
-  have hocc := occupied_cmp (Rv := fun vs vs' => ∃ a b c d, vs = [a, b] ∧ vs' = [c, d] ∧
-      a.toInt + nC = c.toInt + nA ∧ b = d) (fun xs ys hxy => by
-    obtain ⟨a, b, rfl⟩ := xs.two
-    obtain ⟨c, d, rfl⟩ := ys.two
-    simp only [SlotItems.getElem_mk, List.getElem_cons_zero, List.getElem_cons_succ, holds_and] at hxy
-    have h1 := holds_eq hxy.1
-    simp only [Term.denote, htA, htC, Val.toInt, Val.int.injEq] at h1
-    exact ⟨_, _, _, _, rfl, rfl, h1, holds_eq hxy.2⟩) hSA hSC h
-  have hz : Forall2 (fun zA zC => zA.1 + nC = zC.1 + nA ∧ Ty.relV PBij.refl (pendingEntry shs) zA.2 zC.2) zsA zsC :=
-    forall2_imp (fun zA zC ⟨vs', ⟨vs, ⟨ka, ea, e1, hka, hea⟩, ⟨a, b, c, d, e2, e3, hn, hbd⟩⟩, ⟨kc, ec, e4, hkc, hec⟩⟩ => by
-      subst hbd
+  have entries {zs : List ((Ty.dsl .fresh []).den × (pendingEntry shs).den)} {sv : List (Bool × List Val)}
+      {sv' : List (Bool × List Val)} (hh : Holds2 (ETab L (.dsl .fresh []) (pendingEntry shs)) zs sv)
+      (h2 : Forall2 (fun vs vs' => ∃ a b, vs = [a, b] ∧ vs' = [b]) (occupied sv) (occupied sv')) :
+      ∃ es, Forall2 (fun z e => RelV L (pendingEntry shs) z.2 e) zs es ∧ Holds2 (fun z vs => vs = [z]) es sv' :=
+    forall2_ones (forall2_imp (fun _ _ ⟨vs, ⟨ka, ea, e1, _, hea⟩, ⟨a, b, e2, e3⟩⟩ => by
       rw [e1, List.cons.injEq, List.cons.injEq] at e2
-      rw [e4, List.cons.injEq, List.cons.injEq] at e3
-      obtain ⟨rfl, rfl, -⟩ := e2
-      obtain ⟨rfl, rfl, -⟩ := e3
-      change ka = .int (Int.ofNat zA.1) at hka
-      change kc = .int (Int.ofNat zC.1) at hkc
-      subst hka hkc
-      simp only [Val.toInt] at hn
-      exact ⟨Int.ofNat.inj (by simp only [Int.ofNat_eq_natCast] at hn ⊢; exact hn), relV_same _ (pendingEntry_data shs) hea hec⟩)
-      (forall2_comp (forall2_comp hhA hocc) (forall2_flip hhC))
+      obtain ⟨-, rfl, -⟩ := e2
+      exact ⟨_, e3, hea⟩) (forall2_comp hh h2))
+  obtain ⟨svA', hSA', h2A⟩ := seconds_den hSA
+  obtain ⟨svC', hSC', h2C⟩ := seconds_den hSC
+  obtain ⟨esA, hzA, heA⟩ := entries hhA h2A
+  obtain ⟨esC, hzC, heC⟩ := entries hhC h2C
+  have hz : Multi (fun zA zC => Ty.relV PBij.refl (pendingEntry shs) zA.2 zC.2) zsA zsC :=
+    multi_of_codes (r := fun zA zC => Ty.relV PBij.refl (pendingEntry shs) zA.2 zC.2)
+      (fun _ _ _ h1 h2 => relV_same _ (pendingEntry_data shs) h1 h2) hzA
+      (bagEqT_perm (slotsDen_share hSA') (slotsDen_share hSC') heA heC h) hzC
   let pend (y : (Ty.dsl .fresh []).den × (pendingEntry shs).den) : Step.Pending e := pendingOf shs y.1 y.2
   obtain ⟨psA, hpsA, hwA⟩ := forall2_perm_left hpA (forall2_map_right pend (fun _ _ h => h.2) hqA)
   obtain ⟨psC, hpsC, hwC⟩ := forall2_perm_left hpC (forall2_map_right pend (fun _ _ h => h.2) hqC)
-  refine ⟨psA, psC, hwA, hwC, ((Multi.of_forall2 (forall2_map2 (fun zA zC h => ?_) hz)).perm_left hpsA).perm_right hpsC⟩
-  refine ⟨?_, pendingOf_alike shs _ _ h.2⟩
-  erw [pendingOf_id, pendingOf_id]
-  exact h.1
+  exact ⟨psA, psC, hwA, hwC, ((hz.map (f := pend) (g := pend) fun _ _ h => pendingOf_alike shs _ _ h).perm_left
+    hpsA).perm_right hpsC⟩
 
-/-- Two steps' own slots compared equal hold own commands and queries of the unique sites `P` that relate as
-multisets with every id renamed to itself. -/
-theorem ownsE_same {P : List AnySite} (hP : SitesUnique P) {e : Ty} {A C : List OwnSlot} {osA osC : List (EffectV e)}
-    {qA qC : Nat} (hA : OwnRelE M L A osA qA) (hC : OwnRelE M L C osC qC) (h : Holds M (ownsEqT A C))
+/-- Own slots `bagEqT` finds equal, read without their places in the queue, hold own commands and queries of the
+unique sites `P` that relate as multisets with every id renamed to itself. -/
+theorem ownsE_multi {P : List AnySite} (hP : SitesUnique P) {e : Ty} {A C : List OwnSlot} {osA osC : List (EffectV e)}
+    {qA qC : Nat} (hA : OwnRelE M L A osA qA) (hC : OwnRelE M L C osC qC)
+    (h : Holds M (bagEqT .eq (shareSlots (seconds (A.map (·.slot)))) (shareSlots (seconds (C.map (·.slot))))))
     (hrA : ∀ x ∈ osA, x.isRequest = false ∧ x.Reach P) (hrC : ∀ x ∈ osC, x.Reach P) :
     Multi (EffectV.Rel PBij.refl) osA osC := by
   obtain ⟨svA, zsA, hSA, -, hhA, hpA⟩ := hA
   obtain ⟨svC, zsC, hSC, -, hhC, hpC⟩ := hC
-  have hocc := occupied_cmp (Rv := fun vs vs' => ∃ a b c d, vs = [a, b] ∧ vs' = [c, d] ∧ b = d) (fun xs ys hxy => by
-    obtain ⟨a, b, rfl⟩ := xs.two
-    obtain ⟨c, d, rfl⟩ := ys.two
-    simp only [SlotItems.getElem_mk, List.getElem_cons_zero, List.getElem_cons_succ] at hxy
-    exact ⟨_, _, _, _, rfl, rfl, holds_eq hxy⟩) hSA hSC h
-  have hz : Forall2 (fun zA zC => ∃ z, RelV L (.dsl .effect [e]) zA.1 z ∧ RelV L (.dsl .effect [e]) zC.1 z) zsA zsC :=
-    forall2_imp (fun zA zC ⟨vs', ⟨vs, ⟨za, e1, hza⟩, ⟨a, b, c, d, e2, e3, hbd⟩⟩, ⟨zc, e4, hzc⟩⟩ => by
-      subst hbd
+  have codes {zs : List (EffectV e × Nat)} {sv : List (Bool × List Val)} {sv' : List (Bool × List Val)}
+      (hh : Holds2 (EOwn L e) zs sv)
+      (h2 : Forall2 (fun vs vs' => ∃ a b, vs = [a, b] ∧ vs' = [b]) (occupied sv) (occupied sv')) :
+      ∃ cs, Forall2 (fun z c => RelV L (.dsl .effect [e]) z.1 c) zs cs ∧ Holds2 (fun z vs => vs = [z]) cs sv' :=
+    forall2_ones (forall2_imp (fun _ _ ⟨vs, ⟨zx, e1, hzx⟩, ⟨a, b, e2, e3⟩⟩ => by
       rw [e1, List.cons.injEq, List.cons.injEq] at e2
-      rw [e4, List.cons.injEq, List.cons.injEq] at e3
       obtain ⟨-, rfl, -⟩ := e2
-      obtain ⟨-, rfl, -⟩ := e3
-      exact ⟨_, hza, hzc⟩)
-      (forall2_comp (forall2_comp hhA hocc) (forall2_flip hhC))
+      exact ⟨_, e3, hzx⟩) (forall2_comp hh h2))
+  obtain ⟨svA', hSA', h2A⟩ := seconds_den hSA
+  obtain ⟨svC', hSC', h2C⟩ := seconds_den hSC
+  obtain ⟨csA, hzA, hcA⟩ := codes hhA h2A
+  obtain ⟨csC, hzC, hcC⟩ := codes hhC h2C
+  have hz : Multi (fun zA zC => ∃ z, RelV L (.dsl .effect [e]) zA.1 z ∧ RelV L (.dsl .effect [e]) zC.1 z) zsA zsC :=
+    multi_of_codes (fun _ _ z h1 h2 => ⟨z, h1, h2⟩) hzA
+      (bagEqT_perm (slotsDen_share hSA') (slotsDen_share hSC') hcA hcC h) hzC
   have hmem {os : List (EffectV e)} {q : Nat} {zs : List (EffectV e × Nat)} (hp : zs.Perm (os.zipIdx q)) :
       ∀ z ∈ zs, z.1 ∈ os := fun z hz => by
     have := List.mem_map_of_mem (f := Prod.fst) (hp.mem_iff.1 hz)
     rwa [List.zipIdx_map_fst] at this
-  have hm := (Multi.of_forall2 hz).imp_mem (r' := fun zA zC => EffectV.Rel PBij.refl zA.1 zC.1)
+  have hm := hz.imp_mem (r' := fun zA zC => EffectV.Rel PBij.refl zA.1 zC.1)
     fun zA hzA zC hzC ⟨_, h1, h2⟩ =>
       eff_same hP h1 h2 (hrA _ (hmem hpA zA hzA)).2 (hrC _ (hmem hpC zC hzC)) (hrA _ (hmem hpA zA hzA)).1
   have hfst {os : List (EffectV e)} {q : Nat} {zs : List (EffectV e × Nat)} (hp : zs.Perm (os.zipIdx q)) :
@@ -312,12 +390,13 @@ theorem ownsE_same {P : List AnySite} (hP : SitesUnique P) {e : Ty} {A C : List 
     rwa [List.zipIdx_map_fst] at this
   exact ((hm.map (f := Prod.fst) (g := Prod.fst) fun _ _ h => h).perm_left (hfst hpA)).perm_right (hfst hpC)
 
-theorem owns_same {P : List AnySite} (hP : SitesUnique P) {e : Ty} {A C : List OwnSlot} {osA osC : List (OwnEffectV e)}
-    {qA qC : Nat} (hA : OwnRel M L A osA qA) (hC : OwnRel M L C osC qC) (h : Holds M (ownsEqT A C))
+theorem owns_multi {P : List AnySite} (hP : SitesUnique P) {e : Ty} {A C : List OwnSlot} {osA osC : List (OwnEffectV e)}
+    {qA qC : Nat} (hA : OwnRel M L A osA qA) (hC : OwnRel M L C osC qC)
+    (h : Holds M (bagEqT .eq (shareSlots (seconds (A.map (·.slot)))) (shareSlots (seconds (C.map (·.slot))))))
     (hrA : ∀ x ∈ osA, x.effect.Reach P) (hrC : ∀ x ∈ osC, x.effect.Reach P) :
     Multi (OwnEffectV.Rel PBij.refl) osA osC :=
   Multi.of_map (r' := EffectV.Rel PBij.refl) (f := OwnEffectV.effect) (g := OwnEffectV.effect)
-    (fun _ _ h => OwnEffectV.rel_iff.2 h) (ownsE_same hP hA hC h
+    (fun _ _ h => OwnEffectV.rel_iff.2 h) (ownsE_multi hP hA hC h
     (fun x hx => by
       obtain ⟨o, ho, rfl⟩ := List.mem_map.1 hx
       exact ⟨by cases o <;> rfl, hrA o ho⟩)

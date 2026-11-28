@@ -3779,13 +3779,13 @@ def pairWfCheck (solver : Solver) : IO Bool := do
 
 /-! Pair questions whose steps send requests: the service `p` with the reaction `echo`, which asks `mail` to `send`
 the event's key, or `count`, which sends how many rows the records hold, each `on_answer` capturing the event's key.
-Two `ins` with `echo` commute: each sends the same request at the same wire id counted from where its step starts,
-whichever runs first, so the question is unsat. With `count`, from records with no row, the first `ins` sends one row
-fewer than it does after the other `ins`, so the question, which keeps each step's wire ids, is sat; with the wire ids
-swapped the two orders send the same counts, and differ only in which key each `on_answer` captures. (From a row with
-one of the keys, the counts differ in data, and the solver may pick such a model, so the case asks from no row.) `on_answer` ignores it, so the orders
-behave alike, but Lean does not compare what functions do: the model must read as differing only in kept functions,
-never as not commuting. -/
+Two `ins` with `echo` commute: the two orders send the same requests, read as a multiset without their wire ids, so
+the question is unsat. With `count`, from records with no row, the first `ins` sends one row fewer than it does after
+the other `ins`, so the two orders send the same counts, but each count's `on_answer` captures the other key, and the
+question, which compares a request with its captured values, is sat. (From a row with one of the keys, the counts
+differ in data, and the solver may pick such a model, so the case asks from no row.) `on_answer` ignores the key, so
+the orders behave alike, but Lean does not compare what functions do: the model must read as differing only in kept
+functions, never as not commuting. -/
 
 def reqCtxT : Ty := Ty.reactionCtx recordsT
 
