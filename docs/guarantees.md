@@ -216,7 +216,8 @@ An Int or String field takes the kind's `values`, and a kind with none never tak
 An id field takes an id the service made that an out line showed and the state still holds, an outside id the state holds, or one new outside id.
 An instant field takes the state's time or that time plus a wait, and a list, bag or table at most `others_at_most` items.
 A state is kept once per key: two states share a key when they are the same once the counters their ids came from and the wire ids of their pending requests are numbered by rank and every instant is read relative to the state's time.
-A step cannot tell such states apart, since no spec writes an instant or a counter and the canonical order compares fresh ids by their counters' order alone.
+A step cannot tell such states apart, since no spec writes an instant or a counter and the canonical order compares fresh ids by their counters' order alone: `step_ren` proves that from states related by a renaming that keeps the counters' order and moves every instant alike, related inputs step to related results.
+That equal keys give such a renaming, and so the coverage `Explore.unreached` and `Explore.notViolated` claim, has no theorem yet.
 A faulted step ends its run.
 The search stops after `explore_depth` inputs or once it keeps `explore_states` states, never by wall time, so its lines are a function of the spec and the model.
 `Explore.covered` gives the states first reached at each depth, and every scoped line names the coverage: `depth`, every run of at most that many inputs, and `exhausted`, every state the inputs reach was seen, so runs of any length are covered.

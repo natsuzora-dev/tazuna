@@ -127,14 +127,23 @@ theorem cmp_int_add (a b d : Int) : Erl.cmp (.int (a + d)) (.int (b + d)) = Erl.
   simp only [compare, compareOfLessAndEq]
   split <;> split <;> (try split) <;> (try split) <;> first | rfl | omega
 
-theorem IdV.eq_of_rel (hR : ∀ {a b}, R.rel a b → a = b) {a b : IdV} (h : IdV.Rel R a b) : a = b := by
-  rcases h with ⟨s, rfl, rfl⟩ | ⟨c, c', i, hc, rfl, rfl⟩
-  · rfl
-  · rw [hR hc]
+/-- A renaming that keeps the order of the counters it relates, as a rank does: the canonical order compares fresh ids
+by their counters, so such a renaming keeps it. -/
+def _root_.Tazuna.Ir.PBij.Mono (R : PBij) : Prop := ∀ {a b a' b'}, R.rel a b → R.rel a' b' → compare a a' = compare b b'
+
+theorem _root_.Tazuna.Ir.PBij.mono_of_eq {R : PBij} (hR : ∀ {a b}, R.rel a b → a = b) : R.Mono := by
+  intro a b a' b' h h'
+  obtain rfl := hR h
+  obtain rfl := hR h'
+  rfl
+
+theorem cmp_nat_mono (hR : R.Mono) {a b a' b' : Nat} (h : R.rel a b) (h' : R.rel a' b') :
+    Erl.cmp (.int a) (.int a') = Erl.cmp (.int b) (.int b') := by
+  rw [Erl.cmp_int, Erl.cmp_int, Erl.compare_int_nat, Erl.compare_int_nat, hR h h']
 
 mutual
 /-- Values related by a renaming that keeps every name compare as the originals do. -/
-theorem Ty.cmp_shift (hR : ∀ {a b}, R.rel a b → a = b) : (t : Ty) → t.ordered T = true → {x x' y y' : t.den0} → Ty.rel0 R t x x' →
+theorem Ty.cmp_shift (hR : R.Mono) : (t : Ty) → t.ordered T = true → {x x' y y' : t.den0} → Ty.rel0 R t x x' →
     Ty.rel0 R t y y' → Erl.cmp (t.erl T x) (t.erl T y) = Erl.cmp (t.erl T x') (t.erl T y')
   | .int, _, _, _, _, _, hx, hy | .str, _, _, _, _, _, hx, hy => by
     have hx : _ = _ := hx; have hy : _ = _ := hy; subst hx hy; rfl
@@ -145,13 +154,20 @@ theorem Ty.cmp_shift (hR : ∀ {a b}, R.rel a b → a = b) : (t : Ty) → t.orde
     rw [PBij.point_ms_eq hx, PBij.point_ms_eq hy]
     exact (cmp_int_add x y R.shiftMs).symm
   | .id, _, _, _, _, _, hx, hy => by
-    rw [IdV.eq_of_rel hR hx, IdV.eq_of_rel hR hy]
+    rcases hx with ⟨s, rfl, rfl⟩ | ⟨c, c', i, hc, rfl, rfl⟩ <;>
+      rcases hy with ⟨s', rfl, rfl⟩ | ⟨e, e', j, he, rfl, rfl⟩
+    · rfl
+    · show Erl.cmp (.bin _) (.tuple _) = Erl.cmp (.bin _) (.tuple _)
+      rw [Erl.cmp_bin_tuple, Erl.cmp_bin_tuple]
+    · show Erl.cmp (.tuple _) (.bin _) = Erl.cmp (.tuple _) (.bin _)
+      rw [Erl.cmp_tuple_bin, Erl.cmp_tuple_bin]
+    · show Erl.cmp (.tuple [.int c, .int i]) (.tuple [.int e, .int j]) =
+        Erl.cmp (.tuple [.int c', .int i]) (.tuple [.int e', .int j])
+      rw [Erl.cmp_pair, Erl.cmp_pair, cmp_nat_mono hR hc he]
   | .param _, _, _, _, _, _, _, _ => rfl
   | .dsl k _, h, x, x', y, y', hx, hy => by
     cases k <;> simp [Ty.ordered] at h
-    have hx : x = x' := hR hx
-    have hy : y = y' := hR hy
-    subst hx hy; rfl
+    exact cmp_nat_mono hR hx hy
   | .fn .., h, _, _, _, _, _, _ => by simp [Ty.ordered] at h
   | .list t, h, xs, xs', ys, ys', hx, hy => by
     have hE : ∀ a a' b b', ErlRel T R t a a' → ErlRel T R t b b' → Erl.cmp a b = Erl.cmp a' b' := by
@@ -212,14 +228,14 @@ theorem Ty.cmp_shift (hR : ∀ {a b}, R.rel a b → a = b) : (t : Ty) → t.orde
   | .adt i _ vs, h, x, x', y, y', hx, hy => by
     simp only [Ty.ordered, Bool.and_eq_true, decide_eq_true_eq] at h
     exact Ty.cmpAlts_shift hR (variantsAt T i) 0 vs h.2 (by simpa using h.1) hx hy
-theorem Ty.cmps_shift (hR : ∀ {a b}, R.rel a b → a = b) : (ts : List Ty) → Ty.ordereds T ts = true → {x x' y y' : (Ty.semsWith Dsl.base ts).1} →
+theorem Ty.cmps_shift (hR : R.Mono) : (ts : List Ty) → Ty.ordereds T ts = true → {x x' y y' : (Ty.semsWith Dsl.base ts).1} →
     Ty.relsWith Dsl.base (Dsl.rel0 R) R ts x x' → Ty.relsWith Dsl.base (Dsl.rel0 R) R ts y y' →
     Erl.cmps (Ty.erls T ts x) (Ty.erls T ts y) = Erl.cmps (Ty.erls T ts x') (Ty.erls T ts y')
   | [], _, _, _, _, _, _, _ => rfl
   | t :: ts, h, (_, _), (_, _), (_, _), (_, _), ⟨hx, hxs⟩, ⟨hy, hys⟩ => by
     simp only [Ty.ordereds, Bool.and_eq_true] at h
     simp only [Ty.erls, Erl.cmps, Ty.cmp_shift hR t h.1 hx hy, Ty.cmps_shift hR ts h.2 hxs hys]
-theorem Ty.cmpAlts_shift (hR : ∀ {a b}, R.rel a b → a = b) (decl : List Variant) : (j : Nat) → (vs : List (List Ty)) → Ty.orderedss T vs = true →
+theorem Ty.cmpAlts_shift (hR : R.Mono) (decl : List Variant) : (j : Nat) → (vs : List (List Ty)) → Ty.orderedss T vs = true →
     ((List.range vs.length).map fun m => atomAt decl (j + m)).Nodup →
     {x x' y y' : (Ty.semAltsWith Dsl.base vs).1} → Ty.relAltsWith Dsl.base (Dsl.rel0 R) R vs x x' →
     Ty.relAltsWith Dsl.base (Dsl.rel0 R) R vs y y' →
