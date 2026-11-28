@@ -158,8 +158,9 @@ Two kinds of line check that no outcome depends on the order in which the semant
 
 - A pair line, `<first> and <second> commute`, asks for a state and two waiting own effects whose two orders end differently under every renaming of the ids the pair made, as the semantics compares them.
   The question compares the first order with the other order run twice, once with each effect making the ids it makes in the first order and once with the two effects' counters swapped, and reads events, requests and queued own effects as multisets, a request without its wire id. So it searches no renaming, and an unsat answer covers every renaming the semantics allows.
-  Where no input kind's cascade can queue effects of both kinds, the two never wait together, so the line reads as if both questions were unsat and no question is asked.
+  Where no input kind's step can have an effect of each kind waiting together, the line reads as if its target question were unsat, and no question is asked. Where the two kinds share their `on_answer`, the bound question is still asked, since it also bounds the step one such effect runs.
   An input kind's cascade queues only the own effects whose `on_answer` the events it can apply, and the machine states it can enter, can write.
+  An event line applies one event, so each reaction runs once on it: a `case` takes one clause, and a list written in place holds each item once. So two effects that different clauses start, or two of an effect that one clause starts once, never wait together, unless the cascade's own steps can start one of them again. The events those steps can apply decide that: the ones the cascade's functions build and the ones an `on_answer` returns.
 - A timer line, `timers of <machine> fire forward`, asks whether the state a timer of the machine enters can wait for a timer before the one that fired. A timer is read off the instance's state and the records, so the question has no time in it.
 
 `run_lines` (T5): take a run from the initial state whose inputs satisfy `validInputs`, and a cascade that one of its steps starts at a state and an input within the slots.

@@ -171,6 +171,29 @@ def Layout.apart (k1 k2 : OwnPlace L v.event) : Bool :=
   !together P (stepInputs v (shapes v) senv.nT (stateWidth v)) (L.ownsOf v.event)[k1].answer.site
     (L.ownsOf v.event)[k2].answer.site
 
+/-- Whether no input kind's step can have an effect of the own kind `k1` and another of `k2` waiting together
+(`coQueued`): kinds that are apart, and kinds whose effects one step starts in different runs of the code, or at most
+once. No step runs two such effects in either order, so the pair needs no target question (`PairOk`). -/
+def Layout.alone (k1 k2 : OwnPlace L v.event) : Bool :=
+  !coQueued P (stepInputs v (shapes v) senv.nT (stateWidth v)) (L.ownsOf v.event)[k1].answer.site
+    (L.ownsOf v.event)[k2].answer.site
+
+/-- Which of a pair's two questions a line asks. -/
+inductive PairAsk where
+  /-- Neither: no step has the two kinds waiting together, and neither is the other's kind (`PairOk`). -/
+  | none
+  /-- Only the bound question, which bounds a single effect's step: no step has two effects of the kind waiting. -/
+  | bound
+  | both
+deriving DecidableEq
+
+/-- The questions the pair of own kinds `k1`, `k2` gets (`PairOk`). -/
+def Layout.pairAsk (k1 k2 : OwnPlace L v.event) : PairAsk :=
+  if L.apart P v senv k1 k2 then .none
+  else if L.alone P v senv k1 k2 then
+    if (L.ownsOf v.event)[k1].answer.site = (L.ownsOf v.event)[k2].answer.site then .bound else .none
+  else .both
+
 /-- The data value of type `t` an SMT value codes. -/
 def readData (t : Ty) (z : Val) : Option t.den0 :=
   if h : t.isData = true then (decodeV L t z).map (Ty.down t h) else none
@@ -710,22 +733,25 @@ theorem pair_codes {P : List AnySite} {senv : StepEnv L (shapes v)} {S : SymStat
     PairCodesFit]
   exact ⟨fun ⟨a, b, c, _, _⟩ => ⟨a, b, c⟩, fun ⟨a, b, c⟩ => ⟨a, b, c, c, b⟩⟩
 
-/-- What a pair line's answers say, whichever verdict it reads: its target question is unsat, and its bound question is
-unsat (`Prove.proved`) or its codes fit and `F` holds, the fit of the steps the line's scope names
-(`Prove.withinBounds`). -/
+/-- What a pair line's answers say, whichever verdict it reads: its target question is unsat or the two kinds are alone
+(`Layout.alone`), and its bound question is unsat (`Prove.proved`) or its codes fit and `F` holds, the fit of the steps
+the line's scope names (`Prove.withinBounds`). -/
 def PairLine (L : Layout) (T : List TypeDecl) (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v))
     (F : Prop) (p : OwnPlace L v.event × OwnPlace L v.event) : Prop :=
-  ∃ bq tq, pairQuestions L T P v senv p.1 p.2 = .ok (bq, tq) ∧ Unsat L tq ∧
+  ∃ bq tq, pairQuestions L T P v senv p.1 p.2 = .ok (bq, tq) ∧ (Unsat L tq ∨ L.alone P v senv p.1 p.2 = true) ∧
     (Unsat L bq ∨ PairCodesFit L P v p.1 p.2 ∧ F)
 
 theorem PairLine.mono {P : List AnySite} {senv : StepEnv L (shapes v)} {F G : Prop} (h : F → G) {p : OwnPlace L v.event × OwnPlace L v.event} :
     PairLine L T P v senv F p → PairLine L T P v senv G p
   | ⟨bq, tq, hq, ht, hb⟩ => ⟨bq, tq, hq, ht, hb.imp_right fun ⟨hc, hf⟩ => ⟨hc, h hf⟩⟩
 
-/-- What a listed pair of own kinds' line says: its answers (`PairLine`), or that the two are apart (`Layout.apart`). -/
+/-- What a listed pair of own kinds' line says: its answers (`PairLine`), that the two are apart (`Layout.apart`), or
+that they are alone and answered at different sites, so neither is the other's kind and no step's own effect needs
+the pair's bound question. -/
 def PairOk (L : Layout) (T : List TypeDecl) (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v))
     (F : Prop) (p : OwnPlace L v.event × OwnPlace L v.event) : Prop :=
-  PairLine L T P v senv F p ∨ L.apart P v senv p.1 p.2 = true
+  PairLine L T P v senv F p ∨ L.apart P v senv p.1 p.2 = true ∨
+    L.alone P v senv p.1 p.2 = true ∧ (L.ownsOf v.event)[p.1].answer.site ≠ (L.ownsOf v.event)[p.2].answer.site
 
 theorem PairOk.mono {P : List AnySite} {senv : StepEnv L (shapes v)} {F G : Prop} (h : F → G)
     {p : OwnPlace L v.event × OwnPlace L v.event} : PairOk L T P v senv F p → PairOk L T P v senv G p :=
@@ -742,10 +768,17 @@ apart. -/
 theorem not_apart {P : List AnySite} (senv : StepEnv L (shapes v)) {k1 k2 : OwnPlace L v.event}
     {x1 x2 : OwnEffectV v.event} {vals1 vals2 : List Val} (h1 : (L.ownsOf v.event)[k1].Holds L x1.effect vals1)
     (h2 : (L.ownsOf v.event)[k2].Holds L x2.effect vals2)
-    (hl : ∃ inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v), ∀ l, inp.live P = some l → x1.site ∈ l ∧ x2.site ∈ l) :
+    (hl : together P (stepInputs v (shapes v) senv.nT (stateWidth v)) x1.site x2.site = true) :
     L.apart P v senv k1 k2 = false := by
-  obtain ⟨inp, hm, hl⟩ := hl
-  simp only [Layout.apart, OwnKey.holds_site h1, OwnKey.holds_site h2, together_of hm hl, Bool.not_true]
+  simp only [Layout.apart, OwnKey.holds_site h1, OwnKey.holds_site h2, hl, Bool.not_true]
+
+/-- Nor are they alone, where some input kind's step can have them waiting together at different places. -/
+theorem not_alone {P : List AnySite} (senv : StepEnv L (shapes v)) {k1 k2 : OwnPlace L v.event}
+    {x1 x2 : OwnEffectV v.event} {vals1 vals2 : List Val} (h1 : (L.ownsOf v.event)[k1].Holds L x1.effect vals1)
+    (h2 : (L.ownsOf v.event)[k2].Holds L x2.effect vals2)
+    (hc : coQueued P (stepInputs v (shapes v) senv.nT (stateWidth v)) x1.site x2.site = true) :
+    L.alone P v senv k1 k2 = false := by
+  simp only [Layout.alone, OwnKey.holds_site h1, OwnKey.holds_site h2, hc, Bool.not_true]
 
 /-- A pair's questions at a model of their variables whose state is one a pair question assumes (pending ids below
 the next id, names below the counter) and whose effect variables hold the pair's kinds: the questions' context holds,
@@ -830,7 +863,7 @@ renaming keeping its counters. -/
 theorem pair_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (hv : v.Equivariant)
     (hL : SortedLayout L) (senv : StepEnv L (shapes v))
     {a0 : Step.Acc v} {x1 x2 : OwnEffectV v.event} {k1 k2 : OwnPlace L v.event}
-    (hl : PairLine L T P v senv (PairFits L.count T a0 x1 x2) (k1, k2))
+    (hl : PairLine L T P v senv (PairFits L.count T a0 x1 x2) (k1, k2)) (hna : L.alone P v senv k1 k2 = false)
     (hM : ∀ n (h : n < (pairTys v).length), VarSorted L (pairTys v)[n] (M.vars n)) (hsel : LayoutSorted L (pairTys v) M)
     (hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some a0.state)
     (hbelow : ∀ p ∈ a0.state.pending, p.id < a0.state.nextId) (hsupp : Step.StateSupp a0.state)
@@ -844,6 +877,7 @@ theorem pair_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P 
     (ht2 : Holds M (.is senv.dE (L.ownCtor v.event k2) (.var (pairVar v + 1)))) :
     Step.PairCommutes T a0 x1 x2 := by
   obtain ⟨bq, tq, hq, htq, hbq⟩ := hl
+  replace htq := htq.resolve_right (by rw [hna]; decide)
   obtain ⟨o, ho, hb, ht⟩ := pair_unfold chk hL senv hq hM hsel hS hbelow hsupp hx1 hx2 ht1 ht2 hreach1 hreach2
   have hR := decode_state hS
   have hinv := decode_inv chk.reach hS hbelow

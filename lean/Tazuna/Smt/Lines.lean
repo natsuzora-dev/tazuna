@@ -85,34 +85,37 @@ def CascadeFits (L : Layout) (T : List TypeDecl) (a : Step.Acc v) : Prop :=
 bounds and the cascade fits (`CascadeFits`), every order of a cascade from a step in progress it keeps, whose waiting
 own effects are coded and are among those an input kind can queue (`SymInput.LiveJ`), ends as `settle` does, up to
 renaming the names the cascade made, or both fault, wherever every step in progress the cascade reaches in any order
-fits the slots. The effects it queues stay coded (`coded_preserved`) and among the kind's (`liveJ_pick`), so a pair
-of kinds no input kind can queue together (`Layout.apart`) never waits. -/
+fits the slots. The effects it queues stay coded (`coded_preserved`), among the kind's (`liveJ_pick`) and as the kind
+reads them together (`coJ_pick`), so two effects of kinds no input kind can have waiting together (`Layout.alone`)
+never wait. -/
 theorem cascade_lines (c : CheckedSpec) (hv : v ∈ c.spec.services) (hL : SortedLayout L) (senv : StepEnv L (shapes v))
     {a : Step.Acc v} (ha : CascadeKeeps c.T c.P a) (hcoded : QueueCoded L a)
-    (hlive : ∃ inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v), inp.LiveJ c.P a)
+    (hlive : ∃ inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v), inp.LiveJ c.P a ∧ inp.CoJ c.P a)
     (hall : ∀ p ∈ L.ownPairs v.event, PairOk L c.T c.P v senv (CascadeFits L c.T a) p)
     (hfit : ∀ b, Diamond.Reach (Step.ownSys c.T v) a b → Within L (shapes v) b.state) :
     ∀ fuel {r}, Diamond.Runs (Step.ownSys c.T v) fuel a r →
       Diamond.Agree (Step.Same a.state.fresh a.state.nextId) r (Step.settle c.T fuel a) := by
   have he := c.equivariant v hv
   have chk := c.checked v hv
-  obtain ⟨inp, hm, hlive⟩ := hlive
+  obtain ⟨inp, hm, hlive, hco⟩ := hlive
   intro fuel r hr
   refine Step.cascade_agrees c.T he
-    (J := fun b => Diamond.Reach (Step.ownSys c.T v) a b ∧ CascadeKeeps c.T c.P b ∧ QueueCoded L b ∧ inp.LiveJ c.P b)
+    (J := fun b => Diamond.Reach (Step.ownSys c.T v) a b ∧ CascadeKeeps c.T c.P b ∧ QueueCoded L b ∧ inp.LiveJ c.P b ∧
+      inp.CoJ c.P b)
     (fun b i d hb hi hd => ⟨.step hb.1 hi hd, keeps_preserved he chk.reach b i d hb.2.1 hi hd,
       coded_preserved chk hL senv hb.2.1 (hfit b hb.1) hb.2.2.1 hi
         (fun p hp => (hall p hp).mono fun h => (h b hb.1).1 i hi)
-        ⟨inp, hm, liveJ_site hb.2.2.2 _ (List.getElem_mem hi)⟩ hd,
-      by simp only [Step.ownSys, List.getElem?_eq_getElem hi] at hd; exact liveJ_pick c.T chk.reach hb.2.2.2 hi hd⟩)
-    (fun b hsb hb i j hi hj hij => ?_) fuel a ha.supp ⟨.refl, ha, hcoded, hlive⟩ hr
+        ⟨inp, hm, liveJ_site hb.2.2.2.1 _ (List.getElem_mem hi)⟩ hd,
+      by simp only [Step.ownSys, List.getElem?_eq_getElem hi] at hd; exact liveJ_pick c.T chk.reach hb.2.2.2.1 hi hd,
+      by
+        simp only [Step.ownSys, List.getElem?_eq_getElem hi] at hd
+        exact coJ_pick c.T chk.reach hb.2.2.2.2 hb.2.1.queue hi hd⟩)
+    (fun b hsb hb i j hi hj hij => ?_) fuel a ha.supp ⟨.refl, ha, hcoded, hlive, hco⟩ hr
   obtain ⟨hk, hs, hq, hsa, hr1, hr2⟩ := pair_pre hb.2.1 hi hj
   exact pairs_at chk he hL senv (fun p hp => (hall p hp).mono fun h => (h b hb.1).2 i j hi hj hij) hk (hfit b hb.1)
     hb.2.1.inv hs hq hsa (fun P hP => (hsb P hP).2.2 _ (List.getElem_mem hi))
     (fun P hP => (hsb P hP).2.2 _ (List.getElem_mem hj)) (hb.2.2.1 _ (List.getElem_mem hi))
-    (hb.2.2.1 _ (List.getElem_mem hj)) hr1 hr2
-    ⟨inp, hm, fun l hl => ⟨liveJ_site hb.2.2.2 _ (List.getElem_mem hi) l hl,
-      liveJ_site hb.2.2.2 _ (List.getElem_mem hj) l hl⟩⟩
+    (hb.2.2.1 _ (List.getElem_mem hj)) hr1 hr2 (coQueued_at hm hb.2.2.2.1 hb.2.2.2.2 hi hj hij)
 
 /-- A timer's context fits the slots: the instance's key, its state and the records embed. -/
 def CtxFits (L : Layout) {r e : Ty} (m : MachineV r e) (records : r.den0) (key : m.key.den0) (st : m.state.den0) :

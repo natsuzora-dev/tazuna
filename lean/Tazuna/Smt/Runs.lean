@@ -106,15 +106,27 @@ theorem begins_coded {P : List AnySite} {E : List AnyEffectSite} {T : List TypeD
       exact E.2.2 (E.1.2 hfit.2.2.2.2.2) _ hb
   · exact (h.2.1 a hb).elim
 
+/-- The cascade a step starts begins as its input's kind reads (`SymInput.co`). -/
+theorem begins_coJ {M : Model} {T : List TypeDecl} {P : List AnySite} {E : List AnyEffectSite} (hv : v.Reach P E)
+    {shs : List (PendingShape v.event)} {n : Nat} {s : State v} {inp : SymInput v shs n} {hc}
+    {x : Input v} (hx : inp.decode M L hc = some x) {a : Step.Acc v} (hb : Step.Begins T s x a) : inp.CoJ P a := by
+  cases inp with
+  | event k sv =>
+    obtain ⟨value, rfl, -⟩ := decode_event hx
+    cases hb with
+    | event _ _ _ h => exact coJ_event T hv k _ value h
+  | _ => intro c hc; obtain ⟨_, _, _, _, he, -⟩ := co_some hc; cases he
+
 /-- The cascade a step of a run starts has its own effects among those the input's kind can queue
-(`begins_liveJ`). -/
+(`begins_liveJ`), and as the kind reads them together (`begins_coJ`). -/
 theorem begins_live {P : List AnySite} {E : List AnyEffectSite} {T : List TypeDecl} (chk : Checked P E T v)
     (senv : StepEnv L (shapes v)) {s : State v} {x : Input v} (hinv : Step.Inv P s) (hkeys : Step.KeysOk T s)
     (hW : Within L (shapes v) s) (hx : (inputVals L chk.callerData x).isSome) {a : Step.Acc v}
-    (hb : Step.Begins T s x a) : ∃ inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v), inp.LiveJ P a := by
+    (hb : Step.Begins T s x a) :
+    ∃ inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v), inp.LiveJ P a ∧ inp.CoJ P a := by
   obtain ⟨ivs, hivs⟩ := Option.isSome_iff_exists.1 hx
   rcases covered chk senv hkeys hW x hivs with ⟨inp, hmem, _, M, -, -, -, hxd, -⟩ | h
-  · exact ⟨inp, hmem, begins_liveJ chk.reach hinv hxd hb⟩
+  · exact ⟨inp, hmem, begins_liveJ chk.reach hinv hxd hb, begins_coJ chk.reach hxd hb⟩
   · exact (h.2.1 a hb).elim
 
 /-- T5 for runs, scoped to the slots: in a checked spec's service whose initial state keeps its invariants, and a layout
@@ -123,7 +135,7 @@ slots, ends in every order as `settle` does, up to renaming the names the cascad
 step in progress it reaches in any order fits the slots, every input kind's step line reads proved or within the
 bounds where the step fits (`StepLine`), and every listed pair of own kinds reads proved or within the bounds where
 the cascade fits (`PairLine`, `CascadeFits`), or no input kind's cascade has the two waiting together (`PairOk`,
-`Layout.apart`). Where every timer line reads proved, every order of the timers due at
+`Layout.apart`, `Layout.alone`). Where every timer line reads proved, every order of the timers due at
 one deadline of a clock line ends as `fire` does, wherever every timer set in a state the firing reaches in any order
 has a context that fits. -/
 theorem run_lines (c : CheckedSpec) (hv : v ∈ c.spec.services) (hL : SortedLayout L) (senv : StepEnv L (shapes v))

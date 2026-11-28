@@ -355,13 +355,14 @@ def refusedItems (step : String) (g : Option Target) (r : Refused) : Except Stri
 bound question and its target question where `--only` keeps the target, else the target skipped; `place` tells the
 family apart where `step` may not, for the questions' names. -/
 def familyItems (ids : Option Nat) (only : String → Bool) (g : Target) (step place : String)
-    (built : Except Refused (TypedScript × TypedScript)) (report : Smt.Answer → Except String Report) :
-    Except String (List Item) :=
+    (built : Except Refused (TypedScript × TypedScript)) (report : Smt.Answer → Except String Report)
+    (targetUnsat : Bool := false) : Except String (List Item) :=
   match built with
   | .error r => refusedItems c v step (some g) r
   | .ok (bq, tq) => .ok (if only (v.name ++ "/" ++ g.text ++ "/" ++ step) then
       [.ask ⟨["bound", v.name, g.text, place], bq.script, ids, boundReport v.name step⟩,
-        .ask ⟨["target", v.name, g.text, place], tq.script, ids, report⟩]
+        if targetUnsat then .ready (.unsat v.name step (some g))
+        else .ask ⟨["target", v.name, g.text, place], tq.script, ids, report⟩]
     else [.skipped v.name g])
 
 -- The bound question has no target, and its name says so.
@@ -436,14 +437,16 @@ def serviceItems (sv : CheckedService c) (only : String → Bool) : ServiceItems
       if exact.any (OwnKey.same k) then none else some (ownText owns k)
     let g := Target.pair (ownText owns key1) (ownText owns key2) widened.eraseDups
     let step := ownText owns key1 ++ " then " ++ ownText owns key2
-    -- Two kinds no input kind's cascade can have waiting together never run in either order (`PairOk`, `run_lines`).
-    if L.apart c.P v senv k1 k2 then
+    -- Two effects no input kind's step can have waiting together never run in either order (`PairOk`, `run_lines`):
+    -- the pair gets no target question, and no question at all where neither kind is the other's.
+    let ask := L.pairAsk c.P v senv k1 k2
+    if ask = .none then
       items := items ++ [if only (v.name ++ "/" ++ g.text ++ "/" ++ step) then .ready (.unsat v.name step (some g))
         else .skipped v.name g]
       continue
     match familyItems c v L.ids only g step s!"own {k1} {k2}"
         ((Sound.get (pairQuestions L c.T c.P v senv k1 k2) (pairQuestions_ofService sv.mem c.T senv k1 k2)).map (·.1))
-        (pairReport c v L k1 k2 g step) with
+        (pairReport c v L k1 k2 g step) (targetUnsat := ask = .bound) with
     | .ok more => items := items ++ more
     | .error why => return { internal := some why }
   let init := (initReports c v targets).map fun r => match r with

@@ -1,5 +1,5 @@
 import Tazuna.Smt.State
-import Tazuna.Semantics.Emits
+import Tazuna.Semantics.CoEmit
 
 /-! The cone of influence of a step of an input kind, read off the code it runs: the constructors of the event it can
 apply (`SymInput.evs`, behind `Step.step_events`), and the answer sites of the own effects its cascade can queue
@@ -70,12 +70,71 @@ theorem together_of {P : List AnySite} {inps : List (SymInput v shs n)} {inp : S
   | none => rfl
   | some l => exact decide_eq_true (h l hl)
 
-end
+/-- The events the cascade's internal steps can apply: those its functions build (`ServiceV.cascadeEvs`) and those an
+`on_answer` returns, read off every answer site; none where a value a step starts from or an answer site captures can
+hold an event. -/
+def cascEvs (P : List AnySite) (v : ServiceV) (i : Nat) : Option (List Nat) :=
+  let ss := answerSites P v.event
+  if v.quiet i && ss.all (fun s => !(Ty.tuple s.1).mentions i) then
+    some (v.cascadeEvs i ++ ss.flatMap fun s => s.2.2.body.evs i (s.2.2.defs.evs i))
+  else none
 
-/-- The site of the kept function an own effect runs at its answer. -/
-def _root_.Tazuna.Ir.OwnEffectV.site {e : Ty} : OwnEffectV e → SiteId
-  | .command _ _ _ _ _ f => f.site
-  | .query _ _ _ _ _ f => f.site
+/-- What effects a step of a kind can have waiting together: any number answered at the sites whose effects its
+cascade's internal steps can start (`casc`), and the others as its first run of the code starts them together
+(`entry`). -/
+structure KindCo where
+  casc : List SiteId
+  entry : Co
+
+/-- Whether effects answered at `s1` and `s2` can wait together in a step of the kind. -/
+def KindCo.rel (c : KindCo) (s1 s2 : SiteId) : Bool :=
+  s1 ∈ c.casc || s2 ∈ c.casc || (s1, s2) ∈ c.entry.pairs || (s2, s1) ∈ c.entry.pairs
+
+/-- What a step of the kind can have waiting together. An event line applies one event, so its reactions run once
+on it and start what `reactionsCo` reads off them; what the cascade's internal steps start is read off the events
+they can apply (`cascEvs`). None for any other kind, whose own effects may wait together in any number. -/
+def SymInput.co (P : List AnySite) : SymInput v shs n → Option KindCo
+  | .event k _ => do
+    let i ← eventDecl v
+    let cs ← cascEvs P v i
+    pure ⟨(v.liveSites i (fun j => cs.contains j) false).map (·.2.2.site),
+      reactionsCo i (fun j => ((v.subscribes.get k).wrap.evs i ++ v.cascadeEvs i).contains j) v.reactions⟩
+  | _ => none
+
+/-- What a step of the kind keeps of its waiting effects (`Step.QueueCo`), where the kind bounds them. -/
+def SymInput.CoJ (P : List AnySite) (inp : SymInput v shs n) (a : Step.Acc v) : Prop :=
+  ∀ c, inp.co P = some c → Step.QueueCo c.casc c.entry a
+
+/-- Whether some kind of `inps` can have effects answered at `s1` and `s2` waiting together: both are among the own
+effects it can queue (`SymInput.live`) and its steps can start the two together (`SymInput.co`). -/
+def coQueued (P : List AnySite) (inps : List (SymInput v shs n)) (s1 s2 : SiteId) : Bool :=
+  inps.any fun inp => (match inp.live P with
+    | some l => decide (s1 ∈ l ∧ s2 ∈ l)
+    | none => true) && match inp.co P with
+    | some c => c.rel s1 s2
+    | none => true
+
+theorem coQueued_of {P : List AnySite} {inps : List (SymInput v shs n)} {inp : SymInput v shs n} (hm : inp ∈ inps)
+    {s1 s2 : SiteId} (hl : ∀ l, inp.live P = some l → s1 ∈ l ∧ s2 ∈ l)
+    (hc : ∀ c, inp.co P = some c → c.rel s1 s2 = true) : coQueued P inps s1 s2 = true := by
+  refine List.any_eq_true.2 ⟨inp, hm, ?_⟩
+  rw [Bool.and_eq_true]
+  constructor
+  · cases h : inp.live P with
+    | none => rfl
+    | some l => exact decide_eq_true (hl l h)
+  · cases h : inp.co P with
+    | none => rfl
+    | some c => exact hc c h
+
+theorem coQueued_together {P : List AnySite} {inps : List (SymInput v shs n)} {s1 s2 : SiteId}
+    (h : coQueued P inps s1 s2 = true) : together P inps s1 s2 = true := by
+  obtain ⟨inp, hm, h⟩ := List.any_eq_true.1 h
+  rw [Bool.and_eq_true] at h
+  refine List.any_eq_true.2 ⟨inp, hm, ?_⟩
+  exact h.1
+
+end
 
 section
 variable {v : ServiceV} {shs : List (PendingShape v.event)} {n : Nat} {M : Model} {L : Layout} (T : List TypeDecl)
@@ -299,6 +358,94 @@ theorem liveJ_answer (hv : v.Reach P E) {k : Fin shs.length} {j : Fin n} {toT va
     (h : Step.applyEvents T { state := s } ((shs[k].onAnswer.fn env).fn (value, ())) = .ok a) :
     (SymInput.answer k j toT valT).LiveJ P a :=
   liveJ_onAnswer T hv (fun _ _ h => by simpa [SymInput.evs] using h) (shs[k].onAnswer.fn env) hin s value h
+
+
+theorem cascEvs_some {i : Nat} {cs : List Nat} (h : cascEvs P v i = some cs) :
+    Quiet i v ∧ (∀ k ∈ v.cascadeEvs i, k ∈ cs) ∧ ∀ s ∈ answerSites P v.event,
+      (Ty.tuple s.1).mentions i = false ∧ ∀ k ∈ s.2.2.body.evs i (s.2.2.defs.evs i), k ∈ cs := by
+  unfold cascEvs at h
+  dsimp only at h
+  split at h
+  · rename_i hc
+    cases h
+    simp only [Bool.and_eq_true, List.all_eq_true, Bool.not_eq_true'] at hc
+    exact ⟨quiet_facts hc.1, fun k hk => List.mem_append_left _ hk, fun s hs =>
+      ⟨hc.2 s hs, fun k hk => List.mem_append_right _ (List.mem_flatMap.2 ⟨s, hs, hk⟩)⟩⟩
+  · cases h
+
+theorem co_some {inp : SymInput v shs n} {c : KindCo} (h : inp.co P = some c) :
+    ∃ k sv i cs, inp = .event k sv ∧ eventDecl v = some i ∧ cascEvs P v i = some cs ∧
+      c = ⟨(v.liveSites i (fun j => cs.contains j) false).map (·.2.2.site),
+        reactionsCo i (fun j => ((v.subscribes.get k).wrap.evs i ++ v.cascadeEvs i).contains j) v.reactions⟩ := by
+  cases inp with
+  | event k sv =>
+    simp only [SymInput.co, Option.bind_eq_bind, Option.bind_eq_some_iff, Option.pure_def, Option.some.injEq] at h
+    obtain ⟨i, hi, cs, hcs, rfl⟩ := h
+    exact ⟨k, sv, i, cs, rfl, hi, hcs, rfl⟩
+  | _ => simp [SymInput.co] at h
+
+/-- The cascade of an event line starts with what its kind reads (`SymInput.co`). -/
+theorem coJ_event (hv : v.Reach P E) (k : Fin v.subscribes.length) {sv : Term} (s : State v)
+    (value : (v.subscribes.get k).event.den0) {a : Step.Acc v}
+    (h : Step.applyEvents T { state := s } [(v.subscribes.get k).wrap.fn (value, ())] = .ok a) :
+    (SymInput.event (shs := shs) (slots := n) k sv).CoJ P a := by
+  intro c hc
+  obtain ⟨_, _, i, cs, he, hi, hcs, rfl⟩ := co_some hc
+  cases he
+  obtain ⟨hq, -, -⟩ := cascEvs_some hcs
+  have hi15 := (eventDecl_some hi).1
+  refine Step.event_queueCo T hi15 hq hv (okV := (· ∈ (v.subscribes.get k).wrap.evs i ++ v.cascadeEvs i))
+    (fun _ => ⟨List.elem_eq_true_of_mem, List.mem_of_elem_eq_true⟩)
+    (fun m hm z hz => List.mem_map.2 ⟨z, by
+      simp only [ServiceV.liveSites, List.mem_append, List.mem_flatMap]; exact .inl ⟨m, hm, hz⟩, rfl⟩) s _ ?_ h
+  intro he
+  have hsub : v.subscribes.get k ∈ v.subscribes := List.get_mem _ _
+  obtain ⟨hevt, hΓ⟩ := hq.subscribes _ hsub
+  have hps : (Ty.tuple [(v.subscribes.get k).event]).isData = true := by
+    have := (v.subscribes.get k).wrap.ht; simp only [Ty.isData, Bool.and_eq_true] at this; exact this.1
+  erw [Fun.fn_app _ hps he, Ty.up_down]
+  exact Fun.ok_eval hi15 _ (fun k hk => List.mem_append_left _ hk) (oks_free _ hΓ _) _
+    (oks_free _ (by simp only [Ty.mentionsL, hevt]; rfl) _)
+
+/-- A step of the cascade keeps what its kind reads. -/
+theorem coJ_pick (hv : v.Reach P E) {inp : SymInput v shs n} {a : Step.Acc v} (ha : inp.CoJ P a)
+    (hqk : Step.QueueOk P a) {j : Nat} (hj : j < a.own.length) {a' : Step.Acc v}
+    (h : Step.runOwn T { a with own := a.own.eraseIdx j } a.own[j] = .ok a') : inp.CoJ P a' := by
+  intro c hc
+  have hac := ha c hc
+  obtain ⟨_, _, i, cs, -, hi, hcs, rfl⟩ := co_some hc
+  obtain ⟨hq, hcas, hans⟩ := cascEvs_some hcs
+  have hi15 := (eventDecl_some hi).1
+  exact Step.queueCo_pick T hi15 hq hv (okV := (· ∈ cs)) (fun _ => ⟨List.elem_eq_true_of_mem, List.mem_of_elem_eq_true⟩)
+    hcas (fun z hz => List.mem_map.2 ⟨z, hz, rfl⟩) hac hj
+    (Step.effOk_of_answer hi15 hans (hqk _ (List.getElem_mem hj))) h
+
+/-- Two waiting effects at different places of a step in progress that keeps `Step.QueueCo` are answered at sites
+the kind relates. -/
+theorem queueCo_rel {C : List SiteId} {c : Co} {a : Step.Acc v} (h : Step.QueueCo C c a) {i j : Nat}
+    (hi : i < a.own.length) (hj : j < a.own.length) (hij : i ≠ j) :
+    KindCo.rel ⟨C, c⟩ a.own[i].site a.own[j].site = true := by
+  have hp := List.pairwise_iff_getElem.1 h
+  simp only [KindCo.rel, Bool.or_eq_true, decide_eq_true_eq]
+  rcases Nat.lt_or_gt_of_ne hij with hlt | hlt
+  · rcases hp i j hi hj hlt with h1 | h1 | h1 | h1
+    · exact .inl (.inl (.inl h1))
+    · exact .inl (.inl (.inr h1))
+    · exact .inl (.inr h1)
+    · exact .inr h1
+  · rcases hp j i hj hi hlt with h1 | h1 | h1 | h1
+    · exact .inl (.inl (.inr h1))
+    · exact .inl (.inl (.inl h1))
+    · exact .inr h1
+    · exact .inl (.inr h1)
+
+/-- Two waiting effects at different places of a cascade of a kind of `inps` are answered at sites some kind can
+have waiting together (`coQueued`). -/
+theorem coQueued_at {inps : List (SymInput v shs n)} {inp : SymInput v shs n} (hm : inp ∈ inps) {a : Step.Acc v}
+    (hl : inp.LiveJ P a) (hc : inp.CoJ P a) {i j : Nat} (hi : i < a.own.length) (hj : j < a.own.length) (hij : i ≠ j) :
+    coQueued P inps a.own[i].site a.own[j].site = true :=
+  coQueued_of hm (fun l h => ⟨liveJ_site hl _ (List.getElem_mem hi) l h, liveJ_site hl _ (List.getElem_mem hj) l h⟩)
+    fun c h => queueCo_rel (hc c h) hi hj hij
 
 end
 
