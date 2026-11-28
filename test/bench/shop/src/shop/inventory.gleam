@@ -428,11 +428,17 @@ pub fn scope() -> tazuna.Scope {
     explore_states: 3000,
     waits: [],
     values: [
-      // A restock is 1 to 1000 units and stock is low below 5; stock is never
-      // negative, so an order's lines try -1, 0 and 1 units.
+      // A restock is 1 to 1000 units of a given SKU and stock is low below 5;
+      // stock is never negative, so an order's lines, and a reservation's, try
+      // -1, 0 and 1 units.
       tazuna.values(
         of: tazuna.declare_command(restock()),
         ints: [0, 1, 4, 5, 1000, 1001],
+        strings: ["", "MUG-01"],
+      ),
+      tazuna.values(
+        of: tazuna.declare_command(reserve()),
+        ints: [-1, 0, 1],
         strings: ["MUG-01"],
       ),
       tazuna.values(of: tazuna.declare_query(stock_level()), ints: [], strings: [

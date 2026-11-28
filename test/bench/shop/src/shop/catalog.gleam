@@ -491,6 +491,11 @@ pub fn scope() -> tazuna.Scope {
         "MUG-01",
         "TEA-02",
       ]),
+      // The sale clock alone ends a sale; from outside the call is refused.
+      tazuna.values(of: tazuna.declare_command(end_sale()), ints: [], strings: [
+        "MUG-01",
+        "TEA-02",
+      ]),
     ],
   )
 }

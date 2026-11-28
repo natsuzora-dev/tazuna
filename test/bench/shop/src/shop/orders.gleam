@@ -576,15 +576,22 @@ pub fn scope() -> tazuna.Scope {
       // Units are 1 to 10 and prices positive: 0 and 1 for every Int, as a bag of
       // two lines multiplies them (10 and 11 would make 16 times the orders).
       // One string serves as SKU, customer, email and address, and "" as the
-      // missing email.
+      // missing email and the unnamed customer. A cancellation's reason is given
+      // or "".
       tazuna.values(
         of: tazuna.declare_command(place_order()),
         ints: [0, 1],
         strings: ["", "MUG-01"],
       ),
       tazuna.values(of: tazuna.declare_query(open_orders()), ints: [], strings: [
+        "",
         "MUG-01",
       ]),
+      tazuna.values(
+        of: tazuna.declare_command(cancel_for()),
+        ints: [],
+        strings: ["", "cancelled by customer"],
+      ),
       tazuna.values(
         of: tazuna.declare_source(shared.price_changes()),
         ints: [0, 1],
