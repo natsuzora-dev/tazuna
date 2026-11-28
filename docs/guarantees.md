@@ -216,18 +216,19 @@ A clock line moves time by each of `waits`, and to each deadline the state holds
 A timer fires, and a response comes due, only as time reaches or passes its deadline, so these times tell apart every set of timers one clock line can fire and every response it can break, as the regions of a timed automaton do (Alur and Dill, 1994); a deadline already past moves the clock to the state's time.
 The other clock lines are not tried, and no theorem yet shows that each of them steps as one of these does.
 An Int or String field takes the kind's `values`, and a kind with none never takes an input with such a field.
-An id field takes an id the service made that an out line showed and the state still holds, an outside id the state holds, or one new outside id.
+An id field takes an id the service made that an out line showed and the state still holds, an outside id the state holds, or one new outside id; a state holds an id in its records, its machines' instances and its pending requests' senders and values, not in the values a request's closures captured.
 An instant field takes the state's time or that time plus a wait, and a list, bag or table at most `others_at_most` items.
 A state is kept once per key: two states share a key when they are the same once the counters their ids came from and the wire ids of their pending requests are renamed and every instant is read relative to the state's time.
 A counter below the next one a step takes is renamed to its rank among those the state holds, and one from there on keeps its distance from it; wire ids likewise.
 A step cannot tell such states apart, since no spec writes an instant or a counter and the canonical order compares fresh ids by their counters' order alone: `step_ren` proves that from states related by a renaming that keeps the counters' order and moves every instant alike, related inputs step to related results, faulting by the same fault where one faults.
-That equal keys give such a renaming, and so the coverage `Explore.unreached` and `Explore.notViolated` claim, has no theorem yet.
+`key_link` proves that two states explore reaches with equal keys are related by such a renaming, and `link_move` that from related states each input explore tries has a related one it tries, whose transition shows the same classes, the same fault and the same broken responses and reaches related states.
 A faulted step ends its run.
 The search stops after `explore_depth` inputs or once it keeps `explore_states` states, never by wall time, so its lines are a function of the spec and the model.
 `Explore.covered` gives the states first reached at each depth, and every scoped line names the coverage: `depth`, every run of at most that many inputs, and `exhausted`, every state the inputs reach was seen, so runs of any length are covered.
 
 - `Explore.reached` and `Explore.violated` write the first run found, one of the fewest inputs, with `generate`'s writers and file names, so `generate_reaches` and `generate_breaks` hold of them as of `generate`'s. A response's trace is `response_trace`'s: its clock lines pass no waiting timer and its run violates the response as the semantics defines it.
-- `Explore.unreached` and `Explore.notViolated` speak of every run the line's coverage names.
+- `Explore.unreached` and `Explore.notViolated` speak of every run the line's coverage names. `explore_sound`: every transition of a run of the scope's inputs whose steps before it fault nowhere, from a state reached within `depth` inputs, or at any depth where `exhausted`, shows only classes, faults and broken responses the search kept, so a target none of them breaks is broken by no such run.
+- A response is broken where a step comes past the deadline of a trigger the run applied, the trigger waiting since with no step answering it, as `explore` watches it step by step. That this watch breaks the response exactly where `ResponseV.Violated` holds has no theorem yet, so `Explore.notViolated` of a response speaks of the watch.
 
 ## verify
 

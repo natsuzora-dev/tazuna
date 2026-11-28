@@ -97,6 +97,7 @@ inductive Fault where
   every send whose handle it can pin down; a send it cannot (a handle passed as a value, or a function that makes
   more than one) can still run without `Own` listed. The step is defined for every service, so they stay faults. -/
   | invalidEffect (name : String) (rules : List String)
+deriving DecidableEq, Hashable
 
 inductive Outcome where
   | accepted

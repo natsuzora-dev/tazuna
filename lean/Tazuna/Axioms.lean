@@ -5,7 +5,7 @@ import Tazuna.Cli.Test
 import Tazuna.Cli.Prove
 import Tazuna.Cli.Generate
 import Tazuna.Cli.Explore
-import Tazuna.Explore.Move
+import Tazuna.Explore.Sound
 import Tazuna.Cli.Explain
 import Tazuna.Semantics.After
 import Tazuna.Smt.Prove
@@ -195,13 +195,11 @@ elab "#check_tazuna_reach" : command => do
     -- A run explore reports as breaking a response does (Explore.violated): its trace reads as the spec, its clock
     -- lines pass no waiting timer, and its steps violate the response as `ResponseV.Violated` defines it.
     ``Tazuna.Explore.response_trace,
-    -- explore keeps one state per key: nodes of reachable states with equal keys are related by a renaming that keeps
-    -- the counters' order and moves every instant alike, which `step_ren` takes. (Until explore's coverage theorem uses
-    -- it.)
-    ``Tazuna.Explore.key_link,
-    -- From such nodes, each input explore tries from one has one it tries from the other whose transition shows the
-    -- same classes, fault and broken responses and reaches such a node. (Until explore's coverage theorem uses it.)
-    ``Tazuna.Explore.link_move,
+    -- explore covers what it reports (Explore.unreached, Explore.notViolated): every transition of a run of the
+    -- scope's inputs within the reported coverage shows only classes, faults and broken responses the search keeps.
+    -- Its chain: `key_link` (equal keys give a renaming that keeps the counters' order), `link_move` (such nodes move
+    -- alike, through `step_ren`), `levels_spec` (the breadth-first levels).
+    ``Tazuna.Explore.explore_sound,
     -- generate's "unsettled within k steps" (Generate.unsettled): where its break cubes at a depth cover it with no
     -- model, or the step question whether a step breaks the target is unsat for every kind of a cube's last pick, no
     -- run of that many valid inputs within the slots whose steps before the last fault nowhere faults at its last step

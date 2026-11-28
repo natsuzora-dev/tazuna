@@ -194,10 +194,11 @@ def GenerateKind.explanation : GenerateKind → Explanation
 def ExploreKind.explanation : ExploreKind → Explanation
   | .reached => ⟨docOf% ExploreKind.reached, [`Tazuna.Cli.generate_reaches, `Tazuna.Ir.targets_cover,
     `Tazuna.Cli.targetFile_inj], [service, target, written, steps]⟩
-  | .unreached => ⟨docOf% ExploreKind.unreached, [], [service, target, scope, assumes]⟩
+  | .unreached => ⟨docOf% ExploreKind.unreached, [`Tazuna.Explore.explore_sound], [service, target, scope, assumes]⟩
   | .violated => ⟨docOf% ExploreKind.violated, [`Tazuna.Cli.generate_breaks, `Tazuna.Explore.response_trace],
     [service, target, written, steps, outcome]⟩
-  | .notViolated => ⟨docOf% ExploreKind.notViolated, [], [service, target, scope, assumes]⟩
+  | .notViolated => ⟨docOf% ExploreKind.notViolated, [`Tazuna.Explore.explore_sound],
+    [service, target, scope, assumes]⟩
   | .covered => ⟨docOf% ExploreKind.covered, [], [service, scope, states, transitions]⟩
 
 def UndecidedKind.explanation : UndecidedKind → Explanation

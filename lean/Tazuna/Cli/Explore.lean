@@ -133,7 +133,7 @@ def explore (root dir path : String) (opts : Options) : Cmd Unit := do
             assumes Assumption.ofRuns])
       for g in bs do
         let file := breakFile v.name g.text
-        match earliest (found.faults.filterMap fun (_, f, h) => if g.covers f then some h else none) with
+        match earliest (found.faults.filterMap fun (f, h) => if g.covers f then some h else none) with
         | some h =>
           match breakTrace c.T v g (found.hitPath h) with
           | .ok (.ok (tr, f)) =>

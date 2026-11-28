@@ -92,8 +92,9 @@ inductive Tazuna.ExploreKind : Type
   whose steps violate it: its trace is written, and verify replays it, to that fault at its last line for a fault. -/
   | violated
   /-- No run explore covered breaks the target: as `unreached`, of the runs whose steps before the last fault
-  nowhere, and for a response of those whose clock lines pass no waiting timer. Not "proved": other inputs or a longer
-  run may break it. -/
+  nowhere, and for a response of those whose clock lines pass no waiting timer, where a step breaks it when it comes
+  past the deadline of a trigger the run applied and no step since answered (`watchStep`). Not "proved": other inputs
+  or a longer run may break it. -/
   | notViolated
   /-- What explore covered of the service: the states it first reached at each depth (`states`, from the initial
   state's 1), the transitions it checked, and whether it saw every state the scope's inputs reach (`exhausted`) or

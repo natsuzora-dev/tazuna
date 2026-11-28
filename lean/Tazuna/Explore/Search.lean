@@ -224,11 +224,11 @@ structure Coverage where
   transitions : Nat
 
 /-- What explore found: each node it kept with the node and input it came from, the first transition per class of
-out line, per fault (by its summary) and per broken response (by index), and what it covered. -/
+out line, per fault and per broken response (by index), and what it covered. -/
 structure Found (v : ServiceV) where
   nodes : Array (Node v × Nat × Option (Input v))
   classes : List (OutClass × Hit v)
-  faults : List (String × Fault × Hit v)
+  faults : List (Fault × Hit v)
   responses : List (Nat × Hit v)
   coverage : Coverage
 
@@ -241,75 +241,85 @@ partial def Found.path (f : Found v) (i : Nat) : List (Input v) :=
 /-- The run's inputs of a hit: its node's path and its input. -/
 def Found.hitPath (f : Found v) (h : Hit v) : List (Input v) := f.path h.node ++ [h.input]
 
+/-- Where the search is: the nodes kept and their keys, the first transition per class, fault and broken response
+with the order classes and faults were first met in, how many hits were taken, whether the current level hit the
+state cap, and the transitions run. -/
+structure SearchSt (v : ServiceV) where
+  nodes : Array (Node v × Nat × Option (Input v))
+  seen : Std.HashSet Erl
+  byClass : Std.HashMap OutClass (Hit v)
+  classOrder : Array OutClass
+  byFault : Std.HashMap Fault (Hit v)
+  faultOrder : Array Fault
+  byResp : Std.HashMap Nat (Hit v)
+  order : Nat
+  full : Bool
+  transitions : Nat
+
+/-- The hits after a transition that shows `c`: kept with `hit` and put last in the order unless `c` is kept already,
+with whether it was. -/
+def addHit {κ : Type} [BEq κ] [Hashable κ] (hit : Hit v) (acc : Std.HashMap κ (Hit v) × Array κ × Bool) (c : κ) :
+    Std.HashMap κ (Hit v) × Array κ × Bool :=
+  if acc.1.contains c then acc else (acc.1.insert c hit, acc.2.1.push c, true)
+
+/-- The nodes, their keys and whether the level hit the cap, after a transition from the node at `i` on `x` that
+reaches `next`: a node is kept unless one with its key is, or the level hit the cap. -/
+def keep (cap i : Nat) (x : Input v) (st : SearchSt v) :
+    Option (Node v) → Array (Node v × Nat × Option (Input v)) × Std.HashSet Erl × Bool
+  | some n' =>
+    if st.full || st.seen.contains n'.key then (st.nodes, st.seen, st.full)
+    else if st.nodes.size ≥ cap then (st.nodes, st.seen, true)
+    else (st.nodes.push (n', i, some x), st.seen.insert n'.key, false)
+  | none => (st.nodes, st.seen, st.full)
+
+/-- The search after running the transition from the node `n` at `i` of level `k` on the input `x`: each class,
+fault and broken response it is the first to show is kept with it, and the node it reaches is kept (`keep`). -/
+def visit (T : List TypeDecl) (cap k i : Nat) (n : Node v) (st : SearchSt v) (x : Input v) : SearchSt v :=
+  let mv := move T n x
+  let hit : Hit v := ⟨k + 1, st.order, i, x⟩
+  let cls := (classes T v x mv.result).foldl (addHit hit) (st.byClass, st.classOrder, false)
+  let flt := match mv.result.outcome with
+    | .fault f => addHit hit (st.byFault, st.faultOrder, false) f
+    | _ => (st.byFault, st.faultOrder, false)
+  let rsp := mv.broken.foldl (addHit hit) (st.byResp, #[], false)
+  let kept := keep cap i x st mv.next
+  { nodes := kept.1, seen := kept.2.1, byClass := cls.1, classOrder := cls.2.1, byFault := flt.1,
+    faultOrder := flt.2.1, byResp := rsp.1, full := kept.2.2,
+    order := if cls.2.2 || flt.2.2 || rsp.2.2 then st.order + 1 else st.order, transitions := st.transitions + 1 }
+
+/-- The search after running every transition from the nodes at `lo` up to `hi`, which form level `k`. -/
+def level (T : List TypeDecl) (sc : ScopeV) (cap k : Nat) (st : SearchSt v) (lo hi : Nat) : SearchSt v :=
+  (List.range' lo (hi - lo)).foldl (fun st i => match st.nodes[i]? with
+    | some (n, _, _) => (inputsOf sc n).foldl (visit T cap k i n) st
+    | none => st) st
+
+/-- The search from level `k` on, whose nodes are those at `lo` up to `hi`, the last kept: it stops at `depth`
+levels, at an empty level, or once a level hits the cap, and gives the levels' sizes, the levels covered, whether no
+state was left, and whether the cap stopped it. -/
+def levels (T : List TypeDecl) (sc : ScopeV) (depth cap k : Nat) (st : SearchSt v) (lo hi : Nat)
+    (sizes : Array Nat) : SearchSt v × Array Nat × Nat × Bool × Bool :=
+  if k < depth then
+    if lo = hi then (st, sizes, k, true, false)
+    else
+      let st' := level T sc cap k { st with full := false } lo hi
+      let sizes := sizes.push (st'.nodes.size - hi)
+      if st'.full then (st', sizes, k + 1, false, true)
+      else levels T sc depth cap (k + 1) st' hi st'.nodes.size sizes
+  else (st, sizes, k, lo = hi, false)
+termination_by depth - k
+
+/-- The search's start: the initial node kept, nothing found. -/
+def SearchSt.init (v : ServiceV) : SearchSt v :=
+  { nodes := #[(Node.init v, 0, none)], seen := ({} : Std.HashSet Erl).insert (Node.init v).key, byClass := {},
+    classOrder := #[], byFault := {}, faultOrder := #[], byResp := {}, order := 0, full := false, transitions := 0 }
+
 /-- Searches from the initial node, at most `depth` inputs deep, keeping at most `cap` nodes. -/
-def search (T : List TypeDecl) (v : ServiceV) (sc : ScopeV) (depth cap : Nat) : Found v := Id.run do
-  let n0 := Node.init v
-  let mut nodes : Array (Node v × Nat × Option (Input v)) := #[(n0, 0, none)]
-  let mut seen : Std.HashSet Erl := ({} : Std.HashSet Erl).insert n0.key
-  let mut byClass : Std.HashMap OutClass (Hit v) := {}
-  let mut classOrder : Array OutClass := #[]
-  let mut byFault : Std.HashMap String (Fault × Hit v) := {}
-  let mut faultOrder : Array String := #[]
-  let mut byResp : Std.HashMap Nat (Hit v) := {}
-  let mut order := 0
-  let mut lo := 0
-  let mut hi := 1
-  let mut levels : Array Nat := #[1]
-  let mut covered := 0
-  let mut exhausted := false
-  let mut capped := false
-  let mut transitions := 0
-  for k in [0:depth] do
-    if lo == hi then
-      exhausted := true
-      break
-    let mut full := false
-    for i in [lo:hi] do
-      let some (n, _, _) := nodes[i]? | continue
-      for x in inputsOf sc n do
-        let mv := move T n x
-        transitions := transitions + 1
-        let hit : Hit v := ⟨k + 1, order, i, x⟩
-        let mut used := false
-        for c in classes T v x mv.result do
-          if !byClass.contains c then
-            byClass := byClass.insert c hit
-            classOrder := classOrder.push c
-            used := true
-        if let .fault f := mv.result.outcome then
-          let key := (Outcome.fault f).summary
-          if !byFault.contains key then
-            byFault := byFault.insert key (f, hit)
-            faultOrder := faultOrder.push key
-            used := true
-        for j in mv.broken do
-          if !byResp.contains j then
-            byResp := byResp.insert j hit
-            used := true
-        if used then order := order + 1
-        if let some n' := mv.next then
-          if !full then
-            let key := n'.key
-            if !seen.contains key then
-              if nodes.size ≥ cap then full := true
-              else
-                seen := seen.insert key
-                nodes := nodes.push (n', i, some x)
-    levels := levels.push (nodes.size - hi)
-    lo := hi
-    hi := nodes.size
-    covered := k + 1
-    if full then
-      capped := true
-      break
-  if !capped && !exhausted && lo == hi then exhausted := true
-  let coverage : Coverage :=
-    { depth := covered, exhausted := exhausted, capped := capped, levels := levels.toList, transitions := transitions }
-  return {
-    nodes := nodes
-    classes := classOrder.toList.filterMap fun c => (byClass.get? c).map (c, ·)
-    faults := faultOrder.toList.filterMap fun key => (byFault.get? key).map fun (f, h) => (key, f, h)
-    responses := byResp.toList.mergeSort fun a b => a.1 ≤ b.1
-    coverage := coverage }
+def search (T : List TypeDecl) (v : ServiceV) (sc : ScopeV) (depth cap : Nat) : Found v :=
+  let (st, sizes, covered, exhausted, capped) := levels T sc depth cap 0 (SearchSt.init v) 0 1 #[1]
+  { nodes := st.nodes
+    classes := st.classOrder.toList.filterMap fun c => (st.byClass.get? c).map (c, ·)
+    faults := st.faultOrder.toList.filterMap fun f => (st.byFault.get? f).map (f, ·)
+    responses := st.byResp.toList.mergeSort fun a b => a.1 ≤ b.1
+    coverage := { depth := covered, exhausted, capped, levels := sizes.toList, transitions := st.transitions } }
 
 end Tazuna.Explore
