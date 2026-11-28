@@ -161,7 +161,10 @@ structure CreateV (r : Ty) where
   table : Fun (Ty.fn [r] (.table key value))
   atMost : Int
 
-/-- The bounds as the spec writes them, in Gleam's Int. -/
+/-- A service's bounds, in Gleam's Int: `cascade`, which the service writes and which is part of its meaning, and the
+slots and run length its model's scope gives (`ModelV.scoped`). A service as `service` builds it has no scope yet:
+no create bound, no other slots and runs of one input, which only prove and generate read, and they read a scoped
+spec. -/
 structure BoundsV (r : Ty) where
   creates : List (CreateV r)
   /-- `others_at_most`: the items of each bag and of each table no create bounds. -/
@@ -207,6 +210,24 @@ structure ScenarioV (r e c : Ty) where
   name : String
   steps : List (StepV r e c)
 
+/-- The Ints an explicit-state search tries for one input kind's Int fields. -/
+structure ValuesV where
+  input : DeclaredV
+  ints : List Int
+
+/-- How far prove and generate look in one service, as its model writes it, in Gleam's Int: `service` is the
+service's name, and `creates` reads records of the type `records`, which check requires to be the service's. -/
+structure ScopeV where
+  service : String
+  records : Ty
+  creates : List (CreateV records)
+  items : Int
+  steps : Int
+  exploreDepth : Int
+  exploreStates : Int
+  waits : List Int
+  values : List ValuesV
+
 structure ServiceV where
   name : String
   records : Ty
@@ -236,6 +257,32 @@ structure SpecV where
   services : List ServiceV
   externals : List ExternalV
 
+/-- A model: the spec, a scope per service, and the solver's resource limit per question. -/
+structure ModelV where
+  spec : SpecV
+  scopes : List ScopeV
+  rlimit : Int
+
+/-- The scope's create bounds, where they read records of the service's type (check requires it of a scope that has
+any); none otherwise. -/
+def ScopeV.createsOf (sc : ScopeV) (v : ServiceV) : List (CreateV v.records) :=
+  match Ty.same sc.records v.records with
+  | some ⟨h⟩ => h ▸ sc.creates
+  | none => []
+
+/-- The service with the scope's slots and run length. -/
+def ScopeV.apply (sc : ScopeV) (v : ServiceV) : ServiceV :=
+  { v with bounds := { v.bounds with creates := sc.createsOf v, items := sc.items, steps := sc.steps } }
+
+/-- The scope the model gives the service, by its name. -/
+def ModelV.scopeOf (m : ModelV) (v : ServiceV) : Option ScopeV := m.scopes.find? (·.service == v.name)
+
+/-- The spec with each service in the scope the model gives it. -/
+def ModelV.scoped (m : ModelV) : SpecV :=
+  { m.spec with services := m.spec.services.map fun v => match m.scopeOf v with
+      | some sc => sc.apply v
+      | none => v }
+
 /-- What each structure type means. Structure values have no `==`. -/
 def Dsl.val : Dsl → List Ty → Sem
   | .fresh, _ => Dsl.base .fresh []
@@ -254,7 +301,9 @@ def Dsl.val : Dsl → List Ty → Sem
       | .declared, _ => DeclaredV
       | .effect, [e] => EffectV e
       | .subscription, [e] => SubscriptionV e
-      | .bounds, [r] => BoundsV r
+      | .model, _ => ModelV
+      | .scope, _ => ScopeV
+      | .values, _ => ValuesV
       | .create, [r] => CreateV r
       | .response, [r, e] => ResponseV r e
       | .scenario, [r, e, c] => ScenarioV r e c

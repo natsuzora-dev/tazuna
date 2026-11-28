@@ -62,7 +62,7 @@ theorem datatype_isSome_iff (L : Layout) (t : Ty) (n : Nat) : (L.datatype? (t, n
       · rw [← mapM_mapM_isSome]; cases (L.effectFields e).mapM (fun fs : List Ty => fs.mapM L.srt?) <;> simp
     | .effect, [] | .effect, _ :: _ :: _ | .spec, _ | .service, _ | .command, _ | .query, _ | .machine, _
     | .reaction, _ | .external, _ | .externalCommand, _ | .externalQuery, _ | .source, _ | .declared, _
-    | .subscription, _ | .bounds, _ | .create, _ | .response, _ | .scenario, _ | .step, _ | .sender, _
+    | .subscription, _ | .model, _ | .scope, _ | .values, _ | .create, _ | .response, _ | .scenario, _ | .step, _ | .sender, _
     | .closure, _ | .effectClosure, _ | .fresh, _ => simp [datatype?, DtCond]
   | int | str | date | fn | param => simp [datatype?, DtCond]
 
@@ -120,7 +120,7 @@ theorem addTyWith_srt
     | .fresh, _ => rfl
     | .effect, [] | .effect, _ :: _ :: _ | .spec, _ | .service, _ | .command, _ | .query, _ | .machine, _
     | .reaction, _ | .external, _ | .externalCommand, _ | .externalQuery, _ | .source, _ | .declared, _
-    | .subscription, _ | .bounds, _ | .create, _ | .response, _ | .scenario, _ | .step, _ | .sender, _
+    | .subscription, _ | .model, _ | .scope, _ | .values, _ | .create, _ | .response, _ | .scenario, _ | .step, _ | .sender, _
     | .closure, _ | .effectClosure, _ => simp [Ty.sorted] at ht
   | int | str | date => rfl
   | fn | param => simp [Ty.sorted] at ht
@@ -301,7 +301,7 @@ theorem addTys_dts (slots : Ty → Nat) (L : Layout) (hL : L.types = [])
     | .effect, [e] => exact addEffect_le _ L' e
     | .effect, [] | .effect, _ :: _ :: _ | .spec, _ | .service, _ | .command, _ | .query, _ | .machine, _
     | .reaction, _ | .external, _ | .externalCommand, _ | .externalQuery, _ | .source, _ | .declared, _
-    | .subscription, _ | .bounds, _ | .create, _ | .response, _ | .scenario, _ | .step, _ | .sender, _
+    | .subscription, _ | .model, _ | .scope, _ | .values, _ | .create, _ | .response, _ | .scenario, _ | .step, _ | .sender, _
     | .closure, _ | .effectClosure, _ | .fresh, _ => exact Le.refl L'
   · intro L' e _; exact find?_push _ _ _
   · intro L' k a hK h' _ _
@@ -310,7 +310,7 @@ theorem addTys_dts (slots : Ty → Nat) (L : Layout) (hL : L.types = [])
       exact addEffect_dts _ L' e h' (by rw [effectFields_le hK]; exact hk e)
     | .effect, [] | .effect, _ :: _ :: _ | .spec, _ | .service, _ | .command, _ | .query, _ | .machine, _
     | .reaction, _ | .external, _ | .externalCommand, _ | .externalQuery, _ | .source, _ | .declared, _
-    | .subscription, _ | .bounds, _ | .create, _ | .response, _ | .scenario, _ | .step, _ | .sender, _
+    | .subscription, _ | .model, _ | .scope, _ | .values, _ | .create, _ | .response, _ | .scenario, _ | .step, _ | .sender, _
     | .closure, _ | .effectClosure, _ | .fresh, _ => exact h'
 
 end Layout
@@ -348,7 +348,7 @@ theorem srt_of_has : (t : Ty) → L.Has t → t.sorted = true → (L.srt? t).isS
     | .fresh, _ => rfl
     | .effect, [] | .effect, _ :: _ :: _ | .spec, _ | .service, _ | .command, _ | .query, _ | .machine, _
     | .reaction, _ | .external, _ | .externalCommand, _ | .externalQuery, _ | .source, _ | .declared, _
-    | .subscription, _ | .bounds, _ | .create, _ | .response, _ | .scenario, _ | .step, _ | .sender, _
+    | .subscription, _ | .model, _ | .scope, _ | .values, _ | .create, _ | .response, _ | .scenario, _ | .step, _ | .sender, _
     | .closure, _ | .effectClosure, _ => simp [Ty.sorted] at hs
 
 /-- A lookup refused as `lacks t` is no gap where the layout has `t`'s datatypes whenever it has a sort and the lookup
@@ -564,7 +564,7 @@ theorem dataT_isSome : (t : Ty) → L.Has t → t.sorted = true → (x : t.den) 
     | .effect, [e] => simp [embedV] at he
     | .effect, [] | .effect, _ :: _ :: _ | .spec, _ | .service, _ | .command, _ | .query, _ | .machine, _
     | .reaction, _ | .external, _ | .externalCommand, _ | .externalQuery, _ | .source, _ | .declared, _
-    | .subscription, _ | .bounds, _ | .create, _ | .response, _ | .scenario, _ | .step, _ | .sender, _
+    | .subscription, _ | .model, _ | .scope, _ | .values, _ | .create, _ | .response, _ | .scenario, _ | .step, _ | .sender, _
     | .closure, _ | .effectClosure, _ => simp [Ty.sorted] at hs
   | .fn .., _, hs, _, _ | .param _, _, hs, _, _ => by simp [Ty.sorted] at hs
 theorem dataTs_isSome : (ts : List Ty) → Layout.HasWiths L (Layout.HasDsl L) ts → Ty.sorteds ts = true →

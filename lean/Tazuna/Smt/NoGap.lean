@@ -122,7 +122,9 @@ def DslOk : (k : Dsl) → (a : List Ty) → DslCode k a → Prop
   | .declared, a, _ => Avail L (.dsl .declared a)
   | .effect, a, _ => Avail L (.dsl .effect a)
   | .subscription, a, _ => Avail L (.dsl .subscription a)
-  | .bounds, a, _ => Avail L (.dsl .bounds a)
+  | .model, a, _ => Avail L (.dsl .model a)
+  | .scope, a, _ => Avail L (.dsl .scope a)
+  | .values, a, _ => Avail L (.dsl .values a)
   | .create, a, _ => Avail L (.dsl .create a)
   | .response, a, _ => Avail L (.dsl .response a)
   | .scenario, a, _ => Avail L (.dsl .scenario a)
@@ -324,7 +326,7 @@ theorem defaultT_isSome (hL : SortedLayout L) {t : Ty} (h : L.Has t) (hs : t.sor
   | .effect, [], hks, _ | .effect, _ :: _ :: _, hks, _ => simp [Ty.sorted] at hks
   | .spec, _, hks, _ | .service, _, hks, _ | .command, _, hks, _ | .query, _, hks, _ | .machine, _, hks, _
   | .reaction, _, hks, _ | .external, _, hks, _ | .externalCommand, _, hks, _ | .externalQuery, _, hks, _
-  | .source, _, hks, _ | .declared, _, hks, _ | .subscription, _, hks, _ | .bounds, _, hks, _ | .create, _, hks, _
+  | .source, _, hks, _ | .declared, _, hks, _ | .subscription, _, hks, _ | .model, _, hks, _ | .scope, _, hks, _ | .values, _, hks, _ | .create, _, hks, _
   | .response, _, hks, _ | .scenario, _, hks, _ | .step, _, hks, _ | .sender, _, hks, _ | .closure, _, hks, _
   | .effectClosure, _, hks, _ => simp [Ty.sorted] at hks
 
@@ -1026,7 +1028,7 @@ theorem primCode_sound (hC : Covers L P ds) (p : Prim) (args : List Ty) (h : p.o
     exact (hany rfl).2 name _ _ _ _ _ hn s hs' hs hd
   | .spec, _, _ | .service, _, _ | .machine, _, _ | .reaction, _, _ | .external, _, _ | .source, _, _
   | .declareCommand, _, _ | .declareQuery, _, _ | .declareSource, _, _ | .declareExternalCommand, _, _
-  | .declareExternalQuery, _, _ | .subscribe, _, _ | .bounds, _, _ | .create, _, _ | .response, _, _
+  | .declareExternalQuery, _, _ | .subscribe, _, _ | .model, _, _ | .scope, _, _ | .values, _, _ | .create, _, _ | .response, _, _
   | .scenario, _, _ | .stepCommand, _, _ | .stepQuery, _, _ | .stepWait, _, _ | .stepAnswerCommand, _, _
   | .stepAnswerQuery, _, _ | .stepEvent, _, _ | .fromMachine, _, _ | .fromReaction, _, _
   | .stepCommandThen, _, _ => rfl
@@ -1585,10 +1587,16 @@ theorem Defs.encode_sound (hC : Covers L P ds) : {G : List Ty} → (defs : Defs 
     {t : Ty} → {K : List HandleSite} → (v : Var G t) → (∀ s ∈ defs.usesAt sitesC v.idx, s ∈ P) →
     (∀ h ∈ defs.usesAt handlesC v.idx, HandleOk ds K h) → (∀ x ∈ defs.usesAt sendsC v.idx, x.Covered L P K) →
     Sound (fun p => CodeOk L P ds K t p.1) (v.enc (defs.encode L))
-  | _ :: _, .snoc defs _ body, ht, _, _, .here, hs, hh, hw => by
+  | _ :: _, .snoc defs u0 body, ht, _, _, .here, hs, hh, hw => by
     simp only [Defs.usesAt, Defs.uses, Var.idx, List.getD_cons_zero, Expr.usesWith, sitesC, handlesC, sendsC] at hs hh hw
     have htd : ∀ u ∈ defs.tys, Avail L u := fun u hu => ht u (by simp [Defs.tys, hu])
-    exact Tazuna.Smt.encode_sound defs (defs.encode L) hC body () trivial (fun u hu => ht u (by simp [Defs.tys, hu]))
+    rw [show Var.here.enc (Defs.encode L (defs.snoc u0 body)) = (if u0.ofModel = true then
+        .error (.limit (.unsortable u0)) else Smt.encode L (defs.encode L) body ()) from rfl]
+    split
+    · rfl
+    rename_i hm
+    exact Tazuna.Smt.encode_sound defs (defs.encode L) hC body () trivial
+      (fun u hu => ht u (by simp [Defs.tys, hm, hu]))
       (fun s h => hs s (List.mem_append_left _ h)) (fun h hm => hh h (List.mem_append_left _ hm))
       (fun x hx => hw x (List.mem_append_left _ hx))
       (fun w hi => ⟨fun h hm => hh h (List.mem_append_right _ (List.mem_flatMap.2 ⟨_, hi, hm⟩)),
@@ -1715,7 +1723,7 @@ theorem allSorted_addTys (slots : Ty → Nat) (L : Layout) (hL : AllSorted L L)
     exact allSorted_push (allSorted_fold _ _ (by rw [hf]; exact hk e) L' h') (by simpa [Ty.sortable, Ty.sorted] using hka) _
   | .effect, [] | .effect, _ :: _ :: _ | .spec, _ | .service, _ | .command, _ | .query, _ | .machine, _
   | .reaction, _ | .external, _ | .externalCommand, _ | .externalQuery, _ | .source, _ | .declared, _
-  | .subscription, _ | .bounds, _ | .create, _ | .response, _ | .scenario, _ | .step, _ | .sender, _
+  | .subscription, _ | .model, _ | .scope, _ | .values, _ | .create, _ | .response, _ | .scenario, _ | .step, _ | .sender, _
   | .closure, _ | .effectClosure, _ | .fresh, _ => exact h'
 
 end Layout
@@ -2385,18 +2393,29 @@ def SiteOk (L : Layout) (P : List AnySite) (ds : List (String × DeclaredV)) (H 
 /-- Every site of covered definitions is covered. -/
 theorem siteOk_of : {G : List Ty} → (defs : Defs G) → DefsOk L P ds H defs → ∀ s ∈ defs.sites, SiteOk L P ds H s
   | [], .nil, _, _, h => nomatch h
-  | _ :: _, .snoc defs _ body, ⟨ht, hs, hh⟩, s, h => by
+  | _ :: _, .snoc defs u0 body, ⟨ht, hs, hh⟩, s, h => by
     have hd : DefsOk L P ds H defs := ⟨fun u hu => ht u (by simp [Defs.tys, hu]),
       fun x hx => hs x (by simp [Defs.sites, hx]), fun x hx => hh x (by simp [Defs.handles, hx])⟩
     simp only [Defs.sites, List.mem_append] at h
     rcases h with h | h
     · exact siteOk_of defs hd s h
-    · obtain ⟨hΓ, hb, hbs, hbh, hG, hD⟩ := Expr.inside defs body s h
+    · -- A model's definition gives the layout its kept functions' types (`Expr.siteTys`), any other all its own.
+      have hown : ∀ u ∈ s.1 ++ Expr.tys s.2.2.body, Avail L u := by
+        obtain ⟨hΓ, hb, -⟩ := Expr.inside defs body s h
+        intro u hu
+        apply ht u
+        cases hm : u0.ofModel
+        · rcases List.mem_append.1 hu with hu | hu
+          · simp [Defs.tys, hm, hΓ u hu]
+          · simp [Defs.tys, hm, hb u hu]
+        · simp only [Defs.tys, hm, ite_true, Expr.siteTys, List.mem_append, List.mem_flatMap]
+          exact .inr (.inl ⟨s, h, List.mem_append.1 hu⟩)
+      obtain ⟨hΓ, hb, hbs, hbh, hG, hD⟩ := Expr.inside defs body s h
       obtain ⟨Γ, t, ⟨site, G', D', hΓ', ht', b⟩⟩ := s
-      simp only at hG hD hΓ hb hbs hbh ⊢
+      simp only at hG hD hΓ hb hbs hbh hown ⊢
       subst hG
       obtain rfl := eq_of_heq hD
-      exact ⟨fun u hu => ht u (by simp [Defs.tys, hΓ u hu]), fun u hu => ht u (by simp [Defs.tys, hb u hu]),
+      exact ⟨fun u hu => hown u (List.mem_append_left _ hu), fun u hu => hown u (List.mem_append_right _ hu),
         fun x hx => hs x (by simp [Defs.sites, hbs x hx]), fun x hx => hh x (by simp [Defs.handles, hbh x hx]), hd⟩
 
 /-- The effect site is covered, as `SiteOk` says of a site. -/
@@ -2410,18 +2429,28 @@ def EffectSiteOk (L : Layout) (P : List AnySite) (ds : List (String × DeclaredV
 theorem effectSiteOk_of : {G : List Ty} → (defs : Defs G) → DefsOk L P ds H defs → ∀ s ∈ defs.effectSites,
     EffectSiteOk L P ds H s
   | [], .nil, _, _, h => nomatch h
-  | _ :: _, .snoc defs _ body, ⟨ht, hs, hh⟩, s, h => by
+  | _ :: _, .snoc defs u0 body, ⟨ht, hs, hh⟩, s, h => by
     have hd : DefsOk L P ds H defs := ⟨fun u hu => ht u (by simp [Defs.tys, hu]),
       fun x hx => hs x (by simp [Defs.sites, hx]), fun x hx => hh x (by simp [Defs.handles, hx])⟩
     simp only [Defs.effectSites, List.mem_append] at h
     rcases h with h | h
     · exact effectSiteOk_of defs hd s h
-    · obtain ⟨hΓ, hb, hbs, hbh, hG, hD⟩ := Expr.insideE defs body s h
+    · have hown : ∀ u ∈ s.1 ++ Expr.tys s.2.2.2.body, Avail L u := by
+        obtain ⟨hΓ, hb, -⟩ := Expr.insideE defs body s h
+        intro u hu
+        apply ht u
+        cases hm : u0.ofModel
+        · rcases List.mem_append.1 hu with hu | hu
+          · simp [Defs.tys, hm, hΓ u hu]
+          · simp [Defs.tys, hm, hb u hu]
+        · simp only [Defs.tys, hm, ite_true, Expr.siteTys, List.mem_append, List.mem_flatMap]
+          exact .inr (.inr ⟨s, h, List.mem_append.1 hu⟩)
+      obtain ⟨hΓ, hb, hbs, hbh, hG, hD⟩ := Expr.insideE defs body s h
       obtain ⟨Γ, ps, r, ⟨site, G', D', hΓ', hps', b⟩⟩ := s
-      simp only at hG hD hΓ hb hbs hbh ⊢
+      simp only at hG hD hΓ hb hbs hbh hown ⊢
       subst hG
       obtain rfl := eq_of_heq hD
-      exact ⟨fun u hu => ht u (by simp [Defs.tys, hΓ u hu]), fun u hu => ht u (by simp [Defs.tys, hb u hu]),
+      exact ⟨fun u hu => hown u (List.mem_append_left _ hu), fun u hu => hown u (List.mem_append_right _ hu),
         fun x hx => hs x (by simp [Defs.sites, hbs x hx]), fun x hx => hh x (by simp [Defs.handles, hbh x hx]), hd⟩
 
 theorem envCodes_ok : (Γ : List Ty) → (ρ : Ty.dens Γ) → (σ : Codes Γ) → envCodes L Γ ρ = some σ →

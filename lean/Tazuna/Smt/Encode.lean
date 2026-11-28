@@ -213,7 +213,7 @@ def DslCode : Dsl → List Ty → Type
   | .externalCommand, _ | .command, _ | .query, _ => String
   | .externalQuery, _ => String × ClosureCode
   | .spec, _ | .service, _ | .machine, _ | .reaction, _ | .external, _ | .source, _
-  | .declared, _ | .effect, _ | .subscription, _ | .bounds, _ | .create, _ | .response, _ | .scenario, _ | .step, _
+  | .declared, _ | .effect, _ | .subscription, _ | .model, _ | .scope, _ | .values, _ | .create, _ | .response, _ | .scenario, _ | .step, _
   | .sender, _ | .fresh, _ | .effectClosure, _ => Term
 
 mutual
@@ -232,19 +232,19 @@ end
 def DslCode.term? : (k : Dsl) → (a : List Ty) → DslCode k a → Option Term
   | .closure, _, _ | .externalCommand, _, _ | .externalQuery, _, _ | .command, _, _ | .query, _, _ => none
   | .spec, _, s | .service, _, s | .machine, _, s | .reaction, _, s | .external, _, s
-  | .source, _, s | .declared, _, s | .effect, _, s | .subscription, _, s | .bounds, _, s | .create, _, s
+  | .source, _, s | .declared, _, s | .effect, _, s | .subscription, _, s | .model, _, s | .scope, _, s | .values, _, s | .create, _, s
   | .response, _, s | .scenario, _, s | .step, _, s | .sender, _, s | .fresh, _, s | .effectClosure, _, s => some s
 
 def DslCode.ofTerm? : (k : Dsl) → (a : List Ty) → Term → Option (DslCode k a)
   | .closure, _, _ | .externalCommand, _, _ | .externalQuery, _, _ | .command, _, _ | .query, _, _ => none
   | .spec, _, s | .service, _, s | .machine, _, s | .reaction, _, s | .external, _, s
-  | .source, _, s | .declared, _, s | .effect, _, s | .subscription, _, s | .bounds, _, s | .create, _, s
+  | .source, _, s | .declared, _, s | .effect, _, s | .subscription, _, s | .model, _, s | .scope, _, s | .values, _, s | .create, _, s
   | .response, _, s | .scenario, _, s | .step, _, s | .sender, _, s | .fresh, _, s | .effectClosure, _, s => some s
 
 def DslCode.share : (k : Dsl) → (a : List Ty) → DslCode k a → DslCode k a
   | .closure, _, s | .externalCommand, _, s | .externalQuery, _, s | .command, _, s | .query, _, s => s
   | .spec, _, s | .service, _, s | .machine, _, s | .reaction, _, s | .external, _, s
-  | .source, _, s | .declared, _, s | .effect, _, s | .subscription, _, s | .bounds, _, s | .create, _, s
+  | .source, _, s | .declared, _, s | .effect, _, s | .subscription, _, s | .model, _, s | .scope, _, s | .values, _, s | .create, _, s
   | .response, _, s | .scenario, _, s | .step, _, s | .sender, _, s | .fresh, _, s | .effectClosure, _, s => Term.share s
 
 /-- A code with its condition, or why there is none. -/
@@ -1129,7 +1129,10 @@ end
 /-- Each global's code, from the ones before it. -/
 def _root_.Tazuna.Ir.Defs.encode (L : Layout) : {G : List Ty} → Defs G → Encs G
   | [], .nil => ()
-  | _ :: _, .snoc defs _ body => let gs := defs.encode L; (Smt.encode L gs body (), gs)
+  -- A model's value has no sort, and no service's function reads one.
+  | _ :: _, .snoc defs t body =>
+    let gs := defs.encode L
+    (if t.ofModel then .error (.limit (.unsortable t)) else Smt.encode L gs body (), gs)
 
 /-! Layouts for scripts: the datatypes an expression meets, each after the datatypes its fields use. -/
 

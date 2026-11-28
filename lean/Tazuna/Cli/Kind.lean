@@ -21,7 +21,7 @@ deriving DecidableEq
 /-- What `prove` found for one question. -/
 inductive Tazuna.ProveKind : Type
   /-- No step of the input kind from a state of the right shape breaks the target, and no step of any kind goes past
-  the slots the bounds give, while every input and the initial state fit them; so every state a run reaches is within
+  the slots the model's scope gives, while every input and the initial state fit them; so every state a run reaches is within
   the slots, and the line speaks of every run. For a response: the line's step opens each trigger it does not answer
   with a deadline in time, keeps each waiting deadline no later until its answer, and as a clock line passes no
   waiting deadline; where every kind's line reads so, no run on valid inputs with timely clock lines violates the
@@ -42,7 +42,7 @@ inductive Tazuna.ProveKind : Type
   is any state of the right shape, invariants or not. -/
   | unproved
   /-- No step from a state of the right shape whose invariants hold, of any input kind, shows the class of out line
-  the generate target aims at unless it faults, no step of any kind goes past the slots the bounds give, and every
+  the generate target aims at unless it faults, no step of any kind goes past the slots the model's scope gives, and every
   input and the initial state fit them: no run on valid inputs that faults nowhere ever shows it, at any depth. A fact
   about the spec, not a violation: a defensive branch may be meant never to run. A target only a query's answer shows
   gets no line, nor does a target whose question has a model, which may be a state no run reaches. -/
@@ -57,7 +57,7 @@ deriving DecidableEq
 inductive Tazuna.GenerateKind : Type
   /-- A run from the initial state whose last step shows the target's class of out line: its trace is written. -/
   | reached
-  /-- No run of at most the spec's steps within the slots, on which its `assumes` hold (valid inputs, no step faults),
+  /-- No run of at most the scope's steps within the slots, on which its `assumes` hold (valid inputs, no step faults),
   shows the target's class at any step. Not "unreachable": a longer run or larger slots may reach it. -/
   | unreached
   /-- Every input kind's dead-target question is unsat, no step goes past the slots and every input and the initial
@@ -73,7 +73,7 @@ inductive Tazuna.GenerateKind : Type
   verify replays it to that fault at its last line. -/
   | violated
   /-- prove found a step that breaks the target from a state whose invariants hold (`Prove.unproved`), and no run of at
-  most the spec's steps within the slots, on valid inputs, whose steps before the last fault nowhere, faults by it at
+  most the scope's steps within the slots, on valid inputs, whose steps before the last fault nowhere, faults by it at
   its last step. Not settled: a longer run or larger slots may break the target, or no run may. -/
   | unsettled
 deriving DecidableEq

@@ -42,11 +42,26 @@ fn counter() -> tazuna.Service {
     reactions: [],
     invariants: fn(r: Records) { [#("not negative", r.total >= 0)] },
     responses: [],
-    bounds: tazuna.bounds(creates: [], others_at_most: 1, cascade: 1, steps: 5),
+    cascade: 1,
     scenarios: [],
   )
 }
 
 pub fn spec() -> tazuna.Spec {
   tazuna.spec(services: [counter()], externals: [])
+}
+
+pub fn model() -> tazuna.Model {
+  tazuna.model(spec: spec(), resource_limit: 50_000_000, scopes: [
+    tazuna.scope(
+      service: counter(),
+      creates: [],
+      others_at_most: 1,
+      steps: 5,
+      explore_depth: 0,
+      explore_states: 1,
+      waits: [],
+      values: [],
+    ),
+  ])
 }

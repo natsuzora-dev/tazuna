@@ -45,11 +45,26 @@ fn cubes() -> tazuna.Service {
       [#("no cube sum", r.a * r.a * r.a + r.b * r.b * r.b != r.c * r.c * r.c)]
     },
     responses: [],
-    bounds: tazuna.bounds(creates: [], others_at_most: 1, cascade: 1, steps: 5),
+    cascade: 1,
     scenarios: [],
   )
 }
 
 pub fn spec() -> tazuna.Spec {
   tazuna.spec(services: [cubes()], externals: [])
+}
+
+pub fn model() -> tazuna.Model {
+  tazuna.model(spec: spec(), resource_limit: 2_000_000, scopes: [
+    tazuna.scope(
+      service: cubes(),
+      creates: [],
+      others_at_most: 1,
+      steps: 5,
+      explore_depth: 0,
+      explore_states: 1,
+      waits: [],
+      values: [],
+    ),
+  ])
 }

@@ -161,9 +161,9 @@ def ev (x : Int) : Input loop := .event ⟨0, by decide⟩ x
 -- More internal steps than the cascade bound is a fault.
 #guard (step prelude loop (State.init loop) (ev 1)).outcome.summary == "fault cascadeLimit"
 -- Two services that list the same command and query break the owner rule, once for each.
-#guard ((SpecV.illegal prelude ⟨[svc, { svc with name := "other" }], []⟩ [] [] fun _ => []).filter (·.1 == .owner)).length == 2
+#guard ((SpecV.illegal prelude ⟨[svc, { svc with name := "other" }], []⟩ [] [] fun _ => []) true |>.filter (·.1 == .owner)).length == 2
 -- So does a service that declares an external's command.
-#guard ((SpecV.illegal prelude ⟨[{ svc with declares := [.externalCommand "ping" .str .int .str] }], []⟩ [] [] fun _ => []).filter
+#guard ((SpecV.illegal prelude ⟨[{ svc with declares := [.externalCommand "ping" .str .int .str] }], []⟩ [] [] fun _ => []) true |>.filter
   (·.1 == .owner)).length == 1
 -- A test helper: a run with no step prints empty.
 set_option linter.tazuna.silentDefault false in
@@ -173,25 +173,25 @@ def last (v : ServiceV) (is : List (Input v)) : String :=
 -- The handle `pingE` makes: check compares it with what each service's `declared` lists, which the spec built from
 -- the externals' declarations.
 #guard (pingE (Γ := [])).handles.map (fun h => (h.kind, h.name)) == [("external command", some "ping")]
-#guard ((SpecV.illegal prelude ⟨[svc], [⟨"mail", [.externalCommand "ping" .str .int .str]⟩]⟩ (pingE (Γ := [])).handles [] fun _ => []).filter
+#guard ((SpecV.illegal prelude ⟨[svc], [⟨"mail", [.externalCommand "ping" .str .int .str]⟩]⟩ (pingE (Γ := [])).handles [] fun _ => []) true |>.filter
   (·.1 == .unknownHandle)).isEmpty
 #guard ((SpecV.illegal prelude ⟨[{ svc with declared := [("mail", .externalCommand "ping" .str .int .int)] }],
-    [⟨"mail", [.externalCommand "ping" .str .int .int]⟩]⟩ (pingE (Γ := [])).handles [] fun _ => []).filter
+    [⟨"mail", [.externalCommand "ping" .str .int .int]⟩]⟩ (pingE (Γ := [])).handles [] fun _ => []) true |>.filter
   (·.1 == .unknownHandle)).length == 1
 -- A service sends only the commands and queries it declares, by the name and types its own effects carry.
-#guard ((SpecV.illegal prelude ⟨[svc], []⟩ [] [] fun _ => [⟨"command", some "add", [.int, .int, .int, .int, .str]⟩]).filter
+#guard ((SpecV.illegal prelude ⟨[svc], []⟩ [] [] fun _ => [⟨"command", some "add", [.int, .int, .int, .int, .str]⟩]) true |>.filter
   (·.1 == .unknownHandle)).isEmpty
-#guard ((SpecV.illegal prelude ⟨[svc], []⟩ [] [] fun _ => [⟨"command", some "other", [.int, .int, .int, .int, .int]⟩]).filter
+#guard ((SpecV.illegal prelude ⟨[svc], []⟩ [] [] fun _ => [⟨"command", some "other", [.int, .int, .int, .int, .int]⟩]) true |>.filter
   (·.1 == .unknownHandle)).length == 1
 -- A handle built-in passed as a value has no name check can read, so it is Illegal.handleName too.
 #guard ((SpecV.illegal prelude ⟨[svc], [⟨"mail", [.externalCommand "ping" .str .int .str]⟩]⟩
-  (Expr.prim (G := []) (Γ := []) .externalCommand [.str, .int, .str] rfl).handles [] fun _ => []).filter
+  (Expr.prim (G := []) (Γ := []) .externalCommand [.str, .int, .str] rfl).handles [] fun _ => []) true |>.filter
   (·.1 == .handleName)).length == 1
 -- A handle whose name is no string literal is Illegal.handleName, own ones included; an own handle with a literal name
 -- needs no external.
-#guard ((SpecV.illegal prelude ⟨[svc], []⟩ [⟨"command", none, [.int]⟩, ⟨"external query", none, [.int]⟩] [] fun _ => []).filter
+#guard ((SpecV.illegal prelude ⟨[svc], []⟩ [⟨"command", none, [.int]⟩, ⟨"external query", none, [.int]⟩] [] fun _ => []) true |>.filter
   (·.1 == .handleName)).length == 2
-#guard ((SpecV.illegal prelude ⟨[svc], []⟩ [⟨"command", some "add", [.int]⟩, ⟨"query", some "get", [.int]⟩] [] fun _ => []).filter
+#guard ((SpecV.illegal prelude ⟨[svc], []⟩ [⟨"command", some "add", [.int]⟩, ⟨"query", some "get", [.int]⟩] [] fun _ => []) true |>.filter
   fun f => f.1 == .handleName || f.1 == .unknownHandle).isEmpty
 -- Check reports a handle no external declares as Illegal.unknownHandle, so no checked spec reaches this fault: a
 -- request to a command no external declares.
@@ -220,7 +220,7 @@ def specWith (xs : List ExternalV) : SpecV := Prim.spec.den [] rfl (([svc] : Lis
 #guard ((specWith [⟨"text", [.source "moved" .str]⟩, ⟨"clock", [.source "moved" .int]⟩]).services.map fun v =>
   v.subscribes.map (·.source)) == [["clock"]]
 #guard ((specWith [⟨"text", [.source "moved" .str]⟩]).services.map fun v => v.subscribes.map (·.source)) == [[""]]
-#guard ((SpecV.illegal prelude (specWith [⟨"text", [.source "moved" .str]⟩]) [] [] fun _ => []).filter (·.1 == .unknownSource)).length == 1
+#guard ((SpecV.illegal prelude (specWith [⟨"text", [.source "moved" .str]⟩]) [] [] fun _ => []) true |>.filter (·.1 == .unknownSource)).length == 1
 -- Every input has one outcome.
 #guard (run prelude svc s0 [cmd 1 5, cmd 2 5, .clock 3]).2.length == 3
 

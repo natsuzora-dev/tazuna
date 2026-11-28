@@ -38,6 +38,10 @@ gleam run -m tazuna -- check todo_spec
 gleam run -m tazuna -- prove todo_spec
 ```
 
+`prove` checks the spec in the model that `model()` returns, beside `spec()`.
+`spec()` says what the service means; the model says how far `prove` and `generate` look: at most two open tasks, one item in every other collection, and runs of up to three inputs.
+A root module can define more models, such as a larger one for a nightly run, and `--model <name>` picks one.
+
 `prove` prints one line per target and input kind.
 The targets here are the invariant `every title is not empty`, the reminder's invariant `a due reminder went out`, each `ensures` rule, the `cascade` bound, the effect `remind`, the order of two `remind` effects, the reminder's timers, and the response.
 The first line says that the initial records keep the invariant:
@@ -47,11 +51,11 @@ The first line says that the initial records keep the invariant:
 ```
 
 The other 27 lines read `Prove.withinBounds`, and the command exits 0.
-No step breaks its target while the state fits the spec's `bounds`, but a step can grow the task table past the two tasks that `creates` allows.
-Each line lists those bounds.
+No step breaks its target while the state fits the model's slots, but a step can grow the task table past the two tasks that `creates` allows.
+Each line's `scope` names the model and lists those bounds.
 
 The response `an added task is reminded or done within an hour` reads `Prove.withinBounds` as well, at each input kind.
-Its `deadline` reads a task's `remind_at` until the reminder goes out, which `apply` writes down as `reminded`; `prove` checks each step against it, so the line holds for runs of any length within the bounds.
+Its `deadline` reads a task's `remind_at` until the reminder goes out, which `apply` writes down as `reminded`; `prove` checks each step against it, so the line holds for runs of any length within the slots.
 
 ## Test the scenario
 

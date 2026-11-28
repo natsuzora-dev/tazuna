@@ -38,7 +38,7 @@ def actual : Field := ⟨"actual", "the line or lines the run or the trace has t
 def target : Field := ⟨"target", "the target: an invariant, an ensures rule, an effect, a timer machine, a pair, a response"⟩
 def assumes : Field := ⟨"assumes", "what the verdict assumes: the stated assumptions and the invariants it took as holding"⟩
 def widened : Field := ⟨"widened", "a pair's own kinds that stand for any handle or site of their type"⟩
-def bounds : Field := ⟨"bounds", "each bound a step or a run can go past: its type, where its slots come from, how many, and the machines whose instances it holds"⟩
+def scope : Field := ⟨"scope", "the model the verdict rests on and the values of it the verdict reads: model, its name; bounds, each bound a step or a run can go past (its type, where its slots come from, how many, and the machines whose instances it holds); steps, the most inputs searched; resourceLimit, the solver's resource limit per question"⟩
 def fromField : Field := ⟨"from", "init: from the initial state; validState: from any state of the right shape"⟩
 def state : Field := ⟨"state", "the state before the step, as wire values"⟩
 def input : Field := ⟨"input", "the input of the step"⟩
@@ -140,6 +140,7 @@ def Ir.Illegal.means : Ir.Illegal → String
   | .callers => docOf% Ir.Illegal.callers
   | .tagLabel => docOf% Ir.Illegal.tagLabel
   | .initialInstances => docOf% Ir.Illegal.initialInstances
+  | .model => docOf% Ir.Illegal.model
 
 /-- A fault's line comes from test (at a scenario step) or verify (at a trace line). -/
 def FaultKind.explanation : FaultKind → Explanation
@@ -165,7 +166,7 @@ def ProveKind.explanation : ProveKind → Explanation
     questionFields ++ [assumes, widened]⟩
   | .withinBounds => ⟨docOf% ProveKind.withinBounds,
     [`Tazuna.Smt.fault_sound, `Tazuna.Smt.run_lines, `Tazuna.Smt.response_scoped, `Tazuna.Smt.boundReached_iff],
-    questionFields ++ [assumes, bounds, widened]⟩
+    questionFields ++ [assumes, scope, widened]⟩
   | .violated => ⟨docOf% ProveKind.violated, [], questionFields ++ [fromField, state, Field.violated, assumes]⟩
   | .unproved => ⟨docOf% ProveKind.unproved,
     [`Tazuna.Smt.cti_sound, `Tazuna.Ir.step_settled, `Tazuna.Smt.timer_violates, `Tazuna.Smt.pair_violates],
@@ -173,23 +174,23 @@ def ProveKind.explanation : ProveKind → Explanation
       firstThenSecond, secondThenFirst, trigger, Field.violated, assumes, widened]⟩
   | .unreachable => ⟨docOf% ProveKind.unreachable, [`Tazuna.Smt.unshown_sound], [service, target, assumes]⟩
   | .unreachableWithinBounds => ⟨docOf% ProveKind.unreachableWithinBounds, [`Tazuna.Smt.unshown_within],
-    [service, target, assumes, bounds]⟩
+    [service, target, assumes, scope]⟩
 
 def GenerateKind.explanation : GenerateKind → Explanation
   | .reached => ⟨docOf% GenerateKind.reached,
     [`Tazuna.Cli.generate_reaches, `Tazuna.Ir.targets_cover, `Tazuna.Cli.targetFile_inj],
     [service, target, written, steps]⟩
   | .unreached => ⟨docOf% GenerateKind.unreached, [`Tazuna.Smt.noModel_cubes],
-    [service, target, steps, bounds, assumes]⟩
+    [service, target, scope, assumes]⟩
   | .unreachable => ⟨docOf% GenerateKind.unreachable, [`Tazuna.Smt.unshown_sound], [service, target, assumes]⟩
   | .unreachableWithinBounds => ⟨docOf% GenerateKind.unreachableWithinBounds, [`Tazuna.Smt.unshown_within],
-    [service, target, assumes, bounds]⟩
+    [service, target, assumes, scope]⟩
   | .violated => ⟨docOf% GenerateKind.violated, [`Tazuna.Cli.generate_breaks], [service, target, written, steps, outcome]⟩
   | .unsettled => ⟨docOf% GenerateKind.unsettled, [`Tazuna.Smt.noModel_breaks],
-    [service, target, steps, bounds, assumes]⟩
+    [service, target, scope, assumes]⟩
 
 def UndecidedKind.explanation : UndecidedKind → Explanation
-  | .unknown => ⟨docOf% UndecidedKind.unknown, [], questionFields ++ [depth, why]⟩
+  | .unknown => ⟨docOf% UndecidedKind.unknown, [], questionFields ++ [depth, why, scope]⟩
   | .timeout => ⟨docOf% UndecidedKind.timeout, [], questionFields ++ [depth, why]⟩
   | .limit => ⟨docOf% UndecidedKind.limit, [`Tazuna.Trace.replay_iff],
     questionFields ++ [scenario, trace, line, Field.limit] ++ pairFields ++ [input, after, outcome, out, trigger]⟩

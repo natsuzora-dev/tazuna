@@ -58,7 +58,7 @@ theorem relD_up : (t : Ty) → (h : t.isData = true) → (y : t.den0) → (v : V
   | .dsl .query _, _, _, _, hv | .dsl .machine _, _, _, _, hv | .dsl .reaction _, _, _, _, hv
   | .dsl .external _, _, _, _, hv | .dsl .externalCommand _, _, _, _, hv | .dsl .externalQuery _, _, _, _, hv
   | .dsl .source _, _, _, _, hv | .dsl .declared _, _, _, _, hv | .dsl .subscription _, _, _, _, hv
-  | .dsl .bounds _, _, _, _, hv | .dsl .create _, _, _, _, hv | .dsl .response _, _, _, _, hv
+  | .dsl .model _, _, _, _, hv | .dsl .scope _, _, _, _, hv | .dsl .values _, _, _, _, hv | .dsl .create _, _, _, _, hv | .dsl .response _, _, _, _, hv
   | .dsl .scenario _, _, _, _, hv | .dsl .step _, _, _, _, hv | .dsl .sender _, _, _, _, hv
   | .dsl .closure _, _, _, _, hv | .dsl .effectClosure _, _, _, _, hv => by simp [RelD] at hv
 theorem relDs_up : (ts : List Ty) → (h : (Ty.tuple ts).isData = true) → (y : (Ty.semsWith Dsl.base ts).1) →

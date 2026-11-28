@@ -1,6 +1,7 @@
 import Tazuna.Smt.EncodeExact
 import Tazuna.Semantics.Reach
 import Tazuna.Semantics.Rules
+import Tazuna.Semantics.Rename
 import Tazuna.Smt.Instances
 import Tazuna.Trace.Wire
 
@@ -161,17 +162,21 @@ def _root_.Tazuna.Ir.HandleSite.Named (s : SpecV) (h : HandleSite) : Prop :=
   ∃ n, h.name = some n ∧ (!h.kind.startsWith "external" || s.services.all fun v =>
     v.declared.any fun (_, d) => d.kind == h.kind && d.name == n && (Ty.sames d.types h.types).isSome) = true
 
-/-- A spec that passed check: its program, and what check established of each service of the spec the program's root
-evaluates to and of each handle the program makes. -/
+/-- A spec that passed check: its program, whose root is `spec()` or a model function, the spec it gives (a model's
+scoped spec, `ModelV.scoped`), and what check established of each of its services and of each handle the program
+makes; and that each service's parts relate to themselves under every renaming, as evaluating the root relates it to
+itself (`Defs.eval_rel`). -/
 structure CheckedSpec where
-  program : Program (.fn [] Ty.spec)
-  checked : ∀ v ∈ (program.eval ()).services, Checked program.defs.sites program.defs.effectSites program.types v
-  handles : ∀ h ∈ program.defs.handles, h.Named (program.eval ())
+  root : Ty
+  program : Program root
+  spec : SpecV
+  checked : ∀ v ∈ spec.services, Checked program.defs.sites program.defs.effectSites program.types v
+  handles : ∀ h ∈ program.defs.handles, h.Named spec
+  self : ∀ R : PBij, ∀ v ∈ spec.services, v.Self R
 
 abbrev CheckedSpec.T (c : CheckedSpec) : List TypeDecl := c.program.types
 abbrev CheckedSpec.P (c : CheckedSpec) : List AnySite := c.program.defs.sites
 abbrev CheckedSpec.E (c : CheckedSpec) : List AnyEffectSite := c.program.defs.effectSites
-abbrev CheckedSpec.spec (c : CheckedSpec) : SpecV := c.program.eval ()
 
 theorem isFn_of_wire : (t : Ty) → t.wire = true → t.isFn = false
   | .fn .., h => by simp [Ty.wire] at h
@@ -214,7 +219,7 @@ theorem nil_of_eraseDups {α : Type} [BEq α] {l : List α} (h : l.eraseDups = [
 fresh-id source on the wire, so `Checked.wire` fails only for what the loader builds (type variables, the prelude's
 Bool and Nil, a variant's keys and atoms), never for a user's spec. -/
 theorem wireTys_wire {T : List TypeDecl} {s : SpecV} {handles : List HandleSite} {captures : List (SiteId × List Ty)}
-    {sent : ServiceV → List HandleSite} (h : SpecV.illegal T s handles captures sent = []) :
+    {sent : ServiceV → List HandleSite} {inScope : Bool} (h : SpecV.illegal T s handles captures sent inScope = []) :
     ∀ v ∈ s.services, ∀ t ∈ v.wireTys, t.wire = true := by
   intro v hv t ht
   simp only [SpecV.illegal] at h
@@ -279,7 +284,7 @@ each fact's failure would be a finding. -/
 theorem check_ok {T : List TypeDecl} {P : List AnySite} {E : List AnyEffectSite} {s : SpecV} {handles : List HandleSite}
     {captures : List (SiteId × List Ty)} (hP : SitesUnique P) (hreach : ∀ v ∈ s.services, v.Reach P E)
     (htys : ∀ v ∈ s.services, v.stateTys = true) (hok : ∀ v ∈ s.services, v.wireOk T = true)
-    (h : SpecV.illegal T s handles captures ServiceV.sentHandles = []) : ∀ v ∈ s.services, Checked P E T v := by
+    {inScope : Bool} (h : SpecV.illegal T s handles captures ServiceV.sentHandles inScope = []) : ∀ v ∈ s.services, Checked P E T v := by
   intro v hv
   simp only [SpecV.illegal] at h
   replace h := nilL (nil_of_eraseDups h)
@@ -327,7 +332,7 @@ theorem check_ok {T : List TypeDecl} {P : List AnySite} {E : List AnyEffectSite}
 
 /-- A check with no finding names every handle by a literal and finds every external one declared. -/
 theorem handles_ok {T : List TypeDecl} {s : SpecV} {handles : List HandleSite} {captures : List (SiteId × List Ty)}
-    {sent : ServiceV → List HandleSite} (h : SpecV.illegal T s handles captures sent = []) :
+    {sent : ServiceV → List HandleSite} {inScope : Bool} (h : SpecV.illegal T s handles captures sent inScope = []) :
     ∀ x ∈ handles, x.Named s := by
   intro x hx
   simp only [SpecV.illegal] at h

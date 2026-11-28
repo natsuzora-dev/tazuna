@@ -160,7 +160,7 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
     ⟨services.map fun v => { v with declared, subscribes := v.subscribes.map fun sub =>
       { sub with source := ownerOf sub.name sub.event } }, externals⟩
   | .service, args, h => let d := Prim.dataOf h rfl
-    fun (name, init, apply, subscribes, declares, machines, reactions, invariants, responses, bnds, scenarios, ()) =>
+    fun (name, init, apply, subscribes, declares, machines, reactions, invariants, responses, cascade, scenarios, ()) =>
     let R := (Ty.param 0).inst args
     let E := (Ty.param 1).inst args
     let C := (Ty.param 2).inst args
@@ -180,7 +180,7 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
           | _, _ => none
         | _ => none,
       sources := declares.filterMap fun | .source n t => some (n, t) | _ => none,
-      invariants, responses, bounds := bnds, scenarios,
+      invariants, responses, bounds := { creates := [], items := 0, cascade, steps := 1 }, scenarios,
       declared := [] }
   | .command, args, h => let d := Prim.dataOf h rfl
     fun (name, callers, accepts, decide, ensures, ()) =>
@@ -234,7 +234,11 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
     .query q.1.name ((Ty.param 2).inst args) _ _ (Prim.dn d (.param 3) rfl input) onAnswer
   | .subscribe, args, _ => fun (name, wrap, ()) =>
     { source := "", name, event := (Ty.param 1).inst args, wrap }
-  | .bounds, _, _ => fun (creates, items, cascade, steps, ()) => { creates, items, cascade, steps }
+  | .model, _, _ => fun (sp, scopes, rlimit, ()) => { spec := sp, scopes, rlimit }
+  | .scope, args, _ => fun ((v : ServiceV), creates, items, steps, exploreDepth, exploreStates, waits, vs, ()) =>
+    { service := v.name, records := (Ty.param 0).inst args, creates, items, steps, exploreDepth, exploreStates,
+      waits, values := vs }
+  | .values, _, _ => fun (input, ints, ()) => { input, ints }
   | .create, args, _ => fun (table, atMost, ()) =>
     { key := (Ty.param 1).inst args, value := (Ty.param 2).inst args, table, atMost }
   | .response, _, _ => fun (name, after, then_, within, deadline, ()) => { name := name.1, after, then_, within, deadline }

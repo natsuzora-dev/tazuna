@@ -25,6 +25,6 @@ def main (args : List String) : IO UInt32 :=
     | some c => c
     | none => Tazuna.Cli.printLine (.usage .arguments) [("message", Lean.Json.str
         ("usage: check <root> | test <root> [--update] | verify <root> <traces-dir> | " ++
-          "prove <root> [--only <prefix>] [--jobs <n>] [--timeout <seconds>] | " ++
-          "generate <root> <dir> [--only <prefix>] [--jobs <n>] [--timeout <seconds>] | " ++
+          "prove <root> [--model <name>] [--only <prefix>] [--jobs <n>] [--timeout <seconds>] | " ++
+          "generate <root> <dir> [--model <name>] [--only <prefix>] [--jobs <n>] [--timeout <seconds>] | " ++
           "explain [<kind>]"))]

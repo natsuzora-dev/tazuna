@@ -55,12 +55,7 @@ fn tasks(name: String) -> tazuna.Service {
         deadline: fn(_r: Records, _trigger: Event) { None },
       ),
     ],
-    bounds: tazuna.bounds(
-      creates: [tazuna.create(table: fn(r: Records) { r.tasks }, at_most: 3)],
-      others_at_most: 3,
-      cascade: 3,
-      steps: 5,
-    ),
+    cascade: 3,
     scenarios: [],
   )
 }

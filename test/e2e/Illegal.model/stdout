@@ -1,0 +1,1 @@
+{"kind":"Illegal.model","message":"model model(): counter has no scope; give it one in the model's scopes"}

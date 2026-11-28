@@ -387,18 +387,7 @@ pub fn service() -> tazuna.Service {
         deadline: fn(_records: Records, _trigger: Event) { None },
       ),
     ],
-    bounds: tazuna.bounds(
-      creates: [
-        tazuna.create(table: fn(records: Records) { records.stock }, at_most: 3),
-        tazuna.create(
-          table: fn(records: Records) { records.reservations },
-          at_most: 3,
-        ),
-      ],
-      others_at_most: 2,
-      cascade: 2,
-      steps: 4,
-    ),
+    cascade: 2,
     scenarios: [restocking_adds_up()],
   )
 }
@@ -419,4 +408,24 @@ fn restocking_adds_up() -> tazuna.Scenario(Records, Event, Caller) {
     ),
     tazuna.step_query(query: stock_level(), caller: Warehouse, input: "MUG-01"),
   ])
+}
+
+/// How far prove and generate look in this service.
+pub fn scope() -> tazuna.Scope {
+  tazuna.scope(
+    service: service(),
+    creates: [
+      tazuna.create(table: fn(records: Records) { records.stock }, at_most: 3),
+      tazuna.create(
+        table: fn(records: Records) { records.reservations },
+        at_most: 3,
+      ),
+    ],
+    others_at_most: 2,
+    steps: 4,
+    explore_depth: 0,
+    explore_states: 1,
+    waits: [],
+    values: [],
+  )
 }

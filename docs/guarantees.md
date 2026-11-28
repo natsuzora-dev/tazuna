@@ -37,19 +37,26 @@ behavior target
 Only the initial state, or a run from it that Lean runs and `verify` replays, makes a target violated.
 A response's, a pair's and a timer machine's line has no fault to search for, so its `Prove.unproved` line stays open.
 
-## Verdicts are scoped to the bounds
+## Verdicts are scoped to the model
 
-`prove` and `generate` ask the Z3 solver about a fixed number of slots per collection, taken from the service's `bounds`:
+`prove` and `generate` check a spec in a model: a function of the root module that takes nothing and returns `tazuna.model(spec:, scopes:, resource_limit:)`.
+`--model <name>` picks it; with one model function it is the one, and with none or several and no flag the command stops with `Usage.arguments`.
+`check` checks every model function, and the model's own rules are `Illegal.model`.
+The model gives each service a scope, and the Z3 solver gets a fixed number of slots per collection from it:
 
 - `creates` gives the slots of each table field of the records.
 - `others_at_most` gives the slots of every other bag and table: bags anywhere, tables inside values, each machine's table of instances, and the pending requests.
-- Every collection type gets at least as many slots as the longest list literal in the spec that writes its items: a list type its own, `Bag(a)` that of `List(a)`, and `Table(k, v)` that of `List(#(k, v))`, as `bag.from_list` and `table.from_list` take them. So every value the spec writes fits, and `bounds` names such a type's bound `longest literal`.
-- `cascade` limits the internal steps of one input.
+- Every collection type gets at least as many slots as the longest list literal in the spec that writes its items: a list type its own, `Bag(a)` that of `List(a)`, and `Table(k, v)` that of `List(#(k, v))`, as `bag.from_list` and `table.from_list` take them. So every value the spec writes fits, and the line names such a type's bound `longest literal`.
 - `steps` limits the inputs of a run that `generate` unrolls.
+- `resource_limit` is Z3's deterministic resource limit per question, so an answer is the same on every machine.
+- `explore_depth`, `explore_states`, `waits` and `values` are for the explicit-state search. `check` validates them, and no command reads them yet.
+
+A service's `cascade`, the most internal steps one input may take, is part of what the spec means, so it stays in `service`: an input that needs more faults in every command.
 
 A verdict speaks only of states and inputs that fit the slots.
-`Prove.withinBounds`, `Prove.unreachableWithinBounds`, `Generate.unreached`, `Generate.unreachableWithinBounds` and `Generate.unsettled` list in `bounds` every bound a step of the service can go past.
+`Prove.withinBounds`, `Prove.unreachableWithinBounds`, `Generate.unreached`, `Generate.unreachableWithinBounds` and `Generate.unsettled` carry a `scope` that names the model and lists in `bounds` every bound a step of the service can go past; `generate`'s lines also give the `steps` they searched.
 That list is the service's static scope, the same in every run.
+`Undecided.unknown` names the model and the `resourceLimit` the solver ran out of.
 
 ## Lines do not depend on the schedule
 
@@ -92,7 +99,7 @@ The right shape includes that every id the service made in the state is below it
 `run_supp` proves every state a run reaches on inputs that satisfy `validInputs` has that shape, which is why step lines print it in `assumes`.
 The right shape also includes that each machine has an instance for exactly the keys its `instances` gives at the records.
 `run_keys` proves every state a run reaches has it with no assumption on the inputs, because check requires that `instances` gives no key at the initial records (`Illegal.initialInstances`).
-With no such model, the line reads `Prove.proved` or `Prove.withinBounds`.
+With no such solver model, the line reads `Prove.proved` or `Prove.withinBounds`.
 With one, it reads `Prove.unproved`, and an `init` line whose initial state breaks the invariant reads `Prove.violated`.
 
 `proved_sound` (T4): where every input kind's lines about a fault read proved, no step of any run from the initial state on inputs that satisfy `validInputs` faults with it.
@@ -109,7 +116,7 @@ A step line's `assumes` lists `validInputs` and the invariants the induction too
 ## prove: dead targets
 
 For each of `generate`'s targets, `prove` asks per input kind whether a step from a state of the right shape where every invariant holds shows the target's class, the same question as a T4 step line with that goal in place of a broken rule.
-It prints a line only where every input kind's question is unsat, and nothing otherwise: a model's state may be one no run reaches.
+It prints a line only where every input kind's question is unsat, and nothing otherwise: a solver model's state may be one no run reaches.
 Before asking, `prove` reads the code, and a kind whose step cannot show the class gets no question (`Step.step_events`).
 A step applies only events built by a constructor written in a function it runs: the input's own (`decide`, `wrap`, an `on_answer` of the answer's type) and the cascade's (every machine's `effect`, every reaction, every command the service runs as `Own`).
 A request's `on_answer` runs when its answer comes, so its constructors count for that answer, not for the step that sends the request.
@@ -122,12 +129,12 @@ A target that only a query's answer shows gets no question, since no step questi
 Nor does any target of a service whose initial state breaks an invariant or one of whose input kinds is refused.
 
 - `Prove.unreachable`, `unshown_sound`: where every bound question reads proved and every input and the initial state fit the slots, no step of any run from the initial state, on inputs that satisfy `validInputs`, that faults nowhere shows the class.
-- `Prove.unreachableWithinBounds`, `unshown_within`: otherwise, the same for every step within the slots, and the line names the `bounds` as a `Prove.withinBounds` line does. A run past them may show the class, so the target can be one only the bounds keep out of reach.
+- `Prove.unreachableWithinBounds`, `unshown_within`: otherwise, the same for every step within the slots, and the line's `scope` names the bounds as a `Prove.withinBounds` line's does. A run past them may show the class, so the target can be one only the bounds keep out of reach.
 
 Both rest on `run_invariants` and `run_supp`: every state such a run reaches has the shape the question assumes, whether or not the invariants were proved.
 The line exits 0, like a compiler warning, because a defensive branch may be meant never to run.
 `generate` asks the same questions from its second length on, and for such a target the bound questions, and prints `Generate.unreachable` or `Generate.unreachableWithinBounds` as `prove` does.
-A target whose question has a model, from a state no run reaches, gets no such line, and `generate` may still find no run of at most `steps` inputs to it (`Generate.unreached`).
+A target whose question has a solver model, from a state no run reaches, gets no such line, and `generate` may still find no run of at most `steps` inputs to it (`Generate.unreached`).
 
 ## prove: order of own steps and timers (T5)
 
@@ -167,7 +174,7 @@ A response is judged per step, so a `then` event in the same step as its trigger
 
 - `Prove.proved`: `response_holds` (T7): where every kind's line and bound question is unsat, and every input and the initial state fit the slots, no run from the initial state on inputs that satisfy `validInputs`, with timely clock lines, violates the response, at any length.
 - `Prove.withinBounds`: `response_scoped` (T7): where every kind's line is unsat, the same of every run whose steps stay within the slots.
-- `Prove.unproved`: the step breaks one of the three parts, recomputed in Lean from the model's state, input and trigger. Like a step line's counterexample, it comes from a state of the right shape, which no run may reach; another invariant can rule it out (a machine invariant may read `now`). `generate` searches no run for it: a reachable state that breaks a part violates the response only once a later step passes the trigger's time plus `within` unanswered.
+- `Prove.unproved`: the step breaks one of the three parts, recomputed in Lean from the solver model's state, input and trigger. Like a step line's counterexample, it comes from a state of the right shape, which no run may reach; another invariant can rule it out (a machine invariant may read `now`). `generate` searches no run for it: a reachable state that breaks a part violates the response only once a later step passes the trigger's time plus `within` unanswered.
 
 `not_violated` (`Semantics/Response.lean`) turns the three facts into the run's: after the trigger's step its deadline is at most its time plus `within`; each later step that does not answer keeps the deadline no later; and time moves only on clock lines, which pass no waiting deadline.
 A step within the slots ends with every machine's `instances` fitting at the records it leaves (the bound question asks it), so parts 2 and 3 hold at every step after the trigger's.
@@ -185,8 +192,8 @@ Where `decide` writes every rejection in place as a constructor, in `require`, `
 `targets_cover`: every class of out line a step can show is aimed at by one of these targets.
 For each target, `generate` searches runs from the initial state, one input longer each time, up to `steps` inputs.
 It splits each length into cubes that fix the input kinds of the last steps: one cube per kind of the last step, and a cube the solver leaves undecided splits again on the step before (cube and conquer).
-Before it splits, such a cube is asked once more with four times the resource limit, and only an unsat answer is read, so the split is skipped where the cube has no model and the run found is the one the split finds.
-Cubes are asked a fixed number at a time, and the first in order with a model wins, so the questions and the trace do not depend on `--jobs`.
+Before it splits, such a cube is asked once more with four times the resource limit, and only an unsat answer is read, so the split is skipped where the cube has no solver model and the run found is the one the split finds.
+Cubes are asked a fixed number at a time, and the first in order with a solver model wins, so the questions and the trace do not depend on `--jobs`.
 A cube needs no question where the code rules out that its last step's kinds show the target, or, from the second length on, where `prove`'s dead-target question of each kind of its last step is unsat.
 
 - `Generate.reached` writes the trace of the shortest run it found to `<dir>/<service>/<target>.jsonl`. `generate_reaches` (T6): the written trace reads as the spec from the initial state, so `verify` replays it as passed unless it runs out of tries, and the last step of its run shows the target. `generate_sound`: every model the solver gives decodes to inputs that satisfy `validInputs` whose run faults nowhere and reaches the target. `targetFile_inj`: two targets never share a file, so no written trace overwrites another's.
@@ -227,7 +234,7 @@ Three assumptions appear in `assumes`, in these words.
 
 The first leaves ids from outside the service unrestricted.
 
-The model itself assumes more, and no line prints it:
+The semantics itself assumes more, and no line prints it:
 
 - An implementation finishes an input before the next `in` line, so all of an input's `out` lines come before it. Inside a step, the cascade runs to completion.
 - Time moves and timers fire only on clock lines (`{"in":"clock"}`). A trace that wants a timer to fire writes a clock line.
@@ -242,7 +249,7 @@ Everything between them is proved or checked.
 - glance. The converter parses each module with it. On every conversion, the converter prints the IR back as Gleam and compares what glance reads from that text with what it read from the source.
 - The Lean kernel checks every proof, and the Lean compiler builds the engine. Where compiled code uses a faster form, a root proves the two equal: `SExp.print_eq_printFast`, `Term.denote_eq_denoteFast`, `Term.beq_eq_beqFast`, and `Defs.add_eq_addFast`.
 - Lean's JSON printer and parser stand between wire values and a trace's text.
-- Z3. An unsat answer is trusted. A sat answer is not, because Lean decodes the model and recomputes the counterexample or replays the run. The answer cache, keyed by SHA-256 digests of the script and of the solver's version, holds answers you trust in the same way. It also keeps an unknown answer, which the resource limit and seeds written in the script decide, but never a timeout. prove first looks a question up by a key of what builds its script, as ccache's direct mode does: the SHA-256 of the engine executable, Z3's version and the options the engine writes, the SHA-256 of the IR, and which question it is. That key never reads the script, so it trusts the engine to build the same script from the same inputs, as it is deterministic. Another engine, Z3 or spec misses it, and the script's own key still finds every unchanged answer.
+- Z3. An unsat answer is trusted. A sat answer is not, because Lean decodes the solver's model and recomputes the counterexample or replays the run. The answer cache, keyed by SHA-256 digests of the script and of the solver's version, holds answers you trust in the same way. It also keeps an unknown answer, which the resource limit and seeds written in the script decide, but never a timeout. prove first looks a question up by a key of what builds its script, as ccache's direct mode does: the SHA-256 of the engine executable, Z3's version and the options the engine writes, the SHA-256 of the IR, and which question it is. That key never reads the script, so it trusts the engine to build the same script from the same inputs, as it is deterministic. Another engine, Z3 or spec misses it, and the script's own key still finds every unchanged answer.
   Z3 reads each script with the name of every id from outside as an Int code, since a step only compares such names, and the script as it is where a name meets any other operation. `code_model` proves that a model of the script gives a model of what Z3 reads, so an unsat answer is the script's (`Unsat.noModel`). A sat answer's codes read back as fixed names in the same order (`nameOf_lt`).
   Where that script holds strings, Z3 first reads an abstract variant of it: every string is an Int code, each literal a variable kept in the literals' order, `str.<` is `<`, and `str.++` and `str.len` are functions Z3 may choose freely. `abs_model` proves that a model of the script gives a model of the variant, so an unsat answer to the variant is the script's too. A sat answer to the variant may come from codes that no strings realize, so it is never read. Z3 is asked the script again with the variant's model fixed, first with each code as a string in the codes' order, then with only the values that are not strings, and Lean reads that answer as any other. Where neither finds a model, the script itself answers.
 - The release. On first run the launcher fetches the engine and z3 from the GitHub release of its own version and refuses any file whose SHA-256 differs from the one the Hex package pins, so you trust the release workflow that built and pinned them. With `TAZUNA_ENGINE` set you trust that engine instead, and the z3 on PATH.
@@ -253,6 +260,6 @@ Everything between them is proved or checked.
 
 - A pair line that reads `Prove.proved` covers every run only where every order of a cascade stays within the slots. `run_within` keeps the states between inputs within them, but no theorem yet keeps the cascade's other orders there.
 - `Undecided.upToRenaming` says the two orders end the same once renamed. That rests on Lean's comparison of their terms under the renaming it found, and no theorem yet says such orders are the same as the oracle sees them. The line is undecided, so no verdict rests on it.
-- The `bounds` list over-states lists. Every list type of the layout appears with its longest literal, though a list that only literals build cannot grow.
+- The `bounds` list in `scope` over-states lists. Every list type of the layout appears with its longest literal, though a list that only literals build cannot grow.
 - `Undecided.timeout` depends on the machine. Z3 ran past a 10-minute wall clock before its resource limit stopped it, though the limit takes about 6 seconds on a laptop. Every other answer, `Undecided.unknown` included, comes from Z3's fixed resource limit and seeds, so it is the same on every machine.
 - Ids that cannot be guessed, authentication, and anything else outside the spec's values are the implementation's concern.

@@ -39,11 +39,7 @@ fn again() -> tazuna.Reaction(Records, Event) {
         tazuna.request_command(command: ping(), input: 1, on_answer: fn(_a) {
           []
         }),
-        tazuna.send_command(
-          command: bump(),
-          input: 1,
-          on_answer: fn(_a) { [] },
-        ),
+        tazuna.send_command(command: bump(), input: 1, on_answer: fn(_a) { [] }),
       ]
     },
   )
@@ -60,7 +56,7 @@ fn mail(name: String) -> tazuna.Service {
     reactions: [again()],
     invariants: fn(_r) { [] },
     responses: [],
-    bounds: tazuna.bounds(creates: [], others_at_most: 3, cascade: 10, steps: 5),
+    cascade: 10,
     scenarios: [],
   )
 }

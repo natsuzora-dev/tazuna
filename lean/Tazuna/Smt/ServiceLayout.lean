@@ -18,15 +18,22 @@ open Tazuna.Ir
 section
 variable {G : List Ty}
 
-/-- The type of every node of every definition. -/
+/-- The types a model's definition gives a layout: those its kept functions capture and compute with, as a create
+bound's table is read through its code, and none of the model's own values, which are no state, input or effect of a
+service. -/
+def _root_.Tazuna.Ir.Expr.siteTys {Γ : List Ty} {t : Ty} (D : Defs G) (e : Expr G Γ t) : List Ty :=
+  (Expr.sites D e).flatMap (fun s => s.1 ++ Tazuna.Smt.Expr.tys s.2.2.body) ++
+    (Expr.effectSites D e).flatMap (fun s => s.1 ++ Tazuna.Smt.Expr.tys s.2.2.2.body)
+
+/-- The type of every node of every definition, but of a model's definition (`Ty.ofModel`) only its kept functions'. -/
 def _root_.Tazuna.Ir.Defs.tys : {G : List Ty} → Defs G → List Ty
   | [], .nil => []
-  | _ :: _, .snoc defs _ body => defs.tys ++ Tazuna.Smt.Expr.tys body
+  | _ :: _, .snoc defs t body => defs.tys ++ if t.ofModel then Expr.siteTys defs body else Tazuna.Smt.Expr.tys body
 
-/-- The type and length of every list literal of every definition. -/
+/-- The type and length of every list literal of every definition but a model's. -/
 def _root_.Tazuna.Ir.Defs.lits : {G : List Ty} → Defs G → List (Ty × Nat)
   | [], .nil => []
-  | _ :: _, .snoc defs _ body => defs.lits ++ Tazuna.Smt.Expr.lits body
+  | _ :: _, .snoc defs t body => defs.lits ++ if t.ofModel then [] else Tazuna.Smt.Expr.lits body
 
 end
 
@@ -243,7 +250,7 @@ theorem slotted_addTys {S : Ty → Nat} {L : Layout} (hS : NoSlots (Layout.effec
     exact slotted_push (slotted_fold hS _ _ h') _ _ (hS (.dsl .effect [e]) (by simp) (by simp) (by simp)).symm
   | .effect, [] | .effect, _ :: _ :: _ | .spec, _ | .service, _ | .command, _ | .query, _ | .machine, _
   | .reaction, _ | .external, _ | .externalCommand, _ | .externalQuery, _ | .source, _ | .declared, _
-  | .subscription, _ | .bounds, _ | .create, _ | .response, _ | .scenario, _ | .step, _ | .sender, _
+  | .subscription, _ | .model, _ | .scope, _ | .values, _ | .create, _ | .response, _ | .scenario, _ | .step, _ | .sender, _
   | .closure, _ | .effectClosure, _ | .fresh, _ => exact h'
 
 theorem count_of_slotted {S : Ty → Nat} {K L : Layout} (h : Slotted S K L) {t : Ty} (hf : (L.find? t).isSome = true) :

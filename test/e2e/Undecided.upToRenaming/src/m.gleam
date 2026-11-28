@@ -71,11 +71,26 @@ fn marks() -> tazuna.Service {
     reactions: [twice()],
     invariants: fn(_r: Records) { [] },
     responses: [],
-    bounds: tazuna.bounds(creates: [], others_at_most: 2, cascade: 2, steps: 3),
+    cascade: 2,
     scenarios: [],
   )
 }
 
 pub fn spec() -> tazuna.Spec {
   tazuna.spec(services: [marks()], externals: [])
+}
+
+pub fn model() -> tazuna.Model {
+  tazuna.model(spec: spec(), resource_limit: 50_000_000, scopes: [
+    tazuna.scope(
+      service: marks(),
+      creates: [],
+      others_at_most: 2,
+      steps: 3,
+      explore_depth: 0,
+      explore_states: 1,
+      waits: [],
+      values: [],
+    ),
+  ])
 }

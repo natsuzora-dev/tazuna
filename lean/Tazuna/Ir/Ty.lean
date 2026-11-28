@@ -9,14 +9,14 @@ built-ins and never looks inside them. `fresh` is the source of new ids a step h
 inductive Dsl where
   | spec | service | command | query | machine | reaction | external
   | externalCommand | externalQuery | source | declared | effect | subscription
-  | bounds | create | response | scenario | step | sender | fresh | closure | effectClosure
+  | model | scope | values | create | response | scenario | step | sender | fresh | closure | effectClosure
 deriving Repr, DecidableEq, Inhabited
 
 namespace Dsl
 
 def all : List Dsl :=
   [.spec, .service, .command, .query, .machine, .reaction, .external, .externalCommand, .externalQuery,
-   .source, .declared, .effect, .subscription, .bounds, .create, .response,
+   .source, .declared, .effect, .subscription, .model, .scope, .values, .create, .response,
    .scenario, .step, .sender, .fresh, .closure, .effectClosure]
 
 theorem mem_all (k : Dsl) : k ∈ all := by cases k <;> simp [all]
@@ -42,7 +42,10 @@ def decl : Dsl → String × List String × String
   | .effect => ("Effect", ["event"],
       "A request to an external or to a command or query of the same service; its answer becomes events.")
   | .subscription => ("Subscription", ["event"], "Another service's event, received as one of this service's.")
-  | .bounds => ("Bounds", ["records"], "How far checking goes.")
+  | .model => ("Model", [],
+      "A spec with the scope prove and generate check it in. The scope changes which answers they can give, never what the spec means.")
+  | .scope => ("Scope", [], "How far prove and generate look in one service: slots, run length, explore caps, values.")
+  | .values => ("Values", [], "The Ints the explicit-state search tries for one input kind.")
   | .create => ("Create", ["records"], "At most how many records one table of the records holds at any time.")
   | .response => ("Response", ["records", "event"], "After one event, another within a time, by a deadline the records keep.")
   | .scenario => ("Scenario", ["records", "event", "caller"],
@@ -290,6 +293,13 @@ def Ty.timerCtx (k s r : Ty) : Ty := .adt 14 [k, s, r] [[k, s, r]]
 def Ty.never : Ty := .adt 11 [] []
 /-- Named rules, as `invariants`, `accepts` and `ensures` return them. -/
 def Ty.rules : Ty := .list (.tuple [.str, .bool])
+
+/-- Whether a definition of the type builds a model's values (a model, a scope or a value set), or is a function that
+returns one: they choose how far prove and generate look, and no service reads them. -/
+def Ty.ofModel : Ty → Bool
+  | .fn _ r => r.ofModel
+  | .dsl k _ => k == .model || k == .scope || k == .values
+  | _ => false
 
 mutual
 /-- Whether a type is data: it holds no structure value, so it means the same at every level. -/

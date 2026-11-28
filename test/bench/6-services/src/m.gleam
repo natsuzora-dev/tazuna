@@ -190,12 +190,7 @@ fn s1() -> tazuna.Service {
         deadline: fn(_r: R1, _trigger: E1) { None },
       ),
     ],
-    bounds: tazuna.bounds(
-      creates: [tazuna.create(table: fn(r: R1) { r.items }, at_most: 2)],
-      others_at_most: 2,
-      cascade: 2,
-      steps: 5,
-    ),
+    cascade: 2,
     scenarios: [],
   )
 }
@@ -369,12 +364,7 @@ fn s2() -> tazuna.Service {
         deadline: fn(_r: R2, _trigger: E2) { None },
       ),
     ],
-    bounds: tazuna.bounds(
-      creates: [tazuna.create(table: fn(r: R2) { r.items }, at_most: 2)],
-      others_at_most: 2,
-      cascade: 2,
-      steps: 5,
-    ),
+    cascade: 2,
     scenarios: [],
   )
 }
@@ -548,12 +538,7 @@ fn s3() -> tazuna.Service {
         deadline: fn(_r: R3, _trigger: E3) { None },
       ),
     ],
-    bounds: tazuna.bounds(
-      creates: [tazuna.create(table: fn(r: R3) { r.items }, at_most: 2)],
-      others_at_most: 2,
-      cascade: 2,
-      steps: 5,
-    ),
+    cascade: 2,
     scenarios: [],
   )
 }
@@ -727,12 +712,7 @@ fn s4() -> tazuna.Service {
         deadline: fn(_r: R4, _trigger: E4) { None },
       ),
     ],
-    bounds: tazuna.bounds(
-      creates: [tazuna.create(table: fn(r: R4) { r.items }, at_most: 2)],
-      others_at_most: 2,
-      cascade: 2,
-      steps: 5,
-    ),
+    cascade: 2,
     scenarios: [],
   )
 }
@@ -906,12 +886,7 @@ fn s5() -> tazuna.Service {
         deadline: fn(_r: R5, _trigger: E5) { None },
       ),
     ],
-    bounds: tazuna.bounds(
-      creates: [tazuna.create(table: fn(r: R5) { r.items }, at_most: 2)],
-      others_at_most: 2,
-      cascade: 2,
-      steps: 5,
-    ),
+    cascade: 2,
     scenarios: [],
   )
 }
@@ -1085,12 +1060,7 @@ fn s6() -> tazuna.Service {
         deadline: fn(_r: R6, _trigger: E6) { None },
       ),
     ],
-    bounds: tazuna.bounds(
-      creates: [tazuna.create(table: fn(r: R6) { r.items }, at_most: 2)],
-      others_at_most: 2,
-      cascade: 2,
-      steps: 5,
-    ),
+    cascade: 2,
     scenarios: [],
   )
 }
@@ -1101,5 +1071,70 @@ pub fn spec() -> tazuna.Spec {
       tazuna.declare_external_command(send()),
       tazuna.declare_source(tick()),
     ]),
+  ])
+}
+
+pub fn model() -> tazuna.Model {
+  tazuna.model(spec: spec(), resource_limit: 50_000_000, scopes: [
+    tazuna.scope(
+      service: s1(),
+      creates: [tazuna.create(table: fn(r: R1) { r.items }, at_most: 2)],
+      others_at_most: 2,
+      steps: 5,
+      explore_depth: 0,
+      explore_states: 1,
+      waits: [],
+      values: [],
+    ),
+    tazuna.scope(
+      service: s2(),
+      creates: [tazuna.create(table: fn(r: R2) { r.items }, at_most: 2)],
+      others_at_most: 2,
+      steps: 5,
+      explore_depth: 0,
+      explore_states: 1,
+      waits: [],
+      values: [],
+    ),
+    tazuna.scope(
+      service: s3(),
+      creates: [tazuna.create(table: fn(r: R3) { r.items }, at_most: 2)],
+      others_at_most: 2,
+      steps: 5,
+      explore_depth: 0,
+      explore_states: 1,
+      waits: [],
+      values: [],
+    ),
+    tazuna.scope(
+      service: s4(),
+      creates: [tazuna.create(table: fn(r: R4) { r.items }, at_most: 2)],
+      others_at_most: 2,
+      steps: 5,
+      explore_depth: 0,
+      explore_states: 1,
+      waits: [],
+      values: [],
+    ),
+    tazuna.scope(
+      service: s5(),
+      creates: [tazuna.create(table: fn(r: R5) { r.items }, at_most: 2)],
+      others_at_most: 2,
+      steps: 5,
+      explore_depth: 0,
+      explore_states: 1,
+      waits: [],
+      values: [],
+    ),
+    tazuna.scope(
+      service: s6(),
+      creates: [tazuna.create(table: fn(r: R6) { r.items }, at_most: 2)],
+      others_at_most: 2,
+      steps: 5,
+      explore_depth: 0,
+      explore_states: 1,
+      waits: [],
+      values: [],
+    ),
   ])
 }

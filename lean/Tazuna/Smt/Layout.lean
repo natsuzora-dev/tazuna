@@ -126,7 +126,7 @@ theorem HasDsl.mono {L L' : Layout} (h : Le L L') (k : Dsl) (a : List Ty) (hk : 
     exact ⟨by rw [effectFields_le h]; exact HasWithss.mono h (fun _ _ _ => trivial) _ hs, by simp [find?_le h hx]⟩
   | .spec, _, _ | .service, _, _ | .command, _, _ | .query, _, _ | .machine, _, _ | .reaction, _, _
   | .external, _, _ | .externalCommand, _, _ | .externalQuery, _, _ | .source, _, _ | .declared, _, _
-  | .subscription, _, _ | .bounds, _, _ | .create, _, _ | .response, _, _ | .scenario, _, _ | .step, _, _
+  | .subscription, _, _ | .model, _, _ | .scope, _, _ | .values, _, _ | .create, _, _ | .response, _, _ | .scenario, _, _ | .step, _, _
   | .sender, _, _ | .closure, _, _ | .effectClosure, _, _ | .fresh, _, _ => trivial
   | .effect, [], _ | .effect, _ :: _ :: _, _ => trivial
 
@@ -253,14 +253,14 @@ theorem addTys_has (slots : Ty → Nat) (L : Layout) (ts : List Ty) : HasWiths (
     | .effect, [e] => exact addEffect_le _ L e
     | .effect, [] | .effect, _ :: _ :: _ | .spec, _ | .service, _ | .command, _ | .query, _ | .machine, _
     | .reaction, _ | .external, _ | .externalCommand, _ | .externalQuery, _ | .source, _ | .declared, _
-    | .subscription, _ | .bounds, _ | .create, _ | .response, _ | .scenario, _ | .step, _ | .sender, _
+    | .subscription, _ | .model, _ | .scope, _ | .values, _ | .create, _ | .response, _ | .scenario, _ | .step, _ | .sender, _
     | .closure, _ | .effectClosure, _ | .fresh, _ => exact Le.refl L
   · intro L k a
     match k, a with
     | .effect, [e] => exact addEffect_has _ L e
     | .effect, [] | .effect, _ :: _ :: _ | .spec, _ | .service, _ | .command, _ | .query, _ | .machine, _
     | .reaction, _ | .external, _ | .externalCommand, _ | .externalQuery, _ | .source, _ | .declared, _
-    | .subscription, _ | .bounds, _ | .create, _ | .response, _ | .scenario, _ | .step, _ | .sender, _
+    | .subscription, _ | .model, _ | .scope, _ | .values, _ | .create, _ | .response, _ | .scenario, _ | .step, _ | .sender, _
     | .closure, _ | .effectClosure, _ | .fresh, _ => trivial
 
 end Layout

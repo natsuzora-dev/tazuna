@@ -301,7 +301,7 @@ theorem Dsl.rel0_inv {R : PBij} : ∀ k a x y, Dsl.rel0 R k a x y ↔ Dsl.rel0 R
   | .fresh, _, _, _ => Iff.rfl
   | .spec, _, _, _ | .service, _, _, _ | .command, _, _, _ | .query, _, _, _ | .machine, _, _, _
   | .reaction, _, _, _ | .external, _, _, _ | .externalCommand, _, _, _ | .externalQuery, _, _, _
-  | .source, _, _, _ | .declared, _, _, _ | .effect, _, _, _ | .subscription, _, _, _ | .bounds, _, _, _
+  | .source, _, _, _ | .declared, _, _, _ | .effect, _, _, _ | .subscription, _, _, _ | .model, _, _, _ | .scope, _, _, _ | .values, _, _, _
   | .create, _, _, _ | .response, _, _, _ | .scenario, _, _, _ | .step, _, _, _ | .sender, _, _, _
   | .closure, _, _, _ | .effectClosure, _, _, _ => Iff.rfl
 
@@ -724,6 +724,10 @@ structure ServiceV.Self (v : ServiceV) : Prop where
 
 end Self
 
+/-- A scope changes only a service's bounds, which `ServiceV.Self` does not read. -/
+theorem ScopeV.apply_self {R : PBij} {sc : ScopeV} {v : ServiceV} (h : v.Self R) : (sc.apply v).Self R := by
+  exact ⟨h.init, h.apply, h.subscribes, h.commands, h.queries, h.machines, h.reactions, h.invariants⟩
+
 /-- A subscription without the source `spec` finds for it. -/
 def SubscriptionV.stripped {e : Ty} (s : SubscriptionV e) : SubscriptionV e := { s with source := "" }
 
@@ -744,6 +748,7 @@ def Dsl.relV (R : PBij) : (k : Dsl) → (a : List Ty) → (Dsl.val k a).1 → (D
   | .sender, _, x, y => Sender.Rel R x y
   | .subscription, [_], x, y => x.stripped = y.stripped → Fun.Rel R x.wrap x.wrap
   | .spec, _, s, s' => s = s' → ∀ v ∈ (s : SpecV).services, v.Self R
+  | .model, _, m, m' => m = m' → ∀ v ∈ (m : ModelV).scoped.services, v.Self R
   | .service, _, v, w => ServiceV.stripped v = ServiceV.stripped w → ServiceV.Self R v
   | .declared, _, d, d' => d = d' → DeclaredV.Self R d
   | .command, [_, _, _, _, _], x, y => x.1.name = y.1.name ∧ (x = y → x.1.Self R)

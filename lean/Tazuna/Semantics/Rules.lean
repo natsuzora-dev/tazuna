@@ -17,14 +17,16 @@ inductive Illegal where
   | owner
   /-- A subscription names a source that no service or external lists with that name and event type. -/
   | unknownSource
-  /-- A table field of the records has no `create` bound or more than one, or a `create` reads no table field. -/
+  /-- In a model's scope, a table field of the service's records has no `create` bound or more than one, or a `create`
+  reads no table field. -/
   | creates
   /-- A type that crosses the wire holds a function or a fresh-id source. -/
   | wireType
   /-- The records type or a machine's state type holds a function or a fresh-id source: the state is durable data, so
   every value of it can be written down, as a wire value can. -/
   | stateType
-  /-- A bound is negative. -/
+  /-- A bound is negative: the service's `cascade`, or in a model's scope `others_at_most` or a `create`'s `at_most`;
+  or the scope's `steps` is below 1. -/
   | bounds
   /-- A scenario step sends a request its service does not declare, two scenarios of a service share a name, or a
   scenario's name is no file name. -/
@@ -59,13 +61,19 @@ inductive Illegal where
   starts only when an event is applied, so the key would have no instance until the first event. Starting instances
   at time 0 would need effects at time 0, before any input. -/
   | initialInstances
+  /-- A model gives a service no scope or more than one, or a scope to a service its spec does not have; a scope's
+  create bounds read records of another type than its service's; a value set names no input kind of its service, or
+  one input kind twice; or the resource limit, `explore_states` or a wait is below 1, or `explore_depth` below 0. The
+  scope is what prove and generate check a service in, so each service has exactly one, and every value it holds is
+  one they can use. -/
+  | model
 deriving Repr, DecidableEq
 
 namespace Illegal
 
 def all : List Illegal :=
   [wireName, owner, unknownSource, creates, wireType, stateType, bounds, scenario, rejection, machineKey, unknownHandle,
-    handleName, tableKey, response, tagLabel, callers, initialInstances]
+    handleName, tableKey, response, tagLabel, callers, initialInstances, model]
 
 theorem mem_all (k : Illegal) : k ∈ all := by cases k <;> simp [all]
 
@@ -87,6 +95,7 @@ def name : Illegal → String
   | tagLabel => "tagLabel"
   | callers => "callers"
   | initialInstances => "initialInstances"
+  | model => "model"
 
 end Illegal
 
@@ -404,9 +413,10 @@ def ServiceV.lists (v : ServiceV) (h : HandleSite) : Bool :=
 
 /-- Every broken structure rule of `s`, whose user types are `T` and whose program makes `handles` and kept functions
 capturing values of the types `captures`, and whose service `v`'s own sends can name the handles `sent v`, with a
-message naming the definition. -/
+message naming the definition. The create rules read a model's scope, so they apply only where `s` is `inScope`
+(`ModelV.scoped`). -/
 def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) (captures : List (SiteId × List Ty))
-    (sent : ServiceV → List HandleSite) : List (Illegal × String) :=
+    (sent : ServiceV → List HandleSite) (inScope : Bool) : List (Illegal × String) :=
   let tagLabels := T.flatMap fun d => d.variants.filterMap fun var =>
     if var.fields.any (·.label == some "tag") then
       some (Illegal.tagLabel, s!"{d.name}.{var.name} has a field labelled tag, the key its variant's name sits under on the wire; rename the field")
@@ -451,7 +461,7 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) (c
       some (Illegal.machineKey, s!"{v.name}.{m.name}: the instance key type has no canonical order the solver can compare; use Int, String, Date, Id, Bool, an enumeration, or a tuple or one-variant record of these")
     let probes := tableProbes T v.records
     let reads := v.bounds.creates.map (·.reads probes)
-    let creates := (probes.filterMap fun (t, _) => match (reads.filter (·.contains t)).length with
+    let creates := if !inScope then [] else (probes.filterMap fun (t, _) => match (reads.filter (·.contains t)).length with
         | 0 => some (Illegal.creates, s!"{v.name}: the table {t} needs a create bound")
         | 1 => none
         | _ => some (Illegal.creates, s!"{v.name}: the table {t} has more than one create bound")) ++
@@ -529,5 +539,37 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) (c
     fun (x, d) => (Illegal.wireType, s!"{x}.{d.name}: its types cross the wire, so they hold no functions")
   (tagLabels ++ topNames ++ sharedOwners ++ perService ++ perExternal ++ unknownHandles ++ unlistedSends ++ capturedKeys ++
     declaredTypes).eraseDups
+
+/-- Whether the entry is an input kind of the service: a command or query it declares, a source it subscribes to, or an
+external command or query whose answers it may receive. -/
+def ServiceV.inputKind (v : ServiceV) : DeclaredV → Bool
+  | .command _ _ _ x => v.commands.any (·.name == x.name)
+  | .query _ _ x => v.queries.any (·.name == x.name)
+  | .source n t => v.subscribes.any fun sub => sub.name == n && (Ty.same sub.event t).isSome
+  | d => v.declared.any fun (_, d') => d'.same d
+
+/-- Every broken rule of the model's own: its scopes against its spec's services, and the values of each scope that
+the spec's rules do not read. The create and bound rules read the scoped spec (`SpecV.illegal` with `inScope`). -/
+def ModelV.illegal (m : ModelV) : List (Illegal × String) :=
+  let services := m.spec.services.map (·.name)
+  let limit := if m.rlimit < 1 then [(Illegal.model, s!"the resource limit {m.rlimit} is below 1")] else []
+  let unknown := (m.scopes.filter fun sc => !services.contains sc.service).map fun sc =>
+    (Illegal.model, s!"a scope names {sc.service}, which the spec does not define")
+  let perService := m.spec.services.flatMap fun v =>
+    match m.scopes.filter (·.service == v.name) with
+    | [] => [(Illegal.model, s!"{v.name} has no scope; give it one in the model's scopes")]
+    | [sc] =>
+      let records := if sc.creates.isEmpty || (Ty.same sc.records v.records).isSome then [] else
+        [(Illegal.model, s!"{v.name}: the scope's create bounds read records of another type than the service's")]
+      let caps := (if sc.exploreDepth < 0 then [(Illegal.model, s!"{v.name}: explore_depth is below 0")] else []) ++
+        (if sc.exploreStates < 1 then [(Illegal.model, s!"{v.name}: explore_states is below 1")] else []) ++
+        (sc.waits.filter (· < 1)).map fun w => (Illegal.model, s!"{v.name}: the wait {w} is below 1")
+      let values := (sc.values.filter fun vs => !v.inputKind vs.input).map (fun vs =>
+          (Illegal.model, s!"{v.name}: the values of the {vs.input.kind} {vs.input.name} are of no input kind of the service")) ++
+        (duplicates (sc.values.map fun vs => vs.input.kind ++ " " ++ vs.input.name)).map fun n =>
+          (Illegal.model, s!"{v.name}: more than one value set is of the {n}")
+      records ++ caps ++ values
+    | _ => [(Illegal.model, s!"{v.name} has more than one scope")]
+  limit ++ unknown ++ perService
 
 end Tazuna.Ir

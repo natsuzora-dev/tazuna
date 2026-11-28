@@ -531,17 +531,26 @@ pub fn service() -> tazuna.Service {
         },
       ),
     ],
-    bounds: tazuna.bounds(
-      creates: [
-        tazuna.create(
-          table: fn(records: Records) { records.payments },
-          at_most: 3,
-        ),
-      ],
-      others_at_most: 2,
-      cascade: 2,
-      steps: 4,
-    ),
+    cascade: 2,
     scenarios: [],
+  )
+}
+
+/// How far prove and generate look in this service.
+pub fn scope() -> tazuna.Scope {
+  tazuna.scope(
+    service: service(),
+    creates: [
+      tazuna.create(
+        table: fn(records: Records) { records.payments },
+        at_most: 3,
+      ),
+    ],
+    others_at_most: 2,
+    steps: 4,
+    explore_depth: 0,
+    explore_states: 1,
+    waits: [],
+    values: [],
   )
 }

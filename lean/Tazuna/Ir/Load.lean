@@ -201,11 +201,29 @@ def globalsOf (fileOf : String → Option String) (p : Surface.Program) : Except
   if let some n := nodup (all.map (·.name)) then throw ⟨none, none, s!"global {n} is defined twice"⟩
   return all
 
-/-- Loads the IR, requiring the root to be a function of type `rootTy` (the engine asks for `fn() -> tazuna.Spec`). -/
-def load (rootTy : Ty) (j : Lean.Json) : Except LoadError (Program rootTy) := do
-  let p ← match Surface.readProgram (builtinAliases.map (·.1)) j with
-    | .ok p => pure p
-    | .error e => throw ⟨none, e.pos, match e.global with | some g => s!"{g}: {e.message}" | none => e.message⟩
+def read (j : Lean.Json) : Except LoadError Surface.Program :=
+  match Surface.readProgram (builtinAliases.map (·.1)) j with
+  | .ok p => pure p
+  | .error e => throw ⟨none, e.pos, match e.global with | some g => s!"{g}: {e.message}" | none => e.message⟩
+
+/-- The model functions of the root module, by their names in it: functions that take nothing and return a
+`tazuna.Model`. -/
+def models (j : Lean.Json) : Except LoadError (List String) := do
+  let p ← read j
+  let module := moduleOf p.root
+  return p.functions.filterMap fun f =>
+    match f.params, f.ret with
+    | [], .con "tazuna.Model" [] => if moduleOf f.name == module then (f.name.splitOn ".").getLast? else none
+    | _, _ => none
+
+/-- Loads the IR with the function `rootName` of the root module as its root, or the IR's own root where none is given,
+which must be a function of type `rootTy` (the engine asks for `spec() -> tazuna.Spec` or a model function's
+`fn() -> tazuna.Model`). -/
+def load (rootTy : Ty) (j : Lean.Json) (rootName : Option String := none) : Except LoadError (Program rootTy) := do
+  let p ← read j
+  let p := match rootName with
+    | some n => { p with root := moduleOf p.root ++ "." ++ n }
+    | none => p
   unless p.version == irVersion do
     throw ⟨none, none, s!"IR version {p.version}; this engine reads version {irVersion}"⟩
   let fileOf (g : String) := p.sources.lookup (moduleOf g)

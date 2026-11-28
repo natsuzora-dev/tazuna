@@ -123,7 +123,7 @@ theorem decode_isSome_of_relV : (t : Ty) → t.comparable = true → (x : t.den)
   | .dsl .command _, hc, _, _, _ | .dsl .query _, hc, _, _, _ | .dsl .machine _, hc, _, _, _
   | .dsl .reaction _, hc, _, _, _ | .dsl .external _, hc, _, _, _ | .dsl .externalCommand _, hc, _, _, _
   | .dsl .externalQuery _, hc, _, _, _ | .dsl .source _, hc, _, _, _ | .dsl .declared _, hc, _, _, _
-  | .dsl .subscription _, hc, _, _, _ | .dsl .bounds _, hc, _, _, _ | .dsl .create _, hc, _, _, _
+  | .dsl .subscription _, hc, _, _, _ | .dsl .model _, hc, _, _, _ | .dsl .scope _, hc, _, _, _ | .dsl .values _, hc, _, _, _ | .dsl .create _, hc, _, _, _
   | .dsl .response _, hc, _, _, _ | .dsl .scenario _, hc, _, _, _ | .dsl .step _, hc, _, _, _
   | .dsl .sender _, hc, _, _, _ | .dsl .closure _, hc, _, _, _ => by simp [Ty.comparable] at hc
 theorem decodeVs_isSome_of_relVs : (ts : List Ty) → Ty.comparables ts = true → (x : Ty.dens ts) → (vals : List Val) →

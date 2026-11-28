@@ -108,7 +108,7 @@ theorem ok_free : (t : Ty) → t.mentions i = false → (x : t.den) → Ok i okV
       exact fun xs _ => ok_free r hr _
     | .spec, _, _, _ | .service, _, _, _ | .command, _, _, _ | .query, _, _, _ | .machine, _, _, _
     | .reaction, _, _, _ | .external, _, _, _ | .externalCommand, _, _, _ | .externalQuery, _, _, _
-    | .source, _, _, _ | .declared, _, _, _ | .subscription, _, _, _ | .bounds, _, _, _ | .create, _, _, _
+    | .source, _, _, _ | .declared, _, _, _ | .subscription, _, _, _ | .model, _, _, _ | .scope, _, _, _ | .values, _, _, _ | .create, _, _, _
     | .response, _, _, _ | .scenario, _, _, _ | .step, _, _, _ | .sender, _, _, _ | .fresh, _, _, _ => trivial
     | .closure, [], _, _ | .closure, _ :: _ :: _, _, _ | .effect, [], _, _ | .effect, _ :: _ :: _, _, _
     | .effectClosure, [], _, _ => trivial

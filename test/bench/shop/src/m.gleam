@@ -33,3 +33,13 @@ pub fn spec() -> tazuna.Spec {
     ],
   )
 }
+
+pub fn model() -> tazuna.Model {
+  tazuna.model(spec: spec(), resource_limit: 50_000_000, scopes: [
+    catalog.scope(),
+    orders.scope(),
+    inventory.scope(),
+    payments.scope(),
+    shipping.scope(),
+  ])
+}

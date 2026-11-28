@@ -27,7 +27,7 @@ theorem CheckedSpec.equivariant (c : CheckedSpec) : ∀ v ∈ c.spec.services, v
   · have h := hk.stateTys
     simp only [ServiceV.stateTys, Bool.and_eq_true] at h
     exact comparable_of_embeddable _ h.2.1
-  · exact Var.get_rel c.program.root (Defs.eval_rel (R := R) c.program.defs) () () trivial rfl v hv
+  · exact c.self R v hv
 
 section
 variable {L : Layout} {v : ServiceV}

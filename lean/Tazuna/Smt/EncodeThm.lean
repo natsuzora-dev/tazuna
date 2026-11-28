@@ -155,7 +155,9 @@ def DslRel : (k : Dsl) → (a : List Ty) → (Ty.dsl k a).den → DslCode k a �
   | .declared, a, x, s => RelV L (.dsl .declared a) x (Term.denote M s)
   | .effect, a, x, s => RelV L (.dsl .effect a) x (Term.denote M s)
   | .subscription, a, x, s => RelV L (.dsl .subscription a) x (Term.denote M s)
-  | .bounds, a, x, s => RelV L (.dsl .bounds a) x (Term.denote M s)
+  | .model, a, x, s => RelV L (.dsl .model a) x (Term.denote M s)
+  | .scope, a, x, s => RelV L (.dsl .scope a) x (Term.denote M s)
+  | .values, a, x, s => RelV L (.dsl .values a) x (Term.denote M s)
   | .create, a, x, s => RelV L (.dsl .create a) x (Term.denote M s)
   | .response, a, x, s => RelV L (.dsl .response a) x (Term.denote M s)
   | .scenario, a, x, s => RelV L (.dsl .scenario a) x (Term.denote M s)
@@ -248,7 +250,7 @@ theorem relV_up : (t : Ty) → (h : t.isData = true) → (y : t.den0) → (v : V
   | .dsl .query _, _, _, _, hv | .dsl .machine _, _, _, _, hv | .dsl .reaction _, _, _, _, hv
   | .dsl .external _, _, _, _, hv | .dsl .externalCommand _, _, _, _, hv | .dsl .externalQuery _, _, _, _, hv
   | .dsl .source _, _, _, _, hv | .dsl .declared _, _, _, _, hv | .dsl .subscription _, _, _, _, hv
-  | .dsl .bounds _, _, _, _, hv | .dsl .create _, _, _, _, hv | .dsl .response _, _, _, _, hv
+  | .dsl .model _, _, _, _, hv | .dsl .scope _, _, _, _, hv | .dsl .values _, _, _, _, hv | .dsl .create _, _, _, _, hv | .dsl .response _, _, _, _, hv
   | .dsl .scenario _, _, _, _, hv | .dsl .step _, _, _, _, hv | .dsl .sender _, _, _, _, hv
   | .dsl .closure _, _, _, _, hv => by simp [RelV] at hv
 theorem relVs_up : (ts : List Ty) → (h : (Ty.tuple ts).isData = true) → (y : (Ty.semsWith Dsl.base ts).1) →
@@ -2773,10 +2775,15 @@ end
 theorem Defs.encode_agrees (M : Model) (L : Layout) : {G : List Ty} → (defs : Defs G) →
     GRel M L defs.eval (defs.encode L)
   | [], .nil => fun _ v => nomatch v
-  | _ :: _, .snoc defs _ body => by
+  | _ :: _, .snoc defs u body => by
     intro t v s c h hc
     cases v with
-    | here => exact Smt.encode_agrees defs _ _ (Defs.encode_agrees M L defs) body () () trivial s c h hc
+    | here =>
+      rw [show Var.here.enc (Defs.encode L (defs.snoc u body)) = (if u.ofModel = true then
+          .error (.limit (.unsortable u)) else Smt.encode L (defs.encode L) body ()) from rfl] at h
+      split at h
+      · cases h
+      · exact Smt.encode_agrees defs _ _ (Defs.encode_agrees M L defs) body () () trivial s c h hc
     | there v => exact Defs.encode_agrees M L defs t v s c h hc
 
 section

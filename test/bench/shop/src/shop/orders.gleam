@@ -481,21 +481,7 @@ pub fn service() -> tazuna.Service {
         },
       ),
     ],
-    bounds: tazuna.bounds(
-      creates: [
-        tazuna.create(
-          table: fn(records: Records) { records.orders },
-          at_most: 3,
-        ),
-        tazuna.create(
-          table: fn(records: Records) { records.prices },
-          at_most: 3,
-        ),
-      ],
-      others_at_most: 2,
-      cascade: 2,
-      steps: 4,
-    ),
+    cascade: 2,
     scenarios: [an_order_is_paid(), an_unpaid_order_expires()],
   )
 }
@@ -571,4 +557,21 @@ fn an_unpaid_order_expires() -> tazuna.Scenario(Records, Event, Caller) {
     tazuna.step_wait(for: 30 * shared.minute),
     tazuna.step_query(query: open_orders(), caller: Customer, input: "Aiko"),
   ])
+}
+
+/// How far prove and generate look in this service.
+pub fn scope() -> tazuna.Scope {
+  tazuna.scope(
+    service: service(),
+    creates: [
+      tazuna.create(table: fn(records: Records) { records.orders }, at_most: 3),
+      tazuna.create(table: fn(records: Records) { records.prices }, at_most: 3),
+    ],
+    others_at_most: 2,
+    steps: 4,
+    explore_depth: 0,
+    explore_states: 1,
+    waits: [],
+    values: [],
+  )
 }

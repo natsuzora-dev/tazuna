@@ -258,14 +258,7 @@ fn todo_service() -> tazuna.Service {
         },
       ),
     ],
-    bounds: tazuna.bounds(
-      creates: [
-        tazuna.create(table: fn(records: Records) { records.tasks }, at_most: 2),
-      ],
-      others_at_most: 1,
-      cascade: 2,
-      steps: 3,
-    ),
+    cascade: 2,
     scenarios: [remind_the_open_task()],
   )
 }
@@ -310,5 +303,24 @@ pub fn spec() -> tazuna.Spec {
     tazuna.external(name: "mailer", declares: [
       tazuna.declare_external_command(send()),
     ]),
+  ])
+}
+
+/// How far prove and generate look: at most two open tasks, one item in every
+/// other collection, and runs of up to three inputs.
+pub fn model() -> tazuna.Model {
+  tazuna.model(spec: spec(), resource_limit: 50_000_000, scopes: [
+    tazuna.scope(
+      service: todo_service(),
+      creates: [
+        tazuna.create(table: fn(records: Records) { records.tasks }, at_most: 2),
+      ],
+      others_at_most: 1,
+      steps: 3,
+      explore_depth: 6,
+      explore_states: 10_000,
+      waits: [hour],
+      values: [],
+    ),
   ])
 }

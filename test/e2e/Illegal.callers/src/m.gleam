@@ -74,7 +74,7 @@ pub fn spec() -> tazuna.Spec {
         reactions: [again()],
         invariants: fn(_r) { [] },
         responses: [],
-        bounds: tazuna.bounds(creates: [], others_at_most: 1, cascade: 2, steps: 2),
+        cascade: 2,
         scenarios: [],
       ),
     ],

@@ -12,8 +12,8 @@ namespace Tazuna.Smt
 
 structure Solver where
   path : String
-  /-- z3's deterministic resource limit, so the same script gets the same verdict on any machine. About 6 s of z3 on a
-  laptop; the largest question of the 3-service benchmark takes a third of it. -/
+  /-- z3's deterministic resource limit, so the same script gets the same verdict on any machine. prove and generate
+  take it from the model (`resource_limit`); this default is smt-check's. -/
   rlimit : Nat := 50000000
   /-- z3's random seeds, fixed so the same script gets the same answer, model included, on every run (Boogie sets
   the same two options). -/

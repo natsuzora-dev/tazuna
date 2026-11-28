@@ -470,6 +470,16 @@ theorem Prim.den_rel (p : Prim) (args : List Ty) (h : p.ok args = true) :
     refine ⟨hs.init, hs.apply, fun s hs' => ?_, hs.commands, hs.queries, hs.machines, hs.reactions, hs.invariants⟩
     obtain ⟨s0, hs0, rfl⟩ := List.mem_map.1 hs'
     exact hs.subscribes s0 hs0
+  | model =>
+    rintro ⟨sp, scs, rl, ⟨⟩⟩ ⟨sp', scs', rl', ⟨⟩⟩ ⟨hsp, -, -, -⟩ h
+    simp only [Prim.den] at h
+    obtain ⟨rfl, rfl, -⟩ := ModelV.mk.inj h
+    have hs := hsp rfl
+    intro v hv
+    obtain ⟨w, hw, rfl⟩ := List.mem_map.1 hv
+    split
+    · exact ScopeV.apply_self (hs w hw)
+    · exact hs w hw
   | service =>
     rintro ⟨n, ini, app, subs, ds, ms, xs, inv, rsp, bnd, scs, ⟨⟩⟩
       ⟨n', ini', app', subs', ds', ms', xs', inv', rsp', bnd', scs', ⟨⟩⟩
@@ -521,7 +531,7 @@ theorem Prim.den_rel (p : Prim) (args : List Ty) (h : p.ok args = true) :
     show Sender.Rel R (.reaction x.name) (.reaction x'.name)
     rw [hx]
     exact .reaction _
-  | external | bounds | create | response | scenario | stepCommand | stepQuery | stepWait
+  | external | scope | values | create | response | scenario | stepCommand | stepQuery | stepWait
   | stepAnswerCommand | stepAnswerQuery | stepEvent | stepCommandThen => intro _ _ _; trivial
 
 /-! The fundamental lemma. -/

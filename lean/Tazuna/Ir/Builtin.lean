@@ -56,7 +56,7 @@ def timeAliases : List (String × String × String) :=
     ("tazuna.ApplyCtx", "now", "Instant"),
     ("tazuna.QueryCtx", "now", "Instant"),
     ("tazuna.Timer", "at", "Instant"), ("response", "within", "Duration"),
-    ("response", "deadline", "Instant"), ("step_wait", "for", "Duration") ]
+    ("response", "deadline", "Instant"), ("step_wait", "for", "Duration"), ("scope", "waits", "Duration") ]
 
 /-- The built-in functions. -/
 inductive Prim where
@@ -70,7 +70,7 @@ inductive Prim where
   | spec | service | command | query | machine | reaction
   | external | externalCommand | externalQuery | source
   | declareCommand | declareQuery | declareSource | declareExternalCommand | declareExternalQuery
-  | requestCommand | requestQuery | sendCommand | sendQuery | subscribe | bounds | create | response
+  | requestCommand | requestQuery | sendCommand | sendQuery | subscribe | model | scope | values | create | response
   | scenario | stepCommand | stepQuery | stepWait | stepAnswerCommand | stepAnswerQuery | stepEvent | fromMachine | fromReaction | fresh | stepCommandThen
 deriving Repr, DecidableEq
 
@@ -171,13 +171,13 @@ def sig : Prim → PrimSig :=
       ret := .dsl .spec [] }
   | .service =>
     { name := "service",
-      doc := "A service. `apply` folds an event into the records: events are the only writes, so a time the records keep, such as a deadline, is written there from `ctx.now`. The service owns the commands, queries and sources it declares, and its scenarios run from `init` at time 0.",
+      doc := "A service. `apply` folds an event into the records: events are the only writes, so a time the records keep, such as a deadline, is written there from `ctx.now`. The service owns the commands, queries and sources it declares, and its scenarios run from `init` at time 0. `cascade` is the most internal steps one input may take: an input that needs more faults, in every command.",
       tvars := ["records", "event", "caller"], dataArgs := true, needsEq := [2],
       params := [l "name" .str, l "init" a, l "apply" (kept (.fn [.applyCtx a, b] a)),
         l "subscribes" (.list (.dsl .subscription [b])), l "declares" (.list (.dsl .declared [a, b, param 2])),
         l "machines" (.list (.dsl .machine [a, b])),
         l "reactions" (.list (.dsl .reaction [a, b])), l "invariants" (kept (.fn [a] Ty.rules)),
-        l "responses" (.list (.dsl .response [a, b])), l "bounds" (.dsl .bounds [a]),
+        l "responses" (.list (.dsl .response [a, b])), l "cascade" .int,
         l "scenarios" (.list (.dsl .scenario [a, b, param 2]))],
       ret := .dsl .service [] }
   | .command =>
@@ -283,12 +283,26 @@ def sig : Prim → PrimSig :=
     { name := "subscribe", doc := "Receives the events of another service's or an external's source as this service's events.",
       tvars := ["event", "source"], dataArgs := true,
       params := [l "to" (.dsl .source [b]), l "wrap" (kept (.fn [b] a))], ret := .dsl .subscription [a] }
-  | .bounds =>
-    { name := "bounds",
-      doc := "How far checking goes: records per table (`creates`); items per bag and per table no create bounds (`others_at_most`), which covers bags in records and values, tables in values, each machine's table of instances and the pending requests; internal steps per input; steps per run (at least 1). prove and generate name each bag and table type a bound gave slots, a machine's table by the machine. `cascade` is also part of the meaning: an input that needs more internal steps than `cascade` faults, in `test` and `verify` as in `prove`.",
+  | .model =>
+    { name := "model",
+      doc := "A model: the spec, the scope prove and generate check each of its services in, and the solver's resource limit per question, z3's deterministic `rlimit`, which decides the same answers on every machine. A model function is a function of the root module that takes nothing and returns a `Model`; `--model <name>` picks one, and with a single one it is the one. Each line whose verdict rests on the scope names the model and the values it rests on.",
+      tvars := [],
+      params := [l "spec" Ty.spec, l "scopes" (.list (.dsl .scope [])), l "resource_limit" .int],
+      ret := .dsl .model [] }
+  | .scope =>
+    { name := "scope",
+      doc := "How far prove and generate look in `service`: records per table (`creates`); items per bag and per table no create bounds (`others_at_most`), which covers bags in records and values, tables in values, each machine's table of instances and the pending requests; and inputs per run that generate's solver search unrolls (`steps`, at least 1). The rest is the explicit-state search's, which stops after `explore_depth` inputs or `explore_states` states and tries the durations `waits` for the clock and the Ints of `values` for an input kind's Int fields: check validates these, and no command reads them yet. prove and generate name each bag and table type a bound gave slots, a machine's table by the machine.",
       tvars := ["records"], dataArgs := true,
-      params := [l "creates" (.list (.dsl .create [a])), l "others_at_most" .int, l "cascade" .int, l "steps" .int],
-      ret := .dsl .bounds [a] }
+      params := [l "service" (.dsl .service []), l "creates" (.list (.dsl .create [a])), l "others_at_most" .int,
+        l "steps" .int, l "explore_depth" .int, l "explore_states" .int, l "waits" (.list .int),
+        l "values" (.list (.dsl .values []))],
+      ret := .dsl .scope [] }
+  | .values =>
+    { name := "values",
+      doc := "The Ints the explicit-state search tries for every Int field of an input of the kind `of`: a command or query the service declares, a source it subscribes to, or an external command or query whose answers it receives. No command reads them yet.",
+      tvars := ["records", "event", "caller"], dataArgs := true,
+      params := [l "of" (.dsl .declared [a, b, param 2]), l "ints" (.list .int)],
+      ret := .dsl .values [] }
   | .create =>
     { name := "create",
       doc := "At most this many records in the table that `table` reads, a table field of the records, at any time.",
@@ -367,7 +381,7 @@ def all : List Prim :=
    .dateDaysBetween, .require, .tableLookup, .spec, .service, .command, .query, .machine, .reaction,
    .external, .externalCommand, .externalQuery, .source, .declareCommand, .declareQuery, .declareSource,
    .declareExternalCommand, .declareExternalQuery, .requestCommand, .requestQuery,
-   .sendCommand, .sendQuery, .subscribe, .bounds, .create, .response, .scenario, .stepCommand, .stepQuery, .stepWait,
+   .sendCommand, .sendQuery, .subscribe, .model, .scope, .values, .create, .response, .scenario, .stepCommand, .stepQuery, .stepWait,
    .stepAnswerCommand, .stepAnswerQuery, .stepEvent, .fromMachine, .fromReaction, .fresh, .stepCommandThen]
 
 theorem mem_all (p : Prim) : p ∈ all := by cases p <;> simp [all]

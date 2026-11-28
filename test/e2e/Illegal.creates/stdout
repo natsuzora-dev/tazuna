@@ -1,1 +1,1 @@
-{"kind":"Illegal.creates","message":"tasks: the table tasks needs a create bound"}
+{"kind":"Illegal.creates","message":"model model(): tasks: the table tasks needs a create bound"}

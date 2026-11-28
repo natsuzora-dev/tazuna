@@ -419,18 +419,7 @@ pub fn service() -> tazuna.Service {
         },
       ),
     ],
-    bounds: tazuna.bounds(
-      creates: [
-        tazuna.create(
-          table: fn(records: Records) { records.products },
-          at_most: 3,
-        ),
-        tazuna.create(table: fn(records: Records) { records.sales }, at_most: 2),
-      ],
-      others_at_most: 2,
-      cascade: 1,
-      steps: 4,
-    ),
+    cascade: 1,
     scenarios: [a_sale_runs_for_a_day()],
   )
 }
@@ -456,4 +445,24 @@ fn a_sale_runs_for_a_day() -> tazuna.Scenario(Records, Event, Caller) {
     tazuna.step_wait(for: shared.day),
     tazuna.step_query(query: price_of(), caller: Customer, input: "MUG-01"),
   ])
+}
+
+/// How far prove and generate look in this service.
+pub fn scope() -> tazuna.Scope {
+  tazuna.scope(
+    service: service(),
+    creates: [
+      tazuna.create(
+        table: fn(records: Records) { records.products },
+        at_most: 3,
+      ),
+      tazuna.create(table: fn(records: Records) { records.sales }, at_most: 2),
+    ],
+    others_at_most: 2,
+    steps: 4,
+    explore_depth: 0,
+    explore_states: 1,
+    waits: [],
+    values: [],
+  )
 }

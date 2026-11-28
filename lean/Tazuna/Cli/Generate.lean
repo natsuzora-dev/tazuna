@@ -7,7 +7,7 @@ import Tazuna.Trace.Verify
 
 /-! The `generate` command: for each target of each service (`targets`), the shortest run from the initial state whose
 last step shows the target's class of out line, found by deepening an unrolled run (`unrollBase` with `genGoal`) from one
-step to the spec's `steps` bound, each depth asked as cubes that fix the kinds of its last steps (`searchDepths`). A
+step to the scope's `steps`, each depth asked as cubes that fix the kinds of its last steps (`searchDepths`). A
 model is played back in Lean: its inputs are decoded and written with the trace writer scenarios use (`foundTrace`),
 whose lines read as the spec, so verify replays them as passed unless it runs out of tries, and the trace is written
 only when its last step shows the target (`generate_reaches`). A target whose cubes have no model at any depth is
@@ -228,13 +228,15 @@ def once {α : Type} (f : IO α) : IO (IO α) := do
 
 def generate (root dir path : String) (opts : Options) : Cmd Unit := do
   let start ← IO.monoMsNow
-  match ← loadSpec root path with
+  match ← loadModel root path opts.model with
   | none => pure ()
-  | some c =>
+  | some (c, name, model) =>
+    let rm : RunModel := ⟨name, model⟩
     -- At most `jobs` solvers run at once, and at most `jobs` depth builds; a search builds its cubes' scripts while
     -- others' solvers run.
     let gate ← Std.Semaphore.new opts.jobs
-    let solver := { (← Solver.find) with gate := some gate, deadline := opts.timeout.map (start + 1000 * ·) }
+    let deadline := opts.timeout.map (start + 1000 * ·)
+    let solver := { (← Solver.find) with gate := some gate, rlimit := model.rlimit.toNat, deadline }
     let pool ← Std.Semaphore.new opts.jobs
     -- The engine's own digest names this build in the direct keys of prove's questions, which generate shares.
     let engine ← IO.asTask (prio := .dedicated) do return Sha256.hex (← IO.FS.readBinFile (← IO.appPath))
@@ -366,7 +368,7 @@ def generate (root dir path : String) (opts : Options) : Cmd Unit := do
       -- target at its last step.
       | .search (.noModel k) =>
         unwrite
-        printLine (.generate .unreached) (common ++ [("steps", Lean.toJson k), ("bounds", Json.arr job.scope.toArray),
+        printLine (.generate .unreached) (common ++ [rm.field [("bounds", Json.arr job.scope.toArray), ("steps", Lean.toJson k)],
           ("assumes", Json.arr (Step.Assumption.ofRuns.map (Json.str ·.text)).toArray)])
       -- Every kind's dead-target question is unsat, so no step shows the target, at any depth: of every run where no
       -- step can go past the slots and every input and the initial state fit (`unshown_sound`), else of every run
@@ -377,7 +379,7 @@ def generate (root dir path : String) (opts : Options) : Cmd Unit := do
         match ← job.deadScope with
         | .error m => return ← internal m
         | .ok none => printLine (.generate .unreachable) fields
-        | .ok (some bs) => printLine (.generate .unreachableWithinBounds) (fields ++ [("bounds", Json.arr bs.toArray)])
+        | .ok (some bs) => printLine (.generate .unreachableWithinBounds) (fields ++ [rm.field [("bounds", Json.arr bs.toArray)]])
       | .brk (.found d (.ok (tr, f))) =>
         write tr
         printLine (.generate .violated) (common ++ [("file", Json.str job.file), ("steps", Lean.toJson d),
@@ -389,11 +391,11 @@ def generate (root dir path : String) (opts : Options) : Cmd Unit := do
       -- the last fault nowhere, breaks the target at its last step.
       | .brk (.noModel k) =>
         unwrite
-        printLine (.generate .unsettled) (common ++ [("steps", Lean.toJson k), ("bounds", Json.arr job.scope.toArray),
+        printLine (.generate .unsettled) (common ++ [rm.field [("bounds", Json.arr job.scope.toArray), ("steps", Lean.toJson k)],
           ("assumes", Json.arr #[Json.str Step.Assumption.validInputs.text, Json.str "no step before the last faults"])])
       | .search (.undecided kind fields) | .brk (.undecided kind fields) =>
         unwrite
-        printLine kind (common ++ fields)
+        printLine kind (rm.undecided kind (common ++ fields))
       | .settled | .brk .dead => unwrite
     unless unfinished.isEmpty do
       printLine .unfinished [("targets", Json.arr (unfinished.map Json.str))]

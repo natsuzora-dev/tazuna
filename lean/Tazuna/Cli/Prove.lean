@@ -479,14 +479,14 @@ def blocks (service : String) (g : Target) : Report → Bool
 /-- The line of a report, given the targets not proved and the bounds each input kind's step can go past (none: the
 bound question was unsat). A bound question prints no line of its own: it decides whether its kind's target lines say
 proved or within the bounds. -/
-def lineOf (unproved : String → List Target) (past : String → String → Option (List Json)) :
+def lineOf (m : RunModel) (unproved : String → List Target) (past : String → String → Option (List Json)) :
     Report → Option (Kind × List (String × Json))
   | .unsat s step (some g) =>
     let common := [("service", Json.str s), ("target", Json.str g.text), ("step", Json.str step), assumes s step g] ++
       widenedField g
     some <| match past s step with
       | none => (.prove .proved, common)
-      | some bs => (.prove .withinBounds, common ++ [("bounds", Json.arr bs.toArray)])
+      | some bs => (.prove .withinBounds, common ++ [m.field [("bounds", Json.arr bs.toArray)]])
   | .unsat _ _ none | .boundReached .. => none
   | .violated s step g fields =>
     -- The initial state is the one state known to be reached; any other is a counterexample to induction.
@@ -494,8 +494,8 @@ def lineOf (unproved : String → List Target) (past : String → String → Opt
       [("service", Json.str s), ("target", Json.str g.text), ("step", Json.str step)] ++ fields ++
       [assumes s step g] ++ widenedField g)
   | .undecided k s step g fields =>
-    some (k, [("service", Json.str s)] ++ (g.map fun g => ("target", Json.str g.text)).toList ++
-      [("step", Json.str step)] ++ fields ++ g.toList.flatMap widenedField)
+    some (k, m.undecided k ([("service", Json.str s)] ++ (g.map fun g => ("target", Json.str g.text)).toList ++
+      [("step", Json.str step)] ++ fields ++ g.toList.flatMap widenedField))
 where
   /-- A pair line's own kinds that stand for any handle or site of their type, where it has any. -/
   widenedField : Target → List (String × Json)
@@ -538,10 +538,11 @@ def Placed.target : Placed → Option String
 set_option linter.tazuna.silentDefault false in
 def prove (root path : String) (opts : Options) : Cmd Unit := do
   let start ← IO.monoMsNow
-  match ← loadSpec root path with
+  match ← loadModel root path opts.model with
   | none => pure ()
-  | some c =>
-    let solver := { (← Solver.find) with deadline := opts.timeout.map (start + 1000 * ·) }
+  | some (c, name, model) =>
+    let rm : RunModel := ⟨name, model⟩
+    let solver := { (← Solver.find) with rlimit := model.rlimit.toNat, deadline := opts.timeout.map (start + 1000 * ·) }
     -- The engine's own digest names this build in the direct keys; it is read while the questions are built.
     let engine ← IO.asTask (prio := .dedicated) do return Sha256.hex (← IO.FS.readBinFile (← IO.appPath))
     let mut items : List Item := []
@@ -631,7 +632,7 @@ def prove (root path : String) (opts : Options) : Cmd Unit := do
     let past (s step : String) : Option (List Json) :=
       if step == "init" then none else reach s (left s (· == step))
     for r in reports do
-      if let some (kind, fields) := lineOf unproved past r then printLine kind fields
+      if let some (kind, fields) := lineOf rm unproved past r then printLine kind fields
     -- A dead target is a fact, not a verdict: only where every kind's question is unsat (`unshown_sound` at any depth,
     -- else `unshown_within`); a model or no answer says nothing, and stops its family's questions.
     for (s, g, r) in deads do
@@ -645,7 +646,7 @@ def prove (root path : String) (opts : Options) : Cmd Unit := do
           ("assumes", Json.arr (Step.Assumption.ofRuns.map (Json.str ·.text)).toArray)]
         match reach s false with
         | none => printLine (.prove .unreachable) fields
-        | some bs => printLine (.prove .unreachableWithinBounds) (fields ++ [("bounds", Json.arr bs.toArray)])
+        | some bs => printLine (.prove .unreachableWithinBounds) (fields ++ [rm.field [("bounds", Json.arr bs.toArray)]])
     unless unfinished.isEmpty do
       let left := unfinished.flatMap fun s =>
         ((placed.toList.filter (·.service == s)).filterMap (·.target) ++

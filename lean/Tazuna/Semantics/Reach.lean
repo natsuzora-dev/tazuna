@@ -118,7 +118,9 @@ def Reach : (t : Ty) → t.den → Prop
   | .dsl .subscription [_], x => (x : SubscriptionV _).wrap.asSite ∈ P
   | .dsl .response [_, _], r => (r : ResponseV _ _).after.asSite ∈ P ∧ r.then_.asSite ∈ P ∧ r.deadline.asSite ∈ P
   | .dsl .create [_], x => (x : CreateV _).table.asSite ∈ P
-  | .dsl .bounds [_], b => ∀ x ∈ (b : BoundsV _).creates, x.table.asSite ∈ P
+  | .dsl .scope _, sc => ∀ x ∈ (sc : ScopeV).creates, x.table.asSite ∈ P
+  | .dsl .model _, m => (∀ v ∈ (m : ModelV).spec.services, ServiceV.Reach P E v) ∧
+      ∀ sc ∈ m.scopes, ∀ x ∈ sc.creates, x.table.asSite ∈ P
   | .dsl .machine [_, _], m => MachineV.Reach P E m
   | .dsl .reaction [_, _], x => ReactionV.Reach P E x
   | .dsl .service _, v => ServiceV.Reach P E v
@@ -369,9 +371,12 @@ theorem Prim.reach (p : Prim) (args : List Ty) (h : p.ok args = true) : Reach P 
   case create =>
     rintro ⟨table, atMost, ⟨⟩⟩ ⟨ht, -⟩
     exact ht
-  case bounds =>
-    rintro ⟨creates, items, cascade, steps, ⟨⟩⟩ ⟨hc, -⟩
+  case scope =>
+    rintro ⟨v, creates, items, steps, depth, states, waits, vs, ⟨⟩⟩ ⟨-, hc, -⟩
     exact hc
+  case model =>
+    rintro ⟨sp, scopes, rlimit, ⟨⟩⟩ ⟨hs, hc, -⟩
+    exact ⟨hs, hc⟩
   case command =>
     rintro ⟨name, callers, accepts, decide, ensures, ⟨⟩⟩ ⟨-, -, ha, hd, he, -⟩
     exact ⟨ha, hd, he⟩
@@ -386,7 +391,7 @@ theorem Prim.reach (p : Prim) (args : List Ty) (h : p.ok args = true) : Reach P 
     exact hw
   case service =>
     rintro ⟨name, init, apply, subs, decl, ms, xs, inv, resp, bnds, scs, ⟨⟩⟩ ⟨-, -, ha, hs, hd, hm, hx, hi, hr, hb, -⟩
-    refine ⟨hm, hx, ha, hi, fun x hx' => ?_, fun x hx' => ?_, hs, hr, hb⟩
+    refine ⟨hm, hx, ha, hi, fun x hx' => ?_, fun x hx' => ?_, hs, hr, fun _ h => nomatch h⟩
     · obtain ⟨d, hdm, hdx⟩ := List.mem_filterMap.1 hx'
       have hdr := hd d hdm
       cases d with
@@ -554,6 +559,32 @@ theorem Defs.reach : {G : List Ty} → (D : Defs G) → (∀ s ∈ D.effectSites
   | _ :: _, .snoc defs _ _, hE, _, .there v, hu => by
     simp only [Defs.usesAt, Defs.uses, Var.idx, List.getD_cons_succ] at hu
     exact Defs.reach defs (sub_l hE) v hu
+
+/-- A scope keeps a service's kept functions, and its create bounds reach only `P`. -/
+theorem creates_cast {r r' : Ty} (h : r = r') (l : List (CreateV r)) (hl : ∀ x ∈ l, x.table.asSite ∈ P) :
+    ∀ x ∈ (h ▸ l : List (CreateV r')), x.table.asSite ∈ P := by
+  subst h
+  exact hl
+
+theorem ScopeV.apply_reach {sc : ScopeV} {v : ServiceV} (hv : ServiceV.Reach P E v)
+    (hc : ∀ x ∈ sc.creates, x.table.asSite ∈ P) : ServiceV.Reach P E (sc.apply v) := by
+  refine { hv with creates := ?_ }
+  show ∀ x ∈ sc.createsOf v, x.table.asSite ∈ P
+  unfold ScopeV.createsOf
+  split
+  · rename_i h _
+    exact creates_cast P h sc.creates hc
+  · intro _ h; nomatch h
+
+/-- So does every service of the spec a model scopes. -/
+theorem ModelV.scoped_reach {m : ModelV} (h : Reach P E (.dsl .model []) m) :
+    ∀ v ∈ m.scoped.services, ServiceV.Reach P E v := by
+  intro v hv
+  obtain ⟨w, hw, rfl⟩ := List.mem_map.1 hv
+  split
+  · rename_i sc hsc
+    exact ScopeV.apply_reach P (h.1 w hw) (h.2 sc (List.mem_of_find?_eq_some hsc))
+  · exact h.1 w hw
 
 /-- The structure a program evaluates to reaches only the program's sites and effect sites. -/
 theorem Program.reach {t : Ty} (p : Program t) : Reach p.defs.sites p.defs.effectSites t p.eval :=

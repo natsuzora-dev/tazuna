@@ -1141,12 +1141,16 @@ theorem envCodes_notFn {L : Layout} : (Γ : List Ty) → (ρ : Ty.dens Γ) → (
 theorem Defs.encode_exact (M : Model) (L : Layout) : {G : List Ty} → (defs : Defs G) →
     GFRel M L defs.eval (defs.fits L.count) (defs.encode L)
   | [], .nil => fun _ v => nomatch v
-  | _ :: _, .snoc defs _ body => by
+  | _ :: _, .snoc defs u body => by
     intro t v s c h
     cases v with
     | here =>
-      exact Smt.encode_exact defs _ _ _ (Defs.encode_agrees M L defs) (Defs.encode_exact M L defs) body () () () trivial
-        trivial s c h
+      rw [show Var.here.enc (Defs.encode L (defs.snoc u body)) = (if u.ofModel = true then
+          .error (.limit (.unsortable u)) else Smt.encode L (defs.encode L) body ()) from rfl] at h
+      split at h
+      · cases h
+      · exact Smt.encode_exact defs _ _ _ (Defs.encode_agrees M L defs) (Defs.encode_exact M L defs) body () () ()
+          trivial trivial s c h
     | there v => exact Defs.encode_exact M L defs t v s c h
 
 /-- A kept function's condition is exact: it holds exactly when its source's evaluation fits, and where it holds its

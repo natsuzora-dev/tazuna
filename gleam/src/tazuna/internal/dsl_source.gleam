@@ -67,8 +67,14 @@ pub type Effect(event)
 /// Another service's event, received as one of this service's.
 pub type Subscription(event)
 
-/// How far checking goes.
-pub type Bounds(records)
+/// A spec with the scope prove and generate check it in. The scope changes which answers they can give, never what the spec means.
+pub type Model
+
+/// How far prove and generate look in one service: slots, run length, explore caps, values.
+pub type Scope
+
+/// The Ints the explicit-state search tries for one input kind.
+pub type Values
 
 /// At most how many records one table of the records holds at any time.
 pub type Create(records)
@@ -173,7 +179,7 @@ pub fn spec(
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// A service. `apply` folds an event into the records: events are the only writes, so a time the records keep, such as a deadline, is written there from `ctx.now`. The service owns the commands, queries and sources it declares, and its scenarios run from `init` at time 0.
+/// A service. `apply` folds an event into the records: events are the only writes, so a time the records keep, such as a deadline, is written there from `ctx.now`. The service owns the commands, queries and sources it declares, and its scenarios run from `init` at time 0. `cascade` is the most internal steps one input may take: an input that needs more faults, in every command.
 pub fn service(
   name _name: String,
   init _init: records,
@@ -184,7 +190,7 @@ pub fn service(
   reactions _reactions: List(Reaction(records, event)),
   invariants _invariants: fn(records) -> Rules,
   responses _responses: List(Response(records, event)),
-  bounds _bounds: Bounds(records),
+  cascade _cascade: Int,
   scenarios _scenarios: List(Scenario(records, event, caller)),
 ) -> Service {
   panic as \"tazuna's built-ins run only in the engine\"
@@ -340,13 +346,34 @@ pub fn subscribe(
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// How far checking goes: records per table (`creates`); items per bag and per table no create bounds (`others_at_most`), which covers bags in records and values, tables in values, each machine's table of instances and the pending requests; internal steps per input; steps per run (at least 1). prove and generate name each bag and table type a bound gave slots, a machine's table by the machine. `cascade` is also part of the meaning: an input that needs more internal steps than `cascade` faults, in `test` and `verify` as in `prove`.
-pub fn bounds(
+/// A model: the spec, the scope prove and generate check each of its services in, and the solver's resource limit per question, z3's deterministic `rlimit`, which decides the same answers on every machine. A model function is a function of the root module that takes nothing and returns a `Model`; `--model <name>` picks one, and with a single one it is the one. Each line whose verdict rests on the scope names the model and the values it rests on.
+pub fn model(
+  spec _spec: Spec,
+  scopes _scopes: List(Scope),
+  resource_limit _resource_limit: Int,
+) -> Model {
+  panic as \"tazuna's built-ins run only in the engine\"
+}
+
+/// How far prove and generate look in `service`: records per table (`creates`); items per bag and per table no create bounds (`others_at_most`), which covers bags in records and values, tables in values, each machine's table of instances and the pending requests; and inputs per run that generate's solver search unrolls (`steps`, at least 1). The rest is the explicit-state search's, which stops after `explore_depth` inputs or `explore_states` states and tries the durations `waits` for the clock and the Ints of `values` for an input kind's Int fields: check validates these, and no command reads them yet. prove and generate name each bag and table type a bound gave slots, a machine's table by the machine.
+pub fn scope(
+  service _service: Service,
   creates _creates: List(Create(records)),
   others_at_most _others_at_most: Int,
-  cascade _cascade: Int,
   steps _steps: Int,
-) -> Bounds(records) {
+  explore_depth _explore_depth: Int,
+  explore_states _explore_states: Int,
+  waits _waits: List(Duration),
+  values _values: List(Values),
+) -> Scope {
+  panic as \"tazuna's built-ins run only in the engine\"
+}
+
+/// The Ints the explicit-state search tries for every Int field of an input of the kind `of`: a command or query the service declares, a source it subscribes to, or an external command or query whose answers it receives. No command reads them yet.
+pub fn values(
+  of _of: Declared(records, event, caller),
+  ints _ints: List(Int),
+) -> Values {
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
@@ -716,7 +743,9 @@ pub const builtins = [
   "tazuna.send_command",
   "tazuna.send_query",
   "tazuna.subscribe",
-  "tazuna.bounds",
+  "tazuna.model",
+  "tazuna.scope",
+  "tazuna.values",
   "tazuna.create",
   "tazuna.response",
   "tazuna.scenario",
@@ -790,7 +819,9 @@ pub const structure_types = [
   "tazuna.Declared",
   "tazuna.Effect",
   "tazuna.Subscription",
-  "tazuna.Bounds",
+  "tazuna.Model",
+  "tazuna.Scope",
+  "tazuna.Values",
   "tazuna.Create",
   "tazuna.Response",
   "tazuna.Scenario",

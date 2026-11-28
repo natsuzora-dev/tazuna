@@ -48,7 +48,7 @@ A pair whose orders differ, in a state a run reaches, is a bug in the spec, and 
 
 Everything a verdict depends on appears in the spec or in the output:
 
-- The spec writes its bounds. No command-line flag changes them, so the spec under review is the scope of every verdict.
+- Meaning and scope live apart. `spec()` holds only what the spec means. A model function beside it, such as `pub fn model() -> tazuna.Model`, holds the scope `prove` and `generate` check it in: the slots, how long a searched run gets, and the solver's resource limit. A root module may define any number of models, as a TLA+ spec has many `.cfg` files and an Alloy module many `run` commands, and `--model <name>` picks one. Every line whose verdict rests on the scope names the model and the values it read. No other flag changes the scope; `--timeout` only stops the run.
 - A verdict prints what it assumes in `assumes`.
 - An undecided line says why it has no verdict, such as the solver's answer or the limit a search hit.
 - No counterexample within the bounds is a success, `Prove.withinBounds`, as Alloy reports no counterexample within its scope. Otherwise every spec with a growing table would exit 2.
@@ -75,7 +75,7 @@ A service has:
 - queries, which answer from the records, write nothing, and make no ids.
 - machines and reactions, which react to each event.
 - invariants and responses, which `prove` checks. A response says "after each event `trigger`, an event that answers it within `within` ms". Its `deadline` reads the deadline the records keep for a trigger that waits for its answer, so `prove` checks the response step by step, as it checks an invariant. Whatever answers a trigger must change what `deadline` reads.
-- bounds and scenarios.
+- `cascade`, the most internal steps one input may take, and scenarios.
 
 A step takes one input and gives one outcome: accepted, answered, rejected, invalid, or fault.
 A fault is a bug in the spec, never a rejection: a broken invariant or `ensures` rule, more internal steps than `cascade`, an own effect that asks for what its target does not accept, or an answer that names no pending request.

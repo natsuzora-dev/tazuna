@@ -39,11 +39,26 @@ fn tasks(name: String) -> tazuna.Service {
     reactions: [],
     invariants: fn(_r) { [] },
     responses: [],
-    bounds: tazuna.bounds(creates: [], others_at_most: 3, cascade: 10, steps: 5),
+    cascade: 10,
     scenarios: [],
   )
 }
 
 pub fn spec() -> tazuna.Spec {
   tazuna.spec(services: [tasks("tasks")], externals: [])
+}
+
+pub fn model() -> tazuna.Model {
+  tazuna.model(spec: spec(), resource_limit: 50_000_000, scopes: [
+    tazuna.scope(
+      service: tasks("tasks"),
+      creates: [],
+      others_at_most: 3,
+      steps: 5,
+      explore_depth: 0,
+      explore_states: 1,
+      waits: [],
+      values: [],
+    ),
+  ])
 }

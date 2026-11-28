@@ -45,15 +45,7 @@ fn watcher() -> tazuna.Service {
     reactions: [],
     invariants: fn(r: Records) { [#("in step", [r.seen] == [r.last])] },
     responses: [],
-    bounds: tazuna.bounds(
-      creates: [
-        tazuna.create(table: fn(r: Records) { r.seen }, at_most: 2),
-        tazuna.create(table: fn(r: Records) { r.last }, at_most: 2),
-      ],
-      others_at_most: 1,
-      cascade: 1,
-      steps: 5,
-    ),
+    cascade: 1,
     scenarios: [],
   )
 }
@@ -118,16 +110,12 @@ fn both() -> tazuna.Reaction(AskRecords, AskEvent) {
     react: fn(c: tazuna.ReactionCtx(AskRecords), e: AskEvent) {
       case e {
         Went -> [
-          tazuna.send_command(
-            command: set(),
-            input: Nil,
-            on_answer: fn(_a) { [] },
-          ),
-          tazuna.send_command(
-            command: ask(),
-            input: Nil,
-            on_answer: fn(_a) { [] },
-          ),
+          tazuna.send_command(command: set(), input: Nil, on_answer: fn(_a) {
+            []
+          }),
+          tazuna.send_command(command: ask(), input: Nil, on_answer: fn(_a) {
+            []
+          }),
         ]
         Asked ->
           case c.records.flag {
@@ -167,7 +155,7 @@ fn asker() -> tazuna.Service {
     reactions: [both()],
     invariants: fn(_r: AskRecords) { [] },
     responses: [],
-    bounds: tazuna.bounds(creates: [], others_at_most: 2, cascade: 3, steps: 3),
+    cascade: 3,
     scenarios: [],
   )
 }
@@ -177,5 +165,33 @@ pub fn spec() -> tazuna.Spec {
     tazuna.external(name: "mail", declares: [
       tazuna.declare_external_command(ping()),
     ]),
+  ])
+}
+
+pub fn model() -> tazuna.Model {
+  tazuna.model(spec: spec(), resource_limit: 50_000_000, scopes: [
+    tazuna.scope(
+      service: watcher(),
+      creates: [
+        tazuna.create(table: fn(r: Records) { r.seen }, at_most: 2),
+        tazuna.create(table: fn(r: Records) { r.last }, at_most: 2),
+      ],
+      others_at_most: 1,
+      steps: 5,
+      explore_depth: 0,
+      explore_states: 1,
+      waits: [],
+      values: [],
+    ),
+    tazuna.scope(
+      service: asker(),
+      creates: [],
+      others_at_most: 2,
+      steps: 3,
+      explore_depth: 0,
+      explore_states: 1,
+      waits: [],
+      values: [],
+    ),
   ])
 }

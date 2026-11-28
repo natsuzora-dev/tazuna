@@ -163,12 +163,13 @@ def refusedLine (T : List TypeDecl) : Refused → Except String (Kind × List (S
   | .spec l => .ok (.undecided .limit, [("limit", Json.str (l.text T))])
   | .unexpected u => .error s!"the encoding met a case the loaded program's types rule out: {reprStr u}"
 
-/-- The options of `prove` and `generate`: the prefix `--only` keeps lines by, how many solvers run at once, the cache
-directory, and the wall-clock limit of the run in seconds, if any. -/
+/-- The options of `prove` and `generate`: the model `--model` names, if any, the prefix `--only` keeps lines by, how
+many solvers run at once, the cache directory, and the wall-clock limit of the run in seconds, if any. -/
 structure Options where
+  model : Option String := none
   only : Option String := none
   jobs : Nat := 4
-  cache : System.FilePath
+  cache : System.FilePath := "prove-cache"
   timeout : Option Nat := none
 
 /-- Whether `--only` keeps the line named `name`. -/
@@ -178,18 +179,33 @@ def Options.keeps (o : Options) (name : String) : Bool := match o.only with
 
 -- An IR path without a directory part is in the working directory.
 set_option linter.tazuna.silentDefault false in
-/-- The arguments of `prove` and `generate` after their own: `--only <prefix>`, `--jobs <n>` and `--timeout <seconds>`
-in any order, then `--ir <path>`. The cache lives beside the IR, in the user's build directory. -/
+/-- The arguments of `prove` and `generate` after their own: `--model <name>`, `--only <prefix>`, `--jobs <n>` and
+`--timeout <seconds>` in any order, then `--ir <path>`. The cache lives beside the IR, in the user's build directory. -/
 def optionsOf : List String → Option (Options × String) :=
-  go none 4 none
+  go {}
 where
-  go (only : Option String) (jobs : Nat) (timeout : Option Nat) : List String → Option (Options × String)
-    | ["--ir", path] =>
-      some ({ only, jobs, timeout, cache := (System.FilePath.mk path).parent.getD "." / "prove-cache" }, path)
-    | "--only" :: p :: rest => go (some p) jobs timeout rest
-    | "--jobs" :: n :: rest => n.toNat?.bind fun j => if j = 0 then none else go only j timeout rest
-    | "--timeout" :: n :: rest => n.toNat?.bind fun t => go only jobs (some t) rest
+  go (o : Options) : List String → Option (Options × String)
+    | ["--ir", path] => some ({ o with cache := (System.FilePath.mk path).parent.getD "." / "prove-cache" }, path)
+    | "--model" :: m :: rest => go { o with model := some m } rest
+    | "--only" :: p :: rest => go { o with only := some p } rest
+    | "--jobs" :: n :: rest => n.toNat?.bind fun j => if j = 0 then none else go { o with jobs := j } rest
+    | "--timeout" :: n :: rest => n.toNat?.bind fun t => go { o with timeout := some t } rest
     | _ => none
+
+/-- The model a run checks in: its name and its values the lines name. -/
+structure RunModel where
+  name : String
+  model : ModelV
+
+/-- The `scope` field of a line whose verdict rests on the model: its name and the values of it the verdict reads. -/
+def RunModel.field (m : RunModel) (values : List (String × Json)) : String × Json :=
+  ("scope", Json.mkObj (("model", Json.str m.name) :: values))
+
+/-- An undecided line with the resource limit it ran out of, where it is an unknown answer, which that limit decides. -/
+def RunModel.undecided (m : RunModel) (k : Kind) (fields : List (String × Json)) : List (String × Json) :=
+  match k with
+  | .undecided .unknown => fields ++ [m.field [("resourceLimit", Json.num m.model.rlimit)]]
+  | _ => fields
 
 /-- A job of the solver pool: its argument and its work. A job whose pure work is its point (building a depth) takes
 what it builds from as its argument: a job closed over it would have that work floated out of the job by the compiler,
