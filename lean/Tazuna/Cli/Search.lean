@@ -285,25 +285,16 @@ def eachUnsat (solver : Solver) (cache : System.FilePath) (inputs : List String)
 and the trace found are the same whatever the number of solvers. -/
 def cubeChunk : Nat := 4
 
-/-- The solver for a cube's second question. A cube that can still split and that the solver leaves undecided is asked
-once more before it splits, with the resource limit of a whole chunk of cubes (`cubeChunk` times the solver's), the
-most the split's first chunk can cost. Only an unsat answer is read: the cube then has no model, so no cube of its
-split has one. A sat answer is not, so the run found stays the one the split finds: the limit only stops the solver, so
-a decided answer is the same under any limit it fits in. -/
-def _root_.Tazuna.Smt.Solver.retry (s : Solver) : Solver := { s with rlimit := cubeChunk * s.rlimit }
-
 /-- One depth's unrolled run as every goal at that depth shares it: its base, merged into one object per equal subterm
 (`shareCommon`, the identity on values) so a goal built from its steps finds its shared terms among the assertions'
 at once, with the merging's state, which merges a cube's goal into the same objects, the input kinds it refused with their refusals (no gap, by `unrollBase_ofService`), and for each smaller
 number `j` of steps the prefix its cubes with `j` unfixed steps are asked with (`cubeAsk`: the run of `j` steps, this
-depth's declarations and literals), printed once when a cube first needs it, and the same prefixes under the second
-question's limit (`Solver.retry`). -/
+depth's declarations and literals), printed once when a cube first needs it. -/
 structure DepthRun (v : ServiceV) (n : Nat) where
   base : UnrollBase v n
   merged : ShareCommon.State Lean.ShareCommon.persistentObjectFactory
   refused : List (SymInput v (shapes v) n × Refused)
   prefixes : Array (Thunk (Option SentPrefix))
-  retries : Array (Thunk (Option SentPrefix))
 
 abbrev Depth (v : ServiceV) (n : Nat) := Except Refused (DepthRun v n)
 
@@ -320,11 +311,11 @@ def depthAt (ds : Array (Task (Option (Depth s.v s.senv.nT)))) (d : Nat) : Depth
     let ids := s.L.ids
     let shared (Bj : UnrollBase s.v s.senv.nT) : TypedScript :=
       ⟨B.datatypes, B.tys, B.vars, [], Bj.asserts ++ [litsFact ls]⟩
-    let prefixes (header : List String) := (List.range d).toArray.map fun j => Thunk.mk fun _ =>
+    let prefixes := (List.range d).toArray.map fun j => Thunk.mk fun _ =>
       match (ds[j]?).bind (·.get) with
-      | some (.ok r) => some ((shared r.base).script.sentPrefix? ids header)
+      | some (.ok r) => some ((shared r.base).script.sentPrefix? ids solver.header)
       | _ => none
-    ⟨B, merged, refused, prefixes solver.header, prefixes solver.retry.header⟩
+    ⟨B, merged, refused, prefixes⟩
 
 /-- Each depth from 0 to `k`, built by its own job holding a permit of `pool`, once for every search over it: the
 jobs, and each depth as a task a search awaits when it reaches that depth; none if its job never ran, an engine bug. -/
@@ -404,8 +395,8 @@ variable (solver : Solver) (cache : System.FilePath) {c : CheckedSpec} (s : Chec
 
 /-- The search over the depths 1, 2, ... of the service's unrolled run (`ds`, each awaited when the search reaches it)
 for a model of the goal each depth's steps give, stopping at the first, whose decoded run `play` reads. A depth is
-asked as cubes (`CubesCover`): one per pick of its last step, and a cube with no answer, which its second question
-(`Solver.retry`) does not find unsat, splits on the step before its fixed ones, in pick order. A cube whose last step
+asked as cubes (`CubesCover`): one per pick of its last step, and a cube with no answer splits on the step before its
+fixed ones, in pick order. A cube whose last step
 takes only kinds `ruledOut` rules out needs no question, nor, from depth 2 on, once depth 1 found no model, one whose
 last pick is not among those `live` gives. The cubes are asked
 `cubeChunk` at a time, and the first in order with a model is the one taken, so the questions and the run found do not
@@ -496,11 +487,6 @@ def searchDepths {α : Type} (what : String) (ds : Array (Task (Option (Depth s.
       let some pre := (rd.prefixes[j]?.map (·.get)).join | return .error (fail s!"depth {d} has no prefix for {j} steps")
       let some answer ← solver.askGoal cache ids pre q (fallback := j == 0)
         | return .error (fail s!"depth {d}: {noText}")
-      if let (.unknown _, true) := (answer, j != 0) then
-        let some pre := (rd.retries[j]?.map (·.get)).join
-          | return .error (fail s!"depth {d} has no prefix for {j} steps")
-        let some empty ← solver.retry.askUnsat cache pre q | return .error (fail s!"depth {d}: {noText}")
-        if empty then return .ok .none
       match answer with
       | .unsat => return .ok .none
       | .unknown why => return .ok (.open (.undecided .unknown) [("depth", Lean.toJson d), ("why", Json.str why)])

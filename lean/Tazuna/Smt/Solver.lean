@@ -348,15 +348,6 @@ def Solver.askGoal (s : Solver) (dir : System.FilePath) (ids : Option Nat) (p : 
     (if fallback then exact else pure (some (.unknown "the abstract variant decided nothing", "")))
   return r.map (·.1)
 
-/-- Whether the solver reads the prefix's script with `goal` as its last assertion as unsat: its abstract variant
-where the prefix has one and the goal's literals are the prefix's (an unsat answer of which is the script's,
-`Solver.overApprox`), else what it reads exactly. A sat answer is not confirmed, as it is not read. None where a
-script has no text. -/
-def Solver.askUnsat (s : Solver) (dir : System.FilePath) (p : SentPrefix) (goal : Term) : IO (Option Bool) := do
-  let some (q, g, coded) := p.sent goal | return none
-  let some k := (p.absAsk q g coded).map (·.2) <|> q.ask g | return none
-  return some ((← s.runKeyed dir k) matches .unsat)
-
 /-- A question to the solver that owns its call: the script, the id datatype if it has one, and how its answer reads
 as a result. Nothing pairs answers with questions by position. -/
 structure Obligation (α : Type) where

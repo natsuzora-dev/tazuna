@@ -192,7 +192,6 @@ Where `decide` writes every rejection in place as a constructor, in `require`, `
 `targets_cover`: every class of out line a step can show is aimed at by one of these targets.
 For each target, `generate` searches runs from the initial state, one input longer each time, up to `steps` inputs.
 It splits each length into cubes that fix the input kinds of the last steps: one cube per kind of the last step, and a cube the solver leaves undecided splits again on the step before (cube and conquer).
-Before it splits, such a cube is asked once more with four times the resource limit, and only an unsat answer is read, so the split is skipped where the cube has no solver model and the run found is the one the split finds.
 Cubes are asked a fixed number at a time, and the first in order with a solver model wins, so the questions and the trace do not depend on `--jobs`.
 A cube needs no question where the code rules out that its last step's kinds show the target, or, from the second length on, where `prove`'s dead-target question of each kind of its last step is unsat.
 
