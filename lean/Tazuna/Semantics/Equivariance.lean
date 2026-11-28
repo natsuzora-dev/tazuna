@@ -392,6 +392,10 @@ theorem Prim.den_rel (p : Prim) (args : List Ty) (h : p.ok args = true) :
     rintro ⟨a, b, ⟨⟩⟩ ⟨a', b', ⟨⟩⟩ ⟨ha, hb, -⟩
     show @HSub.hSub Int Int Int _ b a = @HSub.hSub Int Int Int _ b' a'
     rw [show a = a' from ha, show b = b' from hb]
+  | durationMilliseconds | durationSeconds | durationMinutes | durationHours | durationToMilliseconds =>
+    rintro ⟨n, ⟨⟩⟩ ⟨n', ⟨⟩⟩ ⟨hn, -⟩
+    obtain rfl : n = n' := hn
+    rfl
   | instantAdd =>
     rintro ⟨d, n, ⟨⟩⟩ ⟨d', n', ⟨⟩⟩ ⟨hd, hn, -⟩
     show @HAdd.hAdd Int Int Int _ d n = @HAdd.hAdd Int Int Int _ d' n'

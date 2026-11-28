@@ -8,6 +8,7 @@
 
 import gleam/option.{type Option}
 import tazuna/bag.{type Bag}
+import tazuna/duration.{type Duration}
 import tazuna/instant.{type Instant}
 import tazuna/internal/launch
 import tazuna/table.{type Table}
@@ -137,10 +138,6 @@ pub type ApplyCtx(records) {
 pub type TimerCtx(key, state, records) {
   TimerCtx(key: key, state: state, records: records)
 }
-
-/// A length of time, in milliseconds.
-pub type Duration =
-  Int
 
 /// Named rules, as `invariants`, `accepts` and `ensures` return them: each holds or not.
 pub type Rules =

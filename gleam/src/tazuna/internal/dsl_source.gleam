@@ -16,6 +16,7 @@ pub const modules = [
 
 import gleam/option.{type Option}
 import tazuna/bag.{type Bag}
+import tazuna/duration.{type Duration}
 import tazuna/instant.{type Instant}
 import tazuna/internal/launch
 import tazuna/table.{type Table}
@@ -145,10 +146,6 @@ pub type ApplyCtx(records) {
 pub type TimerCtx(key, state, records) {
   TimerCtx(key: key, state: state, records: records)
 }
-
-/// A length of time, in milliseconds.
-pub type Duration =
-  Int
 
 /// Named rules, as `invariants`, `accepts` and `ensures` return them: each holds or not.
 pub type Rules =
@@ -687,6 +684,46 @@ pub fn days_between(from _from: Date, to _to: Date) -> Int {
 ",
   ),
   #(
+    "tazuna/duration",
+    "tazuna/duration.gleam",
+    "//// Durations: lengths of time, each written with its unit.
+////
+//// Lean gives a spec its meaning, so the bodies here only let a spec
+//// compile; Gleam never runs them.
+////
+//// Generated from lean/Tazuna/Ir/Builtin.lean by `lake exe gen-dsl --write ..`
+//// in lean/. DO NOT EDIT.
+
+/// A length of time, to the millisecond. Only `milliseconds`, `seconds`, `minutes` and `hours` make one, so every length a spec writes names its unit.
+pub type Duration
+
+/// That many milliseconds.
+pub fn milliseconds(_amount: Int) -> Duration {
+  panic as \"tazuna's built-ins run only in the engine\"
+}
+
+/// That many seconds.
+pub fn seconds(_amount: Int) -> Duration {
+  panic as \"tazuna's built-ins run only in the engine\"
+}
+
+/// That many minutes.
+pub fn minutes(_amount: Int) -> Duration {
+  panic as \"tazuna's built-ins run only in the engine\"
+}
+
+/// That many hours.
+pub fn hours(_amount: Int) -> Duration {
+  panic as \"tazuna's built-ins run only in the engine\"
+}
+
+/// The duration as a number of milliseconds.
+pub fn to_milliseconds(_duration: Duration) -> Int {
+  panic as \"tazuna's built-ins run only in the engine\"
+}
+",
+  ),
+  #(
     "tazuna/instant",
     "tazuna/instant.gleam",
     "//// Instants: points in time a spec cannot write, only move and compare.
@@ -697,16 +734,18 @@ pub fn days_between(from _from: Date, to _to: Date) -> Int {
 //// Generated from lean/Tazuna/Ir/Builtin.lean by `lake exe gen-dsl --write ..`
 //// in lean/. DO NOT EDIT.
 
+import tazuna/duration.{type Duration}
+
 /// A point in time, to the millisecond. No spec can write one: it comes from a context's `now`, from an input, or from moving another by a duration, so what a spec means does not change when every instant moves by the same amount.
 pub type Instant
 
-/// The instant that many milliseconds later (earlier when negative).
-pub fn add(_instant: Instant, _ms: Int) -> Instant {
+/// The instant the duration later (earlier when it is negative).
+pub fn add(_instant: Instant, _duration: Duration) -> Instant {
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// The milliseconds from the first instant to the second: negative when it is earlier.
-pub fn diff(from _from: Instant, to _to: Instant) -> Int {
+/// The duration from the first instant to the second: negative when it is earlier.
+pub fn diff(from _from: Instant, to _to: Instant) -> Duration {
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
@@ -753,6 +792,11 @@ pub const builtins = [
   "tazuna/table.all",
   "tazuna/date.add_days",
   "tazuna/date.days_between",
+  "tazuna/duration.milliseconds",
+  "tazuna/duration.seconds",
+  "tazuna/duration.minutes",
+  "tazuna/duration.hours",
+  "tazuna/duration.to_milliseconds",
   "tazuna/instant.add",
   "tazuna/instant.diff",
   "tazuna/instant.is_before",

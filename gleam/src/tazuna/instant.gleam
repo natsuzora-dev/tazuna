@@ -6,16 +6,18 @@
 //// Generated from lean/Tazuna/Ir/Builtin.lean by `lake exe gen-dsl --write ..`
 //// in lean/. DO NOT EDIT.
 
+import tazuna/duration.{type Duration}
+
 /// A point in time, to the millisecond. No spec can write one: it comes from a context's `now`, from an input, or from moving another by a duration, so what a spec means does not change when every instant moves by the same amount.
 pub type Instant
 
-/// The instant that many milliseconds later (earlier when negative).
-pub fn add(_instant: Instant, _ms: Int) -> Instant {
+/// The instant the duration later (earlier when it is negative).
+pub fn add(_instant: Instant, _duration: Duration) -> Instant {
   panic as "tazuna's built-ins run only in the engine"
 }
 
-/// The milliseconds from the first instant to the second: negative when it is earlier.
-pub fn diff(from _from: Instant, to _to: Instant) -> Int {
+/// The duration from the first instant to the second: negative when it is earlier.
+pub fn diff(from _from: Instant, to _to: Instant) -> Duration {
   panic as "tazuna's built-ins run only in the engine"
 }
 

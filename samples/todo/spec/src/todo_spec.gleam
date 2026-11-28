@@ -3,6 +3,7 @@
 
 import gleam/option.{None, Some}
 import tazuna.{type Ctx, type Id, type MachineCtx, type QueryCtx, type TimerCtx}
+import tazuna/duration
 import tazuna/instant.{type Instant}
 import tazuna/table.{type Table}
 
@@ -47,8 +48,6 @@ pub type Phase {
   Due
 }
 
-const hour: Int = 3_600_000
-
 fn apply(ctx: tazuna.ApplyCtx(Records), event: Event) -> Records {
   let records = ctx.records
   case event {
@@ -58,7 +57,7 @@ fn apply(ctx: tazuna.ApplyCtx(Records), event: Event) -> Records {
         id,
         Task(
           title: title,
-          remind_at: instant.add(ctx.now, hour),
+          remind_at: instant.add(ctx.now, duration.hours(1)),
           reminded: False,
         ),
       ))
@@ -91,7 +90,7 @@ fn add() -> tazuna.Command(Records, Event, Caller, String, tazuna.Never) {
           table.get(after.tasks, tazuna.fresh(ctx.fresh, 0))
             == Some(Task(
             title: ctx.input,
-            remind_at: instant.add(ctx.now, hour),
+            remind_at: instant.add(ctx.now, duration.hours(1)),
             reminded: False,
           )),
         ),
@@ -244,7 +243,7 @@ fn todo_service() -> tazuna.Service {
             _, _ -> False
           }
         },
-        within: hour,
+        within: duration.hours(1),
         deadline: fn(records: Records, trigger: Event) {
           case trigger {
             Added(task:, ..) ->
@@ -290,7 +289,7 @@ fn remind_the_open_task() -> tazuna.Scenario(Records, Event, Caller) {
           input: tazuna.fresh(milk, 0),
         ),
         tazuna.step_query(query: open_tasks(), caller: User, input: Nil),
-        tazuna.step_wait(for: hour),
+        tazuna.step_wait(for: duration.hours(1)),
         tazuna.step_answer_command(
           command: send(),
           sender: tazuna.from_reaction(reaction: mail()),
@@ -322,7 +321,7 @@ pub fn model() -> tazuna.Model {
       steps: 3,
       explore_depth: 6,
       explore_states: 10_000,
-      waits: [hour],
+      waits: [duration.hours(1)],
       values: [],
     ),
   ])

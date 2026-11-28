@@ -356,6 +356,15 @@ end
 @[simp] theorem Term.denote_share (M : Model) (t : Term) : t.share.denote M = t.denote M := by
   unfold Term.share; split <;> simp [Term.denote]
 
+/-- `t` times `k`, as one literal when `t` is one. -/
+def Term.scale (t : Term) (k : Int) : Term := match t with
+  | .int n => .int (n * k)
+  | t => .mul t (.int k)
+
+@[simp] theorem Term.denote_scale (M : Model) (t : Term) (k : Int) :
+    (t.scale k).denote M = .int ((t.denote M).toInt * k) := by
+  unfold Term.scale; split <;> simp [Term.denote, Val.toInt]
+
 /-! Evaluation with sharing. `Term.denote` follows the tree, so a term whose shared parts nest (an unrolled run's
 states, each read by the next step) costs time exponential in the nesting. `Term.evalC` gives each shared term its
 value once, kept by the stored hash and confirmed by `Term.same`, as extraction does; `evalC_ok` proves it is

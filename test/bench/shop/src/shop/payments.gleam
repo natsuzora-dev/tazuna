@@ -9,6 +9,7 @@ import shop/shared.{
 }
 import tazuna.{type Ctx, type Id, type MachineCtx, type QueryCtx, type TimerCtx}
 import tazuna/bag
+import tazuna/duration
 import tazuna/instant.{type Instant}
 import tazuna/table.{type Table}
 
@@ -107,7 +108,7 @@ fn calls(to: PayState, until: Instant) -> fn(Payment) -> Payment {
 
 fn apply(ctx: tazuna.ApplyCtx(Records), event: Event) -> Records {
   let records = ctx.records
-  let gives_up = instant.add(ctx.now, 2 * shared.minute)
+  let gives_up = instant.add(ctx.now, duration.minutes(2))
   case event {
     Ordered(placed) ->
       case table.get(records.payments, placed.order) {
@@ -512,7 +513,7 @@ pub fn service() -> tazuna.Service {
             _, _ -> False
           }
         },
-        within: 5 * shared.minute,
+        within: duration.minutes(5),
         deadline: fn(records: Records, trigger: Event) {
           case trigger {
             ScreeningStarted(order:) ->
@@ -520,7 +521,7 @@ pub fn service() -> tazuna.Service {
                 Some(payment) ->
                   case payment.state {
                     Screening ->
-                      Some(instant.add(payment.call_by, 2 * shared.minute))
+                      Some(instant.add(payment.call_by, duration.minutes(2)))
                     Charging -> Some(payment.call_by)
                     _ -> None
                   }

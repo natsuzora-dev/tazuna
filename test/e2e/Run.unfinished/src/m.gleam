@@ -1,5 +1,6 @@
 import gleam/option.{None}
 import tazuna.{type Ctx}
+import tazuna/duration
 
 pub type Records {
   Records(total: Int)
@@ -47,7 +48,7 @@ fn counter() -> tazuna.Service {
         name: "an add shows its own amount",
         after: fn(_e) { True },
         then: fn(trigger, e) { trigger == e },
-        within: 0,
+        within: duration.milliseconds(0),
         deadline: fn(_r: Records, _trigger: Event) { None },
       ),
     ],

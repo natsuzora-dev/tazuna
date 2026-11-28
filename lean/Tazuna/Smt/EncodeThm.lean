@@ -1947,6 +1947,35 @@ theorem primCode_agrees (p : Prim) (args : List Ty) (hp : p.ok args = true) (s :
     show Rel M L .int _ (Term.sub sy sx)
     simp only [Rel, RelV] at hx hy ⊢
     simp [Term.denote, hx, hy, Val.toInt]; rfl
+  case durationMilliseconds | durationToMilliseconds =>
+    simp only [primCode] at h; cases h
+    intro ⟨x, ()⟩ ⟨sx, ()⟩ ⟨hx, _⟩ r c hr _
+    cases hr
+    exact hx
+  case durationSeconds =>
+    simp only [primCode] at h; cases h
+    intro ⟨x, ()⟩ ⟨sx, ()⟩ ⟨hx, _⟩ r c hr _
+    cases hr
+    change Rel M L .int x sx at hx
+    change Rel M L .int (@HMul.hMul Int Int Int _ x 1000) (Term.scale (show Term from sx) 1000)
+    simp only [Rel, RelV] at hx ⊢
+    exact (Term.denote_scale M (show Term from sx) _).trans (by rw [show Term.denote M (show Term from sx) = _ from hx]; rfl)
+  case durationMinutes =>
+    simp only [primCode] at h; cases h
+    intro ⟨x, ()⟩ ⟨sx, ()⟩ ⟨hx, _⟩ r c hr _
+    cases hr
+    change Rel M L .int x sx at hx
+    change Rel M L .int (@HMul.hMul Int Int Int _ x 60000) (Term.scale (show Term from sx) 60000)
+    simp only [Rel, RelV] at hx ⊢
+    exact (Term.denote_scale M (show Term from sx) _).trans (by rw [show Term.denote M (show Term from sx) = _ from hx]; rfl)
+  case durationHours =>
+    simp only [primCode] at h; cases h
+    intro ⟨x, ()⟩ ⟨sx, ()⟩ ⟨hx, _⟩ r c hr _
+    cases hr
+    change Rel M L .int x sx at hx
+    change Rel M L .int (@HMul.hMul Int Int Int _ x 3600000) (Term.scale (show Term from sx) 3600000)
+    simp only [Rel, RelV] at hx ⊢
+    exact (Term.denote_scale M (show Term from sx) _).trans (by rw [show Term.denote M (show Term from sx) = _ from hx]; rfl)
   case instantAdd =>
     simp only [primCode] at h; cases h
     intro ⟨x, y, ()⟩ ⟨sx, sy, ()⟩ ⟨hx, hy, _⟩ r c hr _

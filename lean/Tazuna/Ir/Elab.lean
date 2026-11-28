@@ -118,7 +118,7 @@ partial def annotationFits (σ : List (String × Ty)) : STy → Ty → Bool
   | .var n, t => match σ.lookup n with
     | some u => (Ty.same u t).isSome
     | none => true
-  | .con "Int" [], .int | .con "String" [], .str => true
+  | .con "Int" [], .int | .con "tazuna/duration.Duration" [], .int | .con "String" [], .str => true
   | .con "List" [a], .list t => annotationFits σ a t
   | .con "tazuna/bag.Bag" [a], .bag t => annotationFits σ a t
   | .con "tazuna/table.Table" [a, b], .table k v => annotationFits σ a k && annotationFits σ b v

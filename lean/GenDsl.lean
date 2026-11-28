@@ -18,6 +18,7 @@ def dslModules : List DslModule :=
       "The tazuna DSL: a spec's services, the externals they talk to, and their scenarios.",
       "import gleam/option.{type Option}\n" ++
       "import tazuna/bag.{type Bag}\n" ++
+      "import tazuna/duration.{type Duration}\n" ++
       "import tazuna/instant.{type Instant}\n" ++
       "import tazuna/internal/launch\n" ++
       "import tazuna/table.{type Table}\n\n" ++
@@ -30,7 +31,9 @@ def dslModules : List DslModule :=
     ⟨"tazuna/table", "tazuna/table.gleam", "Tables: finite maps from keys to values.",
       "import gleam/option.{type Option}\nimport tazuna/bag.{type Bag}\n\n"⟩,
     ⟨"tazuna/date", "tazuna/date.gleam", "Dates: days without a calendar.", ""⟩,
-    ⟨"tazuna/instant", "tazuna/instant.gleam", "Instants: points in time a spec cannot write, only move and compare.", ""⟩ ]
+    ⟨"tazuna/duration", "tazuna/duration.gleam", "Durations: lengths of time, each written with its unit.", ""⟩,
+    ⟨"tazuna/instant", "tazuna/instant.gleam", "Instants: points in time a spec cannot write, only move and compare.",
+      "import tazuna/duration.{type Duration}\n\n"⟩ ]
 
 def moduleHead (m : DslModule) : String :=
   s!"//// {m.doc}\n" ++
@@ -67,13 +70,13 @@ partial def gleamTy (tvars : List String) (int : String) : Ty → String
     let n := k.name
     if args.isEmpty then n else n ++ "(" ++ ", ".intercalate (args.map (gleamTy tvars int)) ++ ")"
 
-/-- The time alias `timeAliases` names for the field or parameter `label` of `owner`, else `Int`. -/
-def intName (owner : String) (label : Option String) : String :=
-  ((label.bind fun l => timeAliases.find? fun (o, l', _) => o == owner && l' == l).map (·.2.2)).getD "Int"
+/-- The name the DSL writes for the Ints of the slot `slot` of `owner` (`durationInts`). -/
+def intName (owner : String) (slot : Option String) : String :=
+  if durationInts.contains (owner, slot) then "Duration" else "Int"
 
-/-- The type of the field or parameter `label` of `owner`, with its Ints written as the time alias it has. -/
+/-- The type of the field `label` of `owner`, with its Ints written as `intName` names them. -/
 def labelledTy (owner : String) (tvars : List String) (label : Option String) (t : Ty) : String :=
-  gleamTy tvars (intName owner label) t
+  gleamTy tvars (if label.isSome then intName owner label else "Int") t
 
 /-- A type as an alias's body writes it. -/
 partial def surfaceTy : Surface.STy → String
@@ -90,20 +93,21 @@ def typeParams (ps : List String) : String := if ps.isEmpty then "" else "(" ++ 
 else one parameter per line. -/
 def gleamFn (p : Prim) : String :=
   let s := p.sig
-  let params := s.params.map fun q =>
-    (q.label.map (· ++ " ")).getD "" ++ "_" ++ q.name ++ ": " ++ labelledTy s.name s.tvars q.label q.ty
-  let ret := gleamTy s.tvars "Int" s.ret
+  let slot (q : PrimParam) : Option String := some (q.label.getD q.name)
+  let paramTy (q : PrimParam) : String := gleamTy s.tvars (intName s.name (slot q)) q.ty
+  let params := s.params.map fun q => (q.label.map (· ++ " ")).getD "" ++ "_" ++ q.name ++ ": " ++ paramTy q
+  let ret := gleamTy s.tvars (intName s.name none) s.ret
   let oneLine := s!"pub fn {s.name}(" ++ ", ".intercalate params ++ s!") -> {ret} \{"
   let head := if oneLine.length ≤ 80 then oneLine
     else
       let line (q : PrimParam) : String :=
         let pre := (q.label.map (· ++ " ")).getD "" ++ "_" ++ q.name ++ ": "
-        let whole := s!"  {pre}{labelledTy s.name s.tvars q.label q.ty},\n"
+        let whole := s!"  {pre}{paramTy q},\n"
         match q.ty with
         | .fn ps r | .dsl .closure [.fn ps r] | .dsl .effectClosure [.fn ps r] =>
           if whole.length ≤ 81 then whole
           else
-            let int := intName s.name q.label
+            let int := intName s.name (slot q)
             s!"  {pre}fn(" ++ ", ".intercalate (ps.map (gleamTy s.tvars int)) ++ s!") ->\n    {gleamTy s.tvars int r},\n"
         | _ => whole
       s!"pub fn {s.name}(\n" ++ String.join (s.params.map line) ++ s!") -> {ret} \{"

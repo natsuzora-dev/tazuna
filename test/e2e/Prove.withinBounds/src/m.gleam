@@ -1,5 +1,6 @@
 import gleam/option.{None}
 import tazuna.{type Ctx}
+import tazuna/duration
 import tazuna/table.{type Table}
 
 pub type Records {
@@ -67,7 +68,7 @@ fn tasks() -> tazuna.Service {
             Added(_, t) -> t == "task"
           }
         },
-        within: 0,
+        within: duration.milliseconds(0),
         deadline: fn(_r: Records, _trigger: Event) { None },
       ),
     ],

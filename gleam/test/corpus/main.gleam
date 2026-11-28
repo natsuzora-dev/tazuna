@@ -4,6 +4,7 @@ import corpus/shapes.{type Count, type Shape, Circle, Rect}
 import gleam/option.{type Option, None, Some}
 import tazuna
 import tazuna/bag
+import tazuna/duration.{type Duration}
 import tazuna/instant.{type Instant}
 import tazuna/table
 
@@ -171,7 +172,7 @@ pub fn builtins(
     Error(bag.Empty) -> 0
     Error(bag.Tie) -> -1
   }
-  Ok(#(longest, instant.add(at, longest)))
+  Ok(#(longest, instant.add(at, duration.milliseconds(longest))))
 }
 
 pub fn captures(ids: bag.Bag(Int)) -> #(bag.Bag(Event), Int, Option(Event)) {
@@ -183,6 +184,6 @@ pub fn captures(ids: bag.Bag(Int)) -> #(bag.Bag(Event), Int, Option(Event)) {
   #(closed, bag.size(opened) + bag.size(titled) + firsts(1), wrap(Closed(2)))
 }
 
-pub fn rules(n: Int, wait: tazuna.Duration) -> tazuna.Rules {
-  [#("positive", n > 0), #("waits", wait >= 0)]
+pub fn rules(n: Int, wait: Duration) -> tazuna.Rules {
+  [#("positive", n > 0), #("waits", duration.to_milliseconds(wait) >= 0)]
 }

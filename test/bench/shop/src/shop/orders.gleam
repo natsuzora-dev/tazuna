@@ -10,6 +10,7 @@ import shop/shared.{
 }
 import tazuna.{type Ctx, type Id, type MachineCtx, type QueryCtx, type TimerCtx}
 import tazuna/bag.{type Bag}
+import tazuna/duration
 import tazuna/instant.{type Instant}
 import tazuna/table.{type Table}
 
@@ -118,7 +119,7 @@ fn apply(ctx: tazuna.ApplyCtx(Records), event: Event) -> Records {
             lines: lines,
             total: total,
             status: AwaitingStock,
-            pay_by: instant.add(ctx.now, 30 * shared.minute),
+            pay_by: instant.add(ctx.now, duration.minutes(30)),
           ),
         ),
       )
@@ -464,7 +465,7 @@ pub fn service() -> tazuna.Service {
             _, _ -> False
           }
         },
-        within: 30 * shared.minute,
+        within: duration.minutes(30),
         deadline: fn(records: Records, trigger: Event) {
           case trigger {
             Placed(order:, ..) ->
@@ -531,7 +532,7 @@ fn an_order_is_paid() -> tazuna.Scenario(Records, Event, Caller) {
           value: shared.Captured(order, 3600),
         ),
         tazuna.step_query(query: order_status(), caller: Customer, input: order),
-        tazuna.step_wait(for: 30 * shared.minute),
+        tazuna.step_wait(for: duration.minutes(30)),
         tazuna.step_command(
           command: cancel_order(),
           caller: Staff,
@@ -553,7 +554,7 @@ fn an_unpaid_order_expires() -> tazuna.Scenario(Records, Event, Caller) {
       caller: Customer,
       input: an_order(),
     ),
-    tazuna.step_wait(for: 30 * shared.minute),
+    tazuna.step_wait(for: duration.minutes(30)),
     tazuna.step_query(query: open_orders(), caller: Customer, input: "Aiko"),
   ])
 }

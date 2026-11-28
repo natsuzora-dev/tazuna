@@ -25,7 +25,7 @@ That rule shapes the values a spec holds:
 
 - Numbers are integers. Hold an amount in its smallest unit, such as cents.
 - An `Instant`, from `tazuna/instant`, is a point in time to the millisecond that a spec cannot write. It comes from a context's `now` or from an input, and `instant.add`, `instant.diff`, `instant.is_before` and `instant.is_after` move and compare it. So moving every instant by the same amount changes no outcome, and a record that has no instant at `init` holds an `Option(Instant)`.
-- A `Duration` is an `Int` of milliseconds.
+- A `Duration`, from `tazuna/duration`, is a length of time. Only `duration.milliseconds`, `seconds`, `minutes` and `hours` make one, so every length a spec writes names its unit. `instant.add` moves an instant by a duration, `instant.diff` gives the duration between two, and `duration.to_milliseconds` reads one as an `Int`.
 - A `Date` is a day with no calendar. A spec adds days and counts the days between two dates, and converts neither between instants and dates nor between time zones. Ask an external for a business day.
 - A `String` supports `==`, `<>`, and `tazuna.length`, which counts code points. Its code points stop at U+2FFFF, as SMT strings do. A string that `prove` or `generate` picks keeps only what the spec asks of it, so it may read as a literal of the spec with letters added.
 

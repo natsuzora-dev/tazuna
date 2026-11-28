@@ -24,6 +24,8 @@ def opaqueTypes : List OpaqueType :=
       fun | [k, v] => some (.table k v) | _ => none⟩,
     ⟨"tazuna/date", "Date", [], "A day. Dates have no calendar: a spec adds days and counts the days between two dates.",
       fun | [] => some (.point .day) | _ => none⟩,
+    ⟨"tazuna/duration", "Duration", [], "A length of time, to the millisecond. Only `milliseconds`, `seconds`, `minutes` and `hours` make one, so every length a spec writes names its unit.",
+      fun | [] => some .int | _ => none⟩,
     ⟨"tazuna/instant", "Instant", [], "A point in time, to the millisecond. No spec can write one: it comes from a context's `now`, from an input, or from moving another by a duration, so what a spec means does not change when every instant moves by the same amount.",
       fun | [] => some (.point .ms) | _ => none⟩,
     ⟨"tazuna", "Id", [], "An identifier a step makes fresh, or one from outside the service; ids compare with `==` only. Where tazuna needs an order (machine keys), fresh ids come in the order they were made, by step and then index, before outside ids, which come by name.",
@@ -45,14 +47,15 @@ def preludeDocs : List (String × String) :=
 
 /-- Aliases `tazuna` declares, with their documentation. -/
 def builtinAliases : List (Surface.AliasDef × String) :=
-  [ (⟨"tazuna.Duration", [], .con "Int" [], ⟨0, 0⟩⟩, "A length of time, in milliseconds."),
-    (⟨"tazuna.Rules", [], .con "List" [.tuple [.con "String" [], .con "Bool" []]], ⟨0, 0⟩⟩,
+  [ (⟨"tazuna.Rules", [], .con "List" [.tuple [.con "String" [], .con "Bool" []]], ⟨0, 0⟩⟩,
       "Named rules, as `invariants`, `accepts` and `ensures` return them: each holds or not.") ]
 
-/-- The fields and parameters whose Ints the DSL writes as the alias `Duration`, so a signature says which Int is a
-length of time: (the declaring type or built-in, the field or parameter label, the alias). -/
-def timeAliases : List (String × String × String) :=
-  [ ("response", "within", "Duration"), ("step_wait", "for", "Duration"), ("scope", "waits", "Duration") ]
+/-- The Ints the DSL writes as `tazuna/duration.Duration`, which Lean reads as Ints of milliseconds: (the declaring type
+or built-in, the field's or parameter's label, else the parameter's name, or none for the built-in's result). -/
+def durationInts : List (String × Option String) :=
+  [ ("response", some "within"), ("step_wait", some "for"), ("scope", some "waits"), ("add", some "duration"),
+    ("diff", none), ("milliseconds", none), ("seconds", none), ("minutes", none), ("hours", none),
+    ("to_milliseconds", some "duration") ]
 
 /-- The built-in functions. -/
 inductive Prim where
@@ -62,6 +65,7 @@ inductive Prim where
   | tableNew | tableFromList | tableInsert | tableRemove | tableGet | tableSize | tableKeys | tableValues
   | tableFilter | tableMap | tableCount | tableAny | tableAll
   | dateAddDays | dateDaysBetween
+  | durationMilliseconds | durationSeconds | durationMinutes | durationHours | durationToMilliseconds
   | instantAdd | instantDiff | instantIsBefore | instantIsAfter
   | require | tableLookup
   | spec | service | command | query | machine | reaction
@@ -152,9 +156,15 @@ def sig : Prim → PrimSig :=
       [p "date" (.point .day), p "days" .int], .point .day, [], false⟩
   | .dateDaysBetween => ⟨"days_between", "The days from the first date to the second: negative when it is earlier.",
       [], [l "from" (.point .day), l "to" (.point .day)], .int, [], false⟩
-  | .instantAdd => ⟨"add", "The instant that many milliseconds later (earlier when negative).", [],
-      [p "instant" (.point .ms), p "ms" .int], .point .ms, [], false⟩
-  | .instantDiff => ⟨"diff", "The milliseconds from the first instant to the second: negative when it is earlier.", [],
+  | .durationMilliseconds => ⟨"milliseconds", "That many milliseconds.", [], [p "amount" .int], .int, [], false⟩
+  | .durationSeconds => ⟨"seconds", "That many seconds.", [], [p "amount" .int], .int, [], false⟩
+  | .durationMinutes => ⟨"minutes", "That many minutes.", [], [p "amount" .int], .int, [], false⟩
+  | .durationHours => ⟨"hours", "That many hours.", [], [p "amount" .int], .int, [], false⟩
+  | .durationToMilliseconds => ⟨"to_milliseconds", "The duration as a number of milliseconds.", [],
+      [p "duration" .int], .int, [], false⟩
+  | .instantAdd => ⟨"add", "The instant the duration later (earlier when it is negative).", [],
+      [p "instant" (.point .ms), p "duration" .int], .point .ms, [], false⟩
+  | .instantDiff => ⟨"diff", "The duration from the first instant to the second: negative when it is earlier.", [],
       [l "from" (.point .ms), l "to" (.point .ms)], .int, [], false⟩
   | .instantIsBefore => ⟨"is_before", "Whether the first instant is earlier than the second.", [],
       [p "instant" (.point .ms), p "other" (.point .ms)], .bool, [], false⟩
@@ -383,7 +393,8 @@ def all : List Prim :=
   [.length, .bagFromList, .bagInsert, .bagSize, .bagFilter, .bagMap, .bagCount, .bagSum, .bagAny, .bagAll,
    .bagContains, .bagMinBy, .bagMaxBy, .tableNew, .tableFromList, .tableInsert, .tableRemove, .tableGet, .tableSize,
    .tableKeys, .tableValues, .tableFilter, .tableMap, .tableCount, .tableAny, .tableAll, .dateAddDays,
-   .dateDaysBetween, .instantAdd, .instantDiff, .instantIsBefore, .instantIsAfter, .require, .tableLookup, .spec,
+   .dateDaysBetween, .durationMilliseconds, .durationSeconds, .durationMinutes, .durationHours,
+   .durationToMilliseconds, .instantAdd, .instantDiff, .instantIsBefore, .instantIsAfter, .require, .tableLookup, .spec,
    .service, .command, .query, .machine, .reaction,
    .external, .externalCommand, .externalQuery, .source, .declareCommand, .declareQuery, .declareSource,
    .declareExternalCommand, .declareExternalQuery, .requestCommand, .requestQuery,
@@ -412,6 +423,8 @@ def module : Prim → String
   | .tableNew | .tableFromList | .tableInsert | .tableRemove | .tableGet | .tableSize | .tableKeys | .tableValues
   | .tableFilter | .tableMap | .tableCount | .tableAny | .tableAll | .tableLookup => "tazuna/table"
   | .dateAddDays | .dateDaysBetween => "tazuna/date"
+  | .durationMilliseconds | .durationSeconds | .durationMinutes | .durationHours | .durationToMilliseconds =>
+    "tazuna/duration"
   | .instantAdd | .instantDiff | .instantIsBefore | .instantIsAfter => "tazuna/instant"
   | _ => "tazuna"
 

@@ -1,6 +1,7 @@
 import gleam/option.{type Option, None, Some}
 import tazuna.{type Ctx, type Id, type QueryCtx}
 import tazuna/bag
+import tazuna/duration
 import tazuna/instant.{type Instant}
 
 pub type Records {
@@ -86,7 +87,10 @@ fn watch() -> tazuna.Machine(Records, Event) {
     timer: fn(c: tazuna.TimerCtx(Int, Phase, Records)) {
       case c.state, c.records.moved_at {
         Waiting, Some(moved_at) ->
-          Some(tazuna.Timer(at: instant.add(moved_at, 10), enter: Pinging))
+          Some(tazuna.Timer(
+            at: instant.add(moved_at, duration.milliseconds(10)),
+            enter: Pinging,
+          ))
         _, _ -> None
       }
     },

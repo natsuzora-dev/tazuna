@@ -1,6 +1,7 @@
 import gleam/option.{None, Some}
 import tazuna.{type Ctx}
 import tazuna/bag
+import tazuna/duration
 import tazuna/instant.{type Instant}
 import tazuna/table.{type Table}
 
@@ -49,10 +50,16 @@ fn put1() -> tazuna.Command(R1, E1, Caller, Int, Nil) {
     callers: [tazuna.Outside(User)],
     accepts: fn(k: Int) { [#("small key", k < 10)] },
     decide: fn(c: Ctx(R1, Int, Caller)) {
-      Ok([Put1(c.input, instant.add(c.now, 10))])
+      Ok([Put1(c.input, instant.add(c.now, duration.milliseconds(10)))])
     },
     ensures: fn(c: Ctx(R1, Int, Caller), r: R1) {
-      [#("kept", table.get(r.items, c.input) == Some(instant.add(c.now, 10)))]
+      [
+        #(
+          "kept",
+          table.get(r.items, c.input)
+            == Some(instant.add(c.now, duration.milliseconds(10))),
+        ),
+      ]
     },
   )
 }
@@ -167,7 +174,7 @@ fn s1() -> tazuna.Service {
             _ -> False
           }
         },
-        within: 20,
+        within: duration.milliseconds(20),
         deadline: fn(r: R1, trigger: E1) {
           case trigger {
             Put1(k, _) -> table.get(r.items, k)
@@ -189,7 +196,7 @@ fn s1() -> tazuna.Service {
             _ -> False
           }
         },
-        within: 0,
+        within: duration.milliseconds(0),
         deadline: fn(_r: R1, _trigger: E1) { None },
       ),
     ],

@@ -148,6 +148,10 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
   | .tableAll, _, _ => fun (t, f, ()) => Ty.ofBool (t.1.all fun (k, v) => Ty.toBool (f (k, v, ())))
   | .dateAddDays, _, _ => fun (d, n, ()) => @HAdd.hAdd Int Int Int _ d n
   | .dateDaysBetween, _, _ => fun (a, b, ()) => @HSub.hSub Int Int Int _ b a
+  | .durationMilliseconds, _, _ | .durationToMilliseconds, _, _ => fun (n, ()) => n
+  | .durationSeconds, _, _ => fun (n, ()) => @HMul.hMul Int Int Int _ n 1000
+  | .durationMinutes, _, _ => fun (n, ()) => @HMul.hMul Int Int Int _ n 60000
+  | .durationHours, _, _ => fun (n, ()) => @HMul.hMul Int Int Int _ n 3600000
   | .instantAdd, _, _ => fun (d, n, ()) => @HAdd.hAdd Int Int Int _ d n
   | .instantDiff, _, _ => fun (a, b, ()) => @HSub.hSub Int Int Int _ b a
   | .instantIsBefore, _, _ => fun (a, b, ()) => Ty.ofBool (decide ((show Int from a) < (show Int from b)))

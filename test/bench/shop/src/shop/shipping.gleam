@@ -9,6 +9,7 @@ import shop/shared.{
 }
 import tazuna.{type Ctx, type Id, type MachineCtx, type QueryCtx, type TimerCtx}
 import tazuna/bag
+import tazuna/duration
 import tazuna/instant.{type Instant}
 import tazuna/table.{type Table}
 
@@ -177,7 +178,7 @@ fn apply(ctx: tazuna.ApplyCtx(Records), event: Event) -> Records {
             ..shipment,
             state: Booked,
             tracking: Some(tracking),
-            late_at: instant.add(ctx.now, 5 * shared.day),
+            late_at: instant.add(ctx.now, duration.hours(5 * 24)),
           )
         },
       )
@@ -510,7 +511,7 @@ pub fn service() -> tazuna.Service {
             _, _ -> False
           }
         },
-        within: 5 * shared.day,
+        within: duration.hours(5 * 24),
         deadline: fn(records: Records, trigger: Event) {
           case trigger {
             LabelIssued(order:, tracking:) ->

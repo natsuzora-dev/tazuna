@@ -9,6 +9,7 @@ import shop/shared.{
 }
 import tazuna.{type Ctx, type Id, type MachineCtx, type QueryCtx}
 import tazuna/bag.{type Bag}
+import tazuna/duration
 import tazuna/table.{type Table}
 
 /// Units on hand per SKU, and the lines each order holds.
@@ -383,7 +384,7 @@ pub fn service() -> tazuna.Service {
             _, _ -> False
           }
         },
-        within: 0,
+        within: duration.milliseconds(0),
         deadline: fn(_records: Records, _trigger: Event) { None },
       ),
     ],

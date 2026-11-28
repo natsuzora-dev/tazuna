@@ -4,6 +4,7 @@
 import gleam/option.{type Option, None, Some}
 import shop/shared.{type Caller, Customer, Staff}
 import tazuna.{type Ctx, type MachineCtx, type QueryCtx, type TimerCtx}
+import tazuna/duration
 import tazuna/instant.{type Instant}
 import tazuna/table.{type Table}
 
@@ -99,7 +100,7 @@ fn apply(ctx: tazuna.ApplyCtx(Records), event: Event) -> Records {
         sales: table.insert(
           records.sales,
           sku,
-          Sale(percent: percent, ends: instant.add(ctx.now, shared.day)),
+          Sale(percent: percent, ends: instant.add(ctx.now, duration.hours(24))),
         ),
       )
     SaleEnded(sku) ->
@@ -405,7 +406,7 @@ pub fn service() -> tazuna.Service {
             _, _ -> False
           }
         },
-        within: shared.day,
+        within: duration.hours(24),
         deadline: fn(records: Records, trigger: Event) {
           case trigger {
             SaleStarted(sku:, ..) ->
@@ -441,7 +442,7 @@ fn a_sale_runs_for_a_day() -> tazuna.Scenario(Records, Event, Caller) {
       caller: Staff,
       input: "MUG-01",
     ),
-    tazuna.step_wait(for: shared.day),
+    tazuna.step_wait(for: duration.hours(24)),
     tazuna.step_query(query: price_of(), caller: Customer, input: "MUG-01"),
   ])
 }

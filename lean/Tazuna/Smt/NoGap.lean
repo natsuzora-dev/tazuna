@@ -868,6 +868,8 @@ theorem primCode_sound (hC : Covers L P ds) (p : Prim) (args : List Ty) (h : p.o
   | .length, _, _ => intro _ _ _; exact avail_int
   | .dateAddDays, _, _ => intro _ _ _; exact avail_date
   | .dateDaysBetween, _, _ => intro _ _ _; exact avail_int
+  | .durationMilliseconds, _, _ | .durationSeconds, _, _ | .durationMinutes, _, _ | .durationHours, _, _
+  | .durationToMilliseconds, _, _ => intro _ _ _; exact avail_int
   | .instantAdd, _, _ => intro _ _ _; exact avail_date
   | .instantDiff, _, _ => intro _ _ _; exact avail_int
   | .instantIsBefore, _, _ | .instantIsAfter, _, _ => intro _ _ _; exact avail_bool

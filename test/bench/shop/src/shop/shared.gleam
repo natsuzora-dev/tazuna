@@ -168,9 +168,3 @@ pub fn book_parcel() -> tazuna.ExternalCommand(Parcel, Label, BookingRefused) {
 pub fn scans() -> tazuna.Source(Scan) {
   tazuna.source(name: "scan")
 }
-
-pub const minute: Int = 60_000
-
-pub const hour: Int = 3_600_000
-
-pub const day: Int = 86_400_000

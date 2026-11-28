@@ -428,7 +428,8 @@ theorem primCode_exact (p : Prim) (args : List Ty) (hp : p.ok args = true) (s : 
   case dateDaysBetween =>
     simp only [primCode] at h; cases h
     exact frel_tt rfl fun ss s c hr => by cases hr; rfl
-  case instantAdd | instantDiff | instantIsBefore | instantIsAfter =>
+  case durationMilliseconds | durationSeconds | durationMinutes | durationHours | durationToMilliseconds
+      | instantAdd | instantDiff | instantIsBefore | instantIsAfter =>
     simp only [primCode] at h; cases h
     exact frel_tt rfl fun ss s c hr => by cases hr; rfl
   case require =>
