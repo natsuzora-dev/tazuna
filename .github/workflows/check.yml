@@ -50,7 +50,6 @@ jobs:
         env:
           TAZUNA_ENGINE: ${{ github.workspace }}/lean/.lake/build/bin/tazuna-engine
         run: |
-          # search exits 2 for the nine pair lines that README.md explains in "The lines prove leaves open".
-          gleam run -m tazuna -- search shop_spec "$RUNNER_TEMP/shop-inputs" --jobs 4 >/dev/null || [ $? -eq 2 ]
+          gleam run -m tazuna -- search shop_spec "$RUNNER_TEMP/shop-inputs" --jobs 4 >/dev/null
           diff -r inputs "$RUNNER_TEMP/shop-inputs" ||
             { echo "samples/shop/spec/inputs is stale. Run: rm -r inputs && gleam run -m tazuna -- search shop_spec inputs"; exit 1; }

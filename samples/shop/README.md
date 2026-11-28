@@ -69,7 +69,7 @@ gleam run -m tazuna -- prove shop_spec --jobs 4
 
 `prove` checks each invariant, each `ensures` rule, the response, the `cascade` bound, and each own command, one input at a time.
 It starts from any state where the invariants hold, not only from states a run reaches, and asks the solver whether one input can break the target.
-It asks 312 questions and takes about 14 seconds.
+It asks 287 questions and takes about 12 seconds.
 
 The six invariants hold in the initial state:
 
@@ -77,7 +77,7 @@ The six invariants hold in the initial state:
 {"assumes":[],"kind":"Prove.proved","service":"payments","step":"init","target":"invariant no cancelled order keeps its money"}
 ```
 
-162 lines read `Prove.withinBounds`: no input breaks the target in any state that fits the model, such as three orders and two prices in orders.
+171 lines read `Prove.withinBounds`: no input breaks the target in any state that fits the model, such as three orders and two prices in orders.
 Each line's `scope` lists those bounds.
 
 ### What prove found
@@ -103,15 +103,17 @@ Two counterexamples showed states that no run reaches, and each led to one more 
 This is the usual way to work with `prove`.
 A counterexample from a state no run reaches tells you which fact the spec relies on but does not state.
 
-### The lines prove leaves open
+### Pairs of own commands
 
-Nine lines read `Prove.unproved`, so the command exits 2.
-Each is a pair of own commands, such as two `take` commands for the same order with different amounts.
+Some lines are pairs of own commands, such as `own command take and own command take commute`.
 If one step queued both, the result would depend on which runs first.
 
-No step of this spec queues such a pair.
-Each event starts at most one own command for an order, and each `cancel for` that the reaction or the deadline sends has a fixed reason.
-`prove` does not yet see either fact, so it asks about every pair the code could send.
+`prove` reads off the code which pairs a step can queue, and with which inputs:
+
+- An event line applies one event, so each reaction runs once on it and takes one clause of its `case`. Each clause sends at most one own command, so no step queues two `take` commands, or `request payment` with the `cancel for` of `OutOfStock`, and `prove` does not ask whether such pairs commute.
+- When two payment deadlines pass at once, one clock line queues two `cancel for` commands. The deadline always sends the reason `NotPaidInTime`, so `prove` asks whether two such commands commute only with that reason, and they do.
+
+So every pair line reads `Prove.withinBounds`, and `prove` exits 0.
 
 ## Test the scenarios
 
