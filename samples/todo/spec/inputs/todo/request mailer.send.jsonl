@@ -1,7 +1,7 @@
 {"service":"todo","trace":1}
-{"caller":{"tag":"User"},"id":"1","in":"request","input":"title is not emptyz","name":"add","time":0}
+{"caller":{"tag":"User"},"id":"1","in":"request","input":"every title is not empty","name":"add","time":0}
 {"out":"answer","outcome":"accepted","time":0,"to":"1"}
-{"out":"event","time":0,"value":{"tag":"Added","task":"id1","title":"title is not emptyz"}}
+{"out":"event","time":0,"value":{"tag":"Added","task":"id1","title":"every title is not empty"}}
 {"in":"clock","time":3600000}
-{"out":"event","time":3600000,"value":{"tag":"ReminderDue","task":"id1","title":"title is not emptyz"}}
-{"external":"mailer","id":"r1","input":{"subject":"title is not emptyz","tag":"Mail"},"name":"send","out":"request","time":3600000}
+{"out":"event","time":3600000,"value":{"tag":"ReminderDue","task":"id1","title":"every title is not empty"}}
+{"external":"mailer","id":"r1","input":{"subject":"every title is not empty","tag":"Mail"},"name":"send","out":"request","time":3600000}

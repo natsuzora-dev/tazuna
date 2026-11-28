@@ -4,7 +4,7 @@ This sample takes one small spec through every tazuna command, then compares an 
 `spec/` holds the spec, a Gleam project.
 `web/` holds an implementation of the same service and a script that records its log.
 
-The service keeps a list of open tasks.
+The service keeps a list of at most two open tasks.
 A user adds a task with `add` and completes it with `complete`, which removes it.
 The query `open tasks` answers how many tasks are open.
 An hour after a task is added, if it is still open, the `reminder` machine runs the service's own command `remind`, and the `mail` reaction asks the external `mailer` to send a reminder.
@@ -39,7 +39,7 @@ gleam run -m tazuna -- prove todo_spec
 ```
 
 `prove` checks the spec in the model that `model()` returns, beside `spec()`.
-`spec()` says what the service means; the model says how far `prove` and `generate` look: at most two open tasks, one item in every other collection, and runs of up to three inputs.
+`spec()` says what the service means; the model says how far `prove` and `generate` look: at most two open tasks, two items in every other collection, and runs of up to three inputs.
 A root module can define more models, such as a larger one for a nightly run, and `--model <name>` picks one.
 
 `prove` prints one line per target and input kind.
@@ -50,7 +50,7 @@ The first line says that the initial records keep the invariant:
 {"assumes":[],"kind":"Prove.proved","service":"todo","step":"init","target":"invariant every title is not empty"}
 ```
 
-The other 27 lines read `Prove.withinBounds`, and the command exits 0.
+The other 30 lines read `Prove.withinBounds`, and the command exits 0.
 No step breaks its target while the state fits the model's slots, but a step can grow the task table past the two tasks that `creates` allows.
 Each line's `scope` names the model and lists those bounds.
 
@@ -88,10 +88,32 @@ gleam run -m tazuna -- generate todo_spec inputs
 ```
 
 Every target is reached.
-`add` never rejects, so its rejection type is `tazuna.Never`, which has no values and so makes no rejected target.
+`add` rejects with `TooManyOpenTasks` once two tasks are open.
+Tasks added at one time come due at one time, and each due reminder takes one internal step of the clock line that reaches it, so the cap is what keeps a clock line within the service's `cascade` of 2.
+The model's `others_at_most` of 2 lets the reminder's two instances fit, so `generate` reaches the rejection too.
 
 `remind` lists only `tazuna.Own` in `callers`, so only the service itself runs it, through the `reminder` machine.
 Its one target, `remind invalid callers`, is an outside request that the implementation must refuse.
+
+## Explore the states
+
+```sh
+gleam run -m tazuna -- explore todo_spec found
+```
+
+`explore` searches the states the service reaches from its initial state breadth first, as TLC does, trying every input from each state.
+`add` takes the titles the model's `values` list, `""` and `"Buy milk"`; every id field takes the ids the state holds and one new one.
+A clock line moves time by the model's wait of an hour, and to each deadline the state holds and the millisecond after it.
+The search stops at `explore_depth`, six inputs:
+
+```json
+{"kind":"Explore.covered","scope":{"capped":false,"depth":6,"exhausted":false,"exploreDepth":6,"exploreStates":10000,"model":"model","othersAtMost":2,"values":[{"input":"command add","ints":[],"strings":["","Buy milk"]}],"waits":[3600000]},"service":"todo","states":[1,1,3,10,21,37,58],"transitions":845}
+```
+
+It reaches every target `generate` reaches and writes its runs to `found/todo/`.
+The seven targets a fault or a late answer breaks read `Explore.notViolated` for runs of up to six inputs.
+Without the cap on open tasks, the `cascade bound` line reads `Explore.violated` instead: three tasks added at one time come due at one clock line, and their three reminders take more internal steps than the `cascade` of 2 allows.
+`prove` reads that bound `Prove.withinBounds`, as it looks at two tasks only.
 
 ## Verify an implementation's log
 

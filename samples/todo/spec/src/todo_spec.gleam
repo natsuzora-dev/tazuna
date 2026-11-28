@@ -1,5 +1,6 @@
 //// A todo service: users add tasks and complete them, and an hour after a
-//// task is added, if it is still open, the service mails a reminder.
+//// task is added, if it is still open, the service mails a reminder. At most
+//// two tasks are open at a time.
 
 import gleam/option.{None, Some}
 import tazuna.{type Ctx, type Id, type MachineCtx, type QueryCtx, type TimerCtx}
@@ -31,6 +32,7 @@ pub type Caller {
 
 pub type Rejection {
   NoSuchTask
+  TooManyOpenTasks
 }
 
 /// What the mailer is asked to send.
@@ -75,13 +77,19 @@ fn apply(ctx: tazuna.ApplyCtx(Records), event: Event) -> Records {
   }
 }
 
-fn add() -> tazuna.Command(Records, Event, Caller, String, tazuna.Never) {
+/// Tasks added at one time come due at one time, and each due reminder is
+/// one internal step of that clock line, so the cap on open tasks is what
+/// keeps a clock line within the service's `cascade`.
+fn add() -> tazuna.Command(Records, Event, Caller, String, Rejection) {
   tazuna.command(
     name: "add",
     callers: [tazuna.Outside(User)],
     accepts: fn(title) { [#("title is not empty", title != "")] },
     decide: fn(ctx: Ctx(Records, String, Caller)) {
-      Ok([Added(tazuna.fresh(ctx.fresh, 0), ctx.input)])
+      case table.size(ctx.records.tasks) < 2 {
+        True -> Ok([Added(tazuna.fresh(ctx.fresh, 0), ctx.input)])
+        False -> Error(TooManyOpenTasks)
+      }
     },
     ensures: fn(ctx: Ctx(Records, String, Caller), after: Records) {
       [
@@ -308,8 +316,9 @@ pub fn spec() -> tazuna.Spec {
   ])
 }
 
-/// How far prove and generate look: at most two open tasks, one item in every
-/// other collection, and runs of up to three inputs.
+/// How far prove and generate look: at most two open tasks, two items in every
+/// other collection, and runs of up to three inputs. explore tries an empty
+/// title and one other for `add`, and searches six inputs deep.
 pub fn model() -> tazuna.Model {
   tazuna.model(spec: spec(), resource_limit: 50_000_000, scopes: [
     tazuna.scope(
@@ -317,12 +326,17 @@ pub fn model() -> tazuna.Model {
       creates: [
         tazuna.create(table: fn(records: Records) { records.tasks }, at_most: 2),
       ],
-      others_at_most: 1,
+      others_at_most: 2,
       steps: 3,
       explore_depth: 6,
       explore_states: 10_000,
       waits: [duration.hours(1)],
-      values: [],
+      values: [
+        tazuna.values(of: tazuna.declare_command(add()), ints: [], strings: [
+          "",
+          "Buy milk",
+        ]),
+      ],
     ),
   ])
 }

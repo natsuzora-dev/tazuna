@@ -2,7 +2,8 @@
 // line of a tazuna trace.
 
 const hour = 3_600_000;
-const rejected = { outcome: "rejected", rejection: { tag: "NoSuchTask" } };
+const rejected = (tag) => ({ outcome: "rejected", rejection: { tag } });
+const maxOpen = 2;
 // The requests outside callers may send. Reminders run only from the clock.
 const publicRequests = new Set(["add", "complete", "open tasks"]);
 
@@ -37,13 +38,14 @@ export function createTodo(record) {
       switch (name) {
         case "add": {
           if (input === "") return answer(to, { outcome: "invalid", rules: ["title is not empty"] });
+          if (tasks.size >= maxOpen) return answer(to, rejected("TooManyOpenTasks"));
           const task = `task-${++taskCount}`;
           tasks.set(task, { title: input, dueAt: now + hour });
           answer(to, { outcome: "accepted" });
           return event({ tag: "Added", task, title: input });
         }
         case "complete":
-          if (!tasks.delete(input)) return answer(to, rejected);
+          if (!tasks.delete(input)) return answer(to, rejected("NoSuchTask"));
           answer(to, { outcome: "accepted" });
           return event({ tag: "Completed", task: input });
         case "open tasks":
