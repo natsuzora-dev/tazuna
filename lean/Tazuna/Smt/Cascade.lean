@@ -1,6 +1,6 @@
 import Tazuna.Smt.InternalDispatch
 
-/-! The cascade: the internal steps one input takes, unrolled up to `bounds.cascade`. Internal step `i` runs the own
+/-! The cascade: the internal steps one input takes, unrolled up to `cascade`. Internal step `i` runs the own
 effect at queue place `k + i` (`queueAt` over every own slot so far) when the place is occupied and no earlier internal
 step faulted; each internal step's own slots join the queue, as `Step.settleFrom` walks a queue that is never popped.
 A place past the bound that is occupied is `Fault.cascadeLimit`, exactly as the semantics says. -/

@@ -422,7 +422,7 @@ def rootUses (v : ServiceV) : List Uses :=
     v.queries.flatMap (fun q => [q.accepts.uses, q.resolve.uses]) ++
     v.machines.flatMap (fun m => [m.instances.uses, m.on.uses, m.timer.uses, m.invariants.uses, m.effect.uses]) ++
     v.reactions.map (·.react.uses) ++ v.subscribes.map (·.wrap.uses) ++
-    v.responses.flatMap (fun r => [r.after.uses, r.then_.uses, r.deadline.uses]) ++ v.bounds.creates.map (·.table.uses)
+    v.responses.flatMap (fun r => [r.after.uses, r.then_.uses, r.deadline.uses])
 
 /-- Every kept function of a service, by field. Each structure is matched whole, so a field added to one of them stops
 this from compiling until it is listed or matched as `_`; `rootUses_eq` then holds only once `rootUses` reads it too.
@@ -431,7 +431,7 @@ commands and queries the service lists and the externals' declarations, whose fu
 program's sites; `scenarios` run in `test` alone. -/
 def keptUses : ServiceV → List Uses
   | ⟨_name, _records, _event, _caller, _init, apply, subscribes, _declares, commands, queries, _sources, machines,
-      reactions, invariants, responses, ⟨creates, _items, _cascade, _steps⟩, _scenarios, _declared⟩ =>
+      reactions, invariants, responses, _cascade, _scenarios, _declared⟩ =>
     [apply.uses, invariants.uses] ++
       commands.flatMap (fun (⟨_name, _input, _rejection, _callers, accepts, decide, ensures⟩ : CommandV _records _event _caller) =>
         [accepts.uses, decide.uses, ensures.uses]) ++
@@ -443,12 +443,11 @@ def keptUses : ServiceV → List Uses
       reactions.map (fun (⟨_name, react⟩ : ReactionV _records _event) => react.uses) ++
       subscribes.map (fun (⟨_source, _name, _sourceEvent, wrap⟩ : SubscriptionV _event) => wrap.uses) ++
       responses.flatMap (fun (⟨_name, after, then_, _within, deadline⟩ : ResponseV _records _event) =>
-        [after.uses, then_.uses, deadline.uses]) ++
-      creates.map (fun (⟨_key, _value, table, _atMost⟩ : CreateV _records) => table.uses)
+        [after.uses, then_.uses, deadline.uses])
 
 /-- `rootUses` reads every kept function of the service. -/
 theorem rootUses_eq (v : ServiceV) : rootUses v = keptUses v := by
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, ⟨_, _, _, _⟩, _, _⟩ := v
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _⟩ := v
   rfl
 
 /-- The handles of `H` a send can make. -/

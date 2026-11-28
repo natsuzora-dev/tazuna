@@ -317,9 +317,9 @@ end Layout
 
 /-- The service's layout declares every datatype it holds: each has a sort for every field, so its `datatypes?` is
 found. -/
-theorem datatypes_ofParts (p : ProgramParts) (v : ServiceV) : ∃ dts, (Layout.ofParts p v).datatypes? = some dts := by
+theorem datatypes_ofParts (p : ProgramParts) (v : ServiceV) {bnd : BoundsV v.records} : ∃ dts, (Layout.ofParts p v bnd).datatypes? = some dts := by
   obtain ⟨hK, hO⟩ := kindsOf_fields p v
-  have h := Layout.addTys_dts (listSlots (stepSlots v p.lits) p.lits) (Layout.kindsOf p v) rfl (fun e fs hfs t ht => by
+  have h := Layout.addTys_dts (listSlots (stepSlots v bnd p.lits) p.lits) (Layout.kindsOf p v) rfl (fun e fs hfs t ht => by
       simp only [Layout.effectFields, Layout.effectsOf, Layout.ownsOf, List.mem_append, List.mem_map,
         List.mem_filter] at hfs
       have hdata : ∀ {fs : List Ty}, Ty.sorteds fs = true ∧ (Ty.tuple fs).isData = true → t ∈ fs →
@@ -613,16 +613,16 @@ end
 
 /-- A checked service's initial state has constant terms in its layout wherever its records have an SMT value: the
 pending table and the instance tables start empty. -/
-theorem initState_ofService (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.services)
-    (he : (embedV (Layout.ofService c.program.defs v) v.records (Ty.up _ v.records_data v.init)).isSome = true) :
-    (initState (Layout.ofService c.program.defs v) v).isSome = true := by
+theorem initState_ofService (c : CheckedSpec) {v : ServiceV} {bnd : BoundsV v.records} (hv : v ∈ c.spec.services)
+    (he : (embedV (Layout.ofService c.program.defs v bnd) v.records (Ty.up _ v.records_data v.init)).isSome = true) :
+    (initState (Layout.ofService c.program.defs v bnd) v).isSome = true := by
   have hk := c.checked v hv
-  have hs := stepTys_has c.program.defs hk
-  have hL := sorted_ofParts c.program.defs.parts v
+  have hs := stepTys_has (bnd := bnd) c.program.defs hk
+  have hL := sorted_ofParts (bnd := bnd) c.program.defs.parts v
   obtain ⟨⟨her, -⟩, hms, hep, -, -⟩ := stateTys_iff.1 hk.stateTys
   obtain ⟨r, hr⟩ := Option.isSome_iff_exists.1
     (dataT_isSome hL v.records (hs _ (by simp [stepTys])) (sorted_of_embeddable _ her) _ he)
-  have hp : (Layout.ofService c.program.defs v).Has (pendingTable (shapes v)) := hs _ (by simp [stepTys])
+  have hp : (Layout.ofService c.program.defs v bnd).Has (pendingTable (shapes v)) := hs _ (by simp [stepTys])
   obtain ⟨-, hw1, ht1, hf1⟩ := hp
   obtain ⟨⟨d, n⟩, hd⟩ := Option.isSome_iff_exists.1 hf1
   obtain ⟨q, hq⟩ := Option.isSome_iff_exists.1 (collT_isSome hL (xs := []) hd ht1
@@ -648,35 +648,35 @@ theorem mem_placeKinds {v : ServiceV} {shs : List (PendingShape v.event)} {n : N
       exact ⟨k, by simp [hk], b', rfl⟩
 
 section
-variable (c : CheckedSpec) (v : ServiceV)
+variable (c : CheckedSpec) (v : ServiceV) {bnd : BoundsV v.records}
 
 /-- The types of an input kind's terms and values have their datatypes in the service's layout wherever they have
 sorts. -/
 def KindAvail {n : Nat} (inp : SymInput v (shapes v) n) : Prop :=
-  (∀ t ∈ inp.tys, Avail (Layout.ofService c.program.defs v) t) ∧
-    ∀ t ∈ inp.dataTys, Avail (Layout.ofService c.program.defs v) t
+  (∀ t ∈ inp.tys, Avail (Layout.ofService c.program.defs v bnd) t) ∧
+    ∀ t ∈ inp.dataTys, Avail (Layout.ofService c.program.defs v bnd) t
 
 theorem kindAvail {n : Nat} (inp : SymInput v (shapes v) n) (hu : ∀ t a b, inp ≠ .unmatched t a b) :
-    KindAvail c v inp := by
-  have hcaller := avail_stepTy c v (t := v.caller) (by simp [stepTys])
+    KindAvail (bnd := bnd) c v inp := by
+  have hcaller := avail_stepTy (bnd := bnd) c v (t := v.caller) (by simp [stepTys])
   cases inp with
   | command i x y =>
-    have hi := avail_use c v (t := (v.commands.get i).input) (by
+    have hi := avail_use (bnd := bnd) c v (t := (v.commands.get i).input) (by
       simp only [useTys, List.mem_append, List.mem_flatMap, List.mem_cons]
       exact .inl (.inl (.inl (.inl (.inr ⟨_, List.get_mem _ i, by simp⟩)))))
     simp only [List.get_eq_getElem] at hi
     exact ⟨by simp [SymInput.tys, hcaller, hi], by simp [SymInput.dataTys, hcaller, hi]⟩
   | query i x y =>
-    have hi := avail_use c v (t := (v.queries.get i).input) (by
+    have hi := avail_use (bnd := bnd) c v (t := (v.queries.get i).input) (by
       simp only [useTys, List.mem_append, List.mem_flatMap, List.mem_cons]
       exact .inl (.inl (.inl (.inr ⟨_, List.get_mem _ i, by simp⟩))))
     simp only [List.get_eq_getElem] at hi
     exact ⟨by simp [SymInput.tys, hcaller, hi], by simp [SymInput.dataTys, hcaller, hi]⟩
   | answer j k x y =>
-    have hi := avail_use c v (t := answerTy (shapes v)[j].output (shapes v)[j].rejection) (by
+    have hi := avail_use (bnd := bnd) c v (t := answerTy (shapes v)[j].output (shapes v)[j].rejection) (by
       simp only [useTys, List.mem_append, List.mem_map]
       exact .inl (.inr ⟨_, List.getElem_mem _, rfl⟩))
-    have hi' : Avail (Layout.ofService c.program.defs v) (answerTy (shapes v)[j.1].output (shapes v)[j.1].rejection) := hi
+    have hi' : Avail (Layout.ofService c.program.defs v bnd) (answerTy (shapes v)[j.1].output (shapes v)[j.1].rejection) := hi
     refine ⟨fun t ht => ?_, fun t ht => ?_⟩
     · simp only [SymInput.tys, List.mem_cons, List.not_mem_nil, or_false] at ht
       rcases ht with rfl | rfl
@@ -686,7 +686,7 @@ theorem kindAvail {n : Nat} (inp : SymInput v (shapes v) n) (hu : ∀ t a b, inp
       subst ht; exact hi'
   | unmatched t x y => exact absurd rfl (hu t x y)
   | event i x =>
-    have hi := avail_use c v (t := (v.subscribes.get i).event) (by
+    have hi := avail_use (bnd := bnd) c v (t := (v.subscribes.get i).event) (by
       simp only [useTys, List.mem_append, List.mem_map]
       exact .inl (.inl (.inr ⟨_, List.get_mem _ i, rfl⟩)))
     simp only [List.get_eq_getElem] at hi
@@ -695,7 +695,7 @@ theorem kindAvail {n : Nat} (inp : SymInput v (shapes v) n) (hu : ∀ t a b, inp
     exact ⟨fun t ht => by simp only [SymInput.tys, List.mem_singleton] at ht; subst ht; exact avail_int,
       by simp [SymInput.dataTys]⟩
 
-theorem unrollKinds_avail {n : Nat} {a : Bool} : ∀ k ∈ unrollKinds v (shapes v) n a, ∀ b, KindAvail c v (k.2 b) := by
+theorem unrollKinds_avail {n : Nat} {a : Bool} : ∀ k ∈ unrollKinds v (shapes v) n a, ∀ b, KindAvail (bnd := bnd) c v (k.2 b) := by
   intro k hk b
   simp only [unrollKinds, List.mem_append, List.mem_map, List.mem_finRange, true_and, List.mem_singleton] at hk
   rcases hk with (((⟨i, rfl⟩ | ⟨i, rfl⟩) | hk) | ⟨i, rfl⟩) | rfl
@@ -709,7 +709,7 @@ theorem unrollKinds_avail {n : Nat} {a : Bool} : ∀ k ∈ unrollKinds v (shapes
   · exact kindAvail c v _ fun _ _ _ h => by cases h
   · exact kindAvail c v _ fun _ _ _ h => by cases h
 
-theorem stepInputs_avail {n b : Nat} : ∀ inp ∈ stepInputs v (shapes v) n b, KindAvail c v inp := by
+theorem stepInputs_avail {n b : Nat} : ∀ inp ∈ stepInputs v (shapes v) n b, KindAvail (bnd := bnd) c v inp := by
   intro inp hinp
   refine kindAvail c v inp fun t x y h => ?_
   subst h
@@ -758,26 +758,26 @@ theorem sound_error {α : Type} {p : α → Prop} {x : Except Refusal α} {r : R
   subst hx; exact h
 
 section
-variable {c : CheckedSpec} {v : ServiceV} (hv : v ∈ c.spec.services) (T : List TypeDecl)
-  (senv : StepEnv (Layout.ofService c.program.defs v) (shapes v))
+variable {c : CheckedSpec} {v : ServiceV} {bnd : BoundsV v.records} (hv : v ∈ c.spec.services) (T : List TypeDecl)
+  (senv : StepEnv (Layout.ofService c.program.defs v bnd) (shapes v))
 include hv
 
-theorem unrollKind_gap (S : SymState v) (shown : List (Term × Term)) (sel : Term) (inp : SymInput v (shapes v) senv.nT) (ha : KindAvail c v inp)
+theorem unrollKind_gap (S : SymState v) (shown : List (Term × Term)) (sel : Term) (inp : SymInput v (shapes v) senv.nT) (ha : KindAvail (bnd := bnd) c v inp)
     {x : SymInput v (shapes v) senv.nT × Refusal}
-    (h : unrollKind (Layout.ofService c.program.defs v) T c.P v senv S shown sel inp = .error x) : x.2.gap = false := by
+    (h : unrollKind (Layout.ofService c.program.defs v bnd) T c.P v senv S shown sel inp = .error x) : x.2.gap = false := by
   unfold unrollKind at h
-  cases h1 : encodeStep (Layout.ofService c.program.defs v) T c.P v senv S inp with
+  cases h1 : encodeStep (Layout.ofService c.program.defs v bnd) T c.P v senv S inp with
   | error r => simp only [h1] at h; cases h; exact sound_error (encodeStep_ofService hv T senv S inp) h1
   | ok t =>
-    cases h2 : inp.validT (Layout.ofService c.program.defs v) S.fresh with
+    cases h2 : inp.validT (Layout.ofService c.program.defs v bnd) S.fresh with
     | error r => simp only [h1, h2] at h; cases h; exact sound_error (validT_sound inp S.fresh ha.2) h2
     | ok valid =>
-      cases h3 : need (lacksDatas inp.dataTys) (inp.wf (Layout.ofService c.program.defs v)) with
+      cases h3 : need (lacksDatas inp.dataTys) (inp.wf (Layout.ofService c.program.defs v bnd)) with
       | error r => simp only [h1, h2, h3] at h; cases h; exact sound_error (wfIn_sound inp ha.2) h3
       | ok wf => simp only [h1, h2, h3] at h; cases h
 
 theorem unrollOne_gap (S : SymState v) (shown : List (Term × Term)) (i b : Nat) (f : Option Nat) :
-    ∀ p ∈ (unrollOne (Layout.ofService c.program.defs v) T c.P v senv S shown i b f).2.2.2.1, p.2.gap = false := by
+    ∀ p ∈ (unrollOne (Layout.ofService c.program.defs v bnd) T c.P v senv S shown i b f).2.2.2.1, p.2.gap = false := by
   intro p hp
   simp only [unrollOne, List.mem_filterMap, List.mem_map, List.mem_filter] at hp
   obtain ⟨r, ⟨inp, ⟨hinp, -⟩, rfl⟩, hr⟩ := hp
@@ -789,7 +789,7 @@ theorem unrollOne_gap (S : SymState v) (shown : List (Term × Term)) (i b : Nat)
 
 omit hv in
 theorem unrollOne_avail (S : SymState v) (shown : List (Term × Term)) (i b : Nat) (f : Option Nat) :
-    ∀ t ∈ (unrollOne (Layout.ofService c.program.defs v) T c.P v senv S shown i b f).1, Avail (Layout.ofService c.program.defs v) t := by
+    ∀ t ∈ (unrollOne (Layout.ofService c.program.defs v bnd) T c.P v senv S shown i b f).1, Avail (Layout.ofService c.program.defs v bnd) t := by
   intro t ht
   simp only [unrollOne, List.mem_append, List.mem_singleton, List.mem_flatMap] at ht
   rcases ht with rfl | ⟨inp, hinp, ht⟩
@@ -798,14 +798,14 @@ theorem unrollOne_avail (S : SymState v) (shown : List (Term × Term)) (i b : Na
     exact (unrollKinds_avail c v k hk b').1 t ht
 
 theorem unrollSteps_gap : (S : SymState v) → (shown : List (Term × Term)) → (i b : Nat) → (fs : List (Option Nat)) →
-    (∀ p ∈ (unrollSteps (Layout.ofService c.program.defs v) T c.P v senv S shown i b fs).2.2.2, p.2.gap = false) ∧
-      ∀ t ∈ (unrollSteps (Layout.ofService c.program.defs v) T c.P v senv S shown i b fs).1,
-        Avail (Layout.ofService c.program.defs v) t
+    (∀ p ∈ (unrollSteps (Layout.ofService c.program.defs v bnd) T c.P v senv S shown i b fs).2.2.2, p.2.gap = false) ∧
+      ∀ t ∈ (unrollSteps (Layout.ofService c.program.defs v bnd) T c.P v senv S shown i b fs).1,
+        Avail (Layout.ofService c.program.defs v bnd) t
   | _, _, _, _, [] => ⟨fun _ h => (nomatch h), fun _ h => (nomatch h)⟩
   | S, shown, i, b, f :: fs => by
-    have ih := unrollSteps_gap (unrollOne (Layout.ofService c.program.defs v) T c.P v senv S shown i b f).2.2.1.after
-      (shown ++ (unrollOne (Layout.ofService c.program.defs v) T c.P v senv S shown i b f).2.2.1.shows) (i + 1)
-      (unrollOne (Layout.ofService c.program.defs v) T c.P v senv S shown i b f).2.2.2.2 fs
+    have ih := unrollSteps_gap (unrollOne (Layout.ofService c.program.defs v bnd) T c.P v senv S shown i b f).2.2.1.after
+      (shown ++ (unrollOne (Layout.ofService c.program.defs v bnd) T c.P v senv S shown i b f).2.2.1.shows) (i + 1)
+      (unrollOne (Layout.ofService c.program.defs v bnd) T c.P v senv S shown i b f).2.2.2.2 fs
     refine ⟨fun p hp => ?_, fun t ht => ?_⟩
     · simp only [unrollSteps, List.mem_append] at hp
       rcases hp with hp | hp
@@ -821,7 +821,7 @@ every refusal is the spec's (initial records past the slots, a limit, a string o
 rule out). -/
 theorem unrollBase_ofService (fs : List (Option Nat)) :
     Sound (fun B => ∀ p ∈ B.refused, p.2.gap = false)
-      (unrollBase (Layout.ofService c.program.defs v) T c.P v senv fs) := by
+      (unrollBase (Layout.ofService c.program.defs v bnd) T c.P v senv fs) := by
   unfold unrollBase
   refine sound_bind (sound_need fun h0 => ?_) fun S0 _ => ?_
   · split
@@ -835,8 +835,8 @@ theorem unrollBase_ofService (fs : List (Option Nat)) :
 
 end
 
-theorem stateTys_avail (c : CheckedSpec) (v : ServiceV) :
-    ∀ t ∈ stateTys v (shapes v), Avail (Layout.ofService c.program.defs v) t := by
+theorem stateTys_avail (c : CheckedSpec) (v : ServiceV) {bnd : BoundsV v.records} :
+    ∀ t ∈ stateTys v (shapes v), Avail (Layout.ofService c.program.defs v bnd) t := by
   intro t ht
   simp only [stateTys, List.mem_append, List.mem_cons, List.mem_map, List.not_mem_nil, or_false] at ht
   rcases ht with (rfl | rfl | rfl | rfl | rfl) | ⟨m, hm, rfl⟩
@@ -861,27 +861,27 @@ theorem namesMachinesT_isSome (n : Term) : (ms : List (MachineV r e)) → (∀ m
 end
 
 section
-variable {c : CheckedSpec} {v : ServiceV} (hv : v ∈ c.spec.services) (T : List TypeDecl)
-  (senv : StepEnv (Layout.ofService c.program.defs v) (shapes v))
+variable {c : CheckedSpec} {v : ServiceV} {bnd : BoundsV v.records} (hv : v ∈ c.spec.services) (T : List TypeDecl)
+  (senv : StepEnv (Layout.ofService c.program.defs v bnd) (shapes v))
 include hv
 
 /-- In each service's layout, what prove's questions about an input kind share never refuses with a layout gap. -/
 theorem stepAsk_ofService (inp : SymInput v (shapes v) senv.nT)
     (hinp : inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v)) :
-    Sound (fun _ => True) (stepAsk (Layout.ofService c.program.defs v) T c.P v senv inp) := by
-  have h := serviceGot_ofService hv
+    Sound (fun _ => True) (stepAsk (Layout.ofService c.program.defs v bnd) T c.P v senv inp) := by
+  have h := serviceGot_ofService (bnd := bnd) hv
   have chk := c.checked v hv
-  have ha := stepInputs_avail c v inp hinp
+  have ha := stepInputs_avail (bnd := bnd) c v inp hinp
   unfold stepAsk
   refine sound_bind (encodeStep_ofService hv T senv _ inp) fun t _ => ?_
   refine sound_bind (sound_need fun hn => by
-    have := wf_ofService c.program.defs chk (SymState.vars 0 : SymState v); rw [hn] at this; cases this) fun wf _ => ?_
+    have := wf_ofService (bnd := bnd) c.program.defs chk (SymState.vars 0 : SymState v); rw [hn] at this; cases this) fun wf _ => ?_
   refine sound_bind (wfIn_sound inp ha.2) fun iwf _ => ?_
   obtain ⟨b, hb⟩ := pendingBelowT_ofService c.program.defs chk (SymState.vars 0 : SymState v).pending
     (SymState.vars 0 : SymState v).nextId
   refine sound_bind_ok hb ?_
   obtain ⟨⟨her, -⟩, hms, -, -, -⟩ := stateTys_iff.1 chk.stateTys
-  have hs := stepTys_has c.program.defs chk
+  have hs := stepTys_has (bnd := bnd) c.program.defs chk
   refine sound_bind (sound_need fun hn => by
     obtain ⟨c1, h1⟩ := Option.isSome_iff_exists.1 (namesT_isSome (SymState.vars 0 : SymState v).fresh v.records
       (hs _ (by simp [stepTys])) her (SymState.vars 0 : SymState v).records)
@@ -904,7 +904,7 @@ theorem stepAsk_ofService (inp : SymInput v (shapes v) senv.nT)
 /-- In each service's layout, prove's questions about an input kind never refuse with a layout gap. -/
 theorem questions_ofService (inp : SymInput v (shapes v) senv.nT)
     (hinp : inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v)) :
-    Sound (fun _ => True) (questions (Layout.ofService c.program.defs v) T c.P v senv inp) :=
+    Sound (fun _ => True) (questions (Layout.ofService c.program.defs v bnd) T c.P v senv inp) :=
   sound_bind (stepAsk_ofService hv T senv inp hinp) fun _ _ => trivial
 
 end
@@ -988,37 +988,37 @@ theorem tablesEqT_sound (hL : SortedLayout L) : (ms : List (MachineV r e)) → (
 end
 
 section
-variable {c : CheckedSpec} {v : ServiceV} (hv : v ∈ c.spec.services) (T : List TypeDecl)
-  (senv : StepEnv (Layout.ofService c.program.defs v) (shapes v))
+variable {c : CheckedSpec} {v : ServiceV} {bnd : BoundsV v.records} (hv : v ∈ c.spec.services) (T : List TypeDecl)
+  (senv : StepEnv (Layout.ofService c.program.defs v bnd) (shapes v))
 include hv
 
 /-- In each service's layout, a pair of own kinds' two questions never refuse with a layout gap. -/
-theorem pairQuestions_ofService (k1 k2 : OwnPlace (Layout.ofService c.program.defs v) v.event) :
-    Sound (fun _ => True) (pairQuestions (Layout.ofService c.program.defs v) T c.P v senv k1 k2) := by
-  have h := serviceGot_ofService hv
+theorem pairQuestions_ofService (k1 k2 : OwnPlace (Layout.ofService c.program.defs v bnd) v.event) :
+    Sound (fun _ => True) (pairQuestions (Layout.ofService c.program.defs v bnd) T c.P v senv k1 k2) := by
+  have h := serviceGot_ofService (bnd := bnd) hv
   have chk := c.checked v hv
   have hL := h.sorted
   obtain ⟨⟨her, -⟩, hms, -, -, -⟩ := stateTys_iff.1 chk.stateTys
-  have hs := stepTys_has c.program.defs chk
-  have heff : (Layout.ofService c.program.defs v).Has (.dsl .effect [v.event]) :=
+  have hs := stepTys_has (bnd := bnd) c.program.defs chk
+  have heff : (Layout.ofService c.program.defs v bnd).Has (.dsl .effect [v.event]) :=
     (hs (Ty.option (.dsl .effect [v.event])) (by simp [stepTys])).1.1.1
-  have hown : ∀ k : OwnPlace (Layout.ofService c.program.defs v) v.event, ∀ t ∈ ((Layout.ofService c.program.defs v).ownsOf v.event)[k].fields,
-      Layout.HasWith (Layout.ofService c.program.defs v) (fun _ _ => True) t := fun k t ht =>
+  have hown : ∀ k : OwnPlace (Layout.ofService c.program.defs v bnd) v.event, ∀ t ∈ ((Layout.ofService c.program.defs v bnd).ownsOf v.event)[k].fields,
+      Layout.HasWith (Layout.ofService c.program.defs v bnd) (fun _ _ => True) t := fun k t ht =>
     hasWiths_mem (hasWiths_of_mem heff.1 _ (List.mem_append_right _ (List.mem_map_of_mem (List.getElem_mem _)))) t ht
-  have hwf : ∀ (k : OwnPlace (Layout.ofService c.program.defs v) v.event) z,
-      Sound (fun a => ownWf (Layout.ofService c.program.defs v) v.event senv.dE k z = some a)
-        (need (lacksDatas ((Layout.ofService c.program.defs v).ownsOf v.event)[k].fields)
-          (ownWf (Layout.ofService c.program.defs v) v.event senv.dE k z)) := fun k z =>
+  have hwf : ∀ (k : OwnPlace (Layout.ofService c.program.defs v bnd) v.event) z,
+      Sound (fun a => ownWf (Layout.ofService c.program.defs v bnd) v.event senv.dE k z = some a)
+        (need (lacksDatas ((Layout.ofService c.program.defs v bnd).ownsOf v.event)[k].fields)
+          (ownWf (Layout.ofService c.program.defs v bnd) v.event senv.dE k z)) := fun k z =>
     sound_lacksDatas_of fun hf => by
       simp only [ownWf, Option.isSome_map]
       exact mapM_some_of fun x hx => wfT_isSome x.1 (hown k x.1 (List.fst_mem_of_mem_zipIdx hx))
         (hf x.1 (List.fst_mem_of_mem_zipIdx hx)).1 (hf x.1 (List.fst_mem_of_mem_zipIdx hx)).2 _
   unfold pairQuestions encodePair
   refine sound_bind (p := fun _ => True) (sound_bind h.apply fun ⟨apply, ca⟩ happ => ?_) fun o _ => ?_
-  · have step := fun records fresh n q eff xs (k : OwnPlace (Layout.ofService c.program.defs v) v.event) j =>
-      encodeOwnKind_sound h T senv ((Layout.ofService c.program.defs v).effectsOf v.event).length happ records
+  · have step := fun records fresh n q eff xs (k : OwnPlace (Layout.ofService c.program.defs v bnd) v.event) j =>
+      encodeOwnKind_sound h T senv ((Layout.ofService c.program.defs v bnd).effectsOf v.event).length happ records
         (SymState.vars 0 : SymState v).now fresh n q eff xs j
-        (List.getElem_mem (l := (Layout.ofService c.program.defs v).ownsOf v.event) k.2)
+        (List.getElem_mem (l := (Layout.ofService c.program.defs v bnd).ownsOf v.event) k.2)
     refine sound_bind (step _ _ _ _ _ _ k1 _) fun ⟨⟨_, a1⟩, c1, x1⟩ _ => ?_
     refine sound_bind (step _ _ _ _ _ _ k2 _) fun ⟨⟨_, a2⟩, c2, x2⟩ _ => ?_
     refine sound_bind (step _ _ _ _ _ _ k2 _) fun ⟨⟨_, b1⟩, c3, x3⟩ _ => ?_
@@ -1027,7 +1027,7 @@ theorem pairQuestions_ofService (k1 k2 : OwnPlace (Layout.ofService c.program.de
     exact sound_bind (tablesEqT_sound hL v.machines (fun m hm => avail_of_got (h.machines m hm).1.1.table) _ _)
       fun _ _ => trivial
   refine sound_bind (sound_need fun hn => by
-    have := wf_ofService c.program.defs chk (SymState.vars 0 : SymState v); rw [hn] at this; cases this) fun _ _ => ?_
+    have := wf_ofService (bnd := bnd) c.program.defs chk (SymState.vars 0 : SymState v); rw [hn] at this; cases this) fun _ _ => ?_
   obtain ⟨b, hb⟩ := pendingBelowT_ofService c.program.defs chk (SymState.vars 0 : SymState v).pending
     (SymState.vars 0 : SymState v).nextId
   refine sound_bind_ok hb ?_
@@ -1051,7 +1051,7 @@ theorem pairQuestions_ofService (k1 k2 : OwnPlace (Layout.ofService c.program.de
 
 /-- In each service's layout, a timer machine's two questions never refuse with a layout gap. -/
 theorem timerQuestions_ofService {m : MachineV v.records v.event} (hm : m ∈ v.machines) :
-    Sound (fun _ => True) (timerQuestions (Layout.ofService c.program.defs v) m) :=
+    Sound (fun _ => True) (timerQuestions (Layout.ofService c.program.defs v bnd) m) :=
   have h := serviceGot_ofService hv
   timerQuestions_sound h.sorted (h.machines m hm).1.1 (h.machines m hm).1.2 (datatypes_ofParts c.program.defs.parts v)
 

@@ -1779,10 +1779,10 @@ theorem kindsOf_fields (p : ProgramParts) (v : ServiceV) :
     exact hk.2
 
 /-- The service's layout keeps its kinds, and its datatypes have sorts. -/
-theorem allSorted_ofParts (p : ProgramParts) (v : ServiceV) : Layout.AllSorted (Layout.kindsOf p v) (Layout.ofParts p v) :=
+theorem allSorted_ofParts (p : ProgramParts) (v : ServiceV) {bnd : BoundsV v.records} : Layout.AllSorted (Layout.kindsOf p v) (Layout.ofParts p v bnd) :=
   by
   obtain ⟨hK, hO⟩ := kindsOf_fields p v
-  exact Layout.allSorted_addTys (listSlots (stepSlots v p.lits) p.lits) (Layout.kindsOf p v)
+  exact Layout.allSorted_addTys (listSlots (stepSlots v bnd p.lits) p.lits) (Layout.kindsOf p v)
     ⟨(fun _ h => nomatch h), rfl, rfl⟩ (fun e fs hfs => by
       simp only [Layout.effectFields, Layout.effectsOf, Layout.ownsOf, List.mem_append, List.mem_map,
         List.mem_filter] at hfs
@@ -1791,9 +1791,9 @@ theorem allSorted_ofParts (p : ProgramParts) (v : ServiceV) : Layout.AllSorted (
       · exact (hO k hk).1) ((stepTys v ++ p.tys ++ useTys v (Layout.kindsOf p v)).filter Ty.sortable)
       (fun t ht => (List.mem_filter.1 ht).2)
 
-theorem sorted_ofParts (p : ProgramParts) (v : ServiceV) : SortedLayout (Layout.ofParts p v) := by
+theorem sorted_ofParts (p : ProgramParts) (v : ServiceV) {bnd : BoundsV v.records} : SortedLayout (Layout.ofParts p v bnd) := by
   obtain ⟨hK, hO⟩ := kindsOf_fields p v
-  have hS := allSorted_ofParts p v
+  have hS := allSorted_ofParts (bnd := bnd) p v
   exact ⟨hS.1, fun k hk => hK k (hS.2.1 ▸ hk), fun k hk => hO k (hS.2.2 ▸ hk)⟩
 
 theorem requestShapesAt_mono {ds : List (String × DeclaredV)} {e : Ty} {S S' : List AnySite} (h : ∀ s ∈ S, s ∈ S')
@@ -1813,10 +1813,10 @@ theorem requestShapesAt_mono {ds : List (String × DeclaredV)} {e : Ty} {S S' : 
   | command | query | source => simp at hsh
 
 /-- The layout covers any of the program's sites: its request kinds have the request shapes of those sites. -/
-theorem covers_uses (p : ProgramParts) (v : ServiceV) {S : List AnySite} (hP : ∀ s ∈ S, s ∈ p.sites) :
-    Covers (Layout.ofParts p v) S v.declared := by
-  have hS' := allSorted_ofParts p v
-  have hE : (Layout.ofParts p v).effects = (Layout.kindsOf p v).effects := hS'.2.1
+theorem covers_uses (p : ProgramParts) (v : ServiceV) {bnd : BoundsV v.records} {S : List AnySite} (hP : ∀ s ∈ S, s ∈ p.sites) :
+    Covers (Layout.ofParts p v bnd) S v.declared := by
+  have hS' := allSorted_ofParts (bnd := bnd) p v
+  have hE : (Layout.ofParts p v bnd).effects = (Layout.kindsOf p v).effects := hS'.2.1
   refine ⟨sorted_ofParts p v, ?_⟩
   intro e sh hsh hs hd
   have hsh := requestShapesAt_mono hP hsh
@@ -1827,10 +1827,10 @@ theorem covers_uses (p : ProgramParts) (v : ServiceV) {S : List AnySite} (hP : �
 
 /-- Every send one function of the step can run is covered for any of that function's sites and handles that are the
 program's: the layout has each own kind it makes there. -/
-theorem sends_covered (p : ProgramParts) (v : ServiceV) {r : Uses} (hr : r ∈ rootUses v) {S : List AnySite}
+theorem sends_covered (p : ProgramParts) (v : ServiceV) {bnd : BoundsV v.records} {r : Uses} (hr : r ∈ rootUses v) {S : List AnySite}
     {Hs : List HandleSite} (hS : ∀ s ∈ S, s ∈ r.1) (hH : ∀ h ∈ Hs, h ∈ r.2.1) (hP : ∀ s ∈ S, s ∈ p.sites) :
-    ∀ w ∈ rootSends r, w.Covered (Layout.ofParts p v) S Hs := by
-  have hW : (Layout.ofParts p v).owns = (Layout.kindsOf p v).owns := (allSorted_ofParts p v).2.2
+    ∀ w ∈ rootSends r, w.Covered (Layout.ofParts p v bnd) S Hs := by
+  have hW : (Layout.ofParts p v bnd).owns = (Layout.kindsOf p v).owns := (allSorted_ofParts (bnd := bnd) p v).2.2
   intro w hw
   refine ⟨fun n rt e c i j hh s hs hso hd => ?_, fun n rt e c i o hh s hs hso hd => ?_⟩
   · rw [hW]
@@ -2523,9 +2523,9 @@ end
 
 /-- Every site of a checked spec's program is covered in each service's layout, so a kept function at one of them,
 and a pending request's `on_answer` and `ensures`, have codes with no layout gap behind them. -/
-theorem sites_ofService (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.services) :
-    ∀ s ∈ c.P, SiteOk (Layout.ofService c.program.defs v) c.P v.declared c.program.defs.handles s :=
-  siteOk_of c.program.defs ⟨fun u hu hs => ofService_has c.program.defs v u
+theorem sites_ofService (c : CheckedSpec) {v : ServiceV} {bnd : BoundsV v.records} (hv : v ∈ c.spec.services) :
+    ∀ s ∈ c.P, SiteOk (Layout.ofService c.program.defs v bnd) c.P v.declared c.program.defs.handles s :=
+  siteOk_of c.program.defs ⟨fun u hu hs => ofService_has c.program.defs v bnd u
     (List.mem_filter.2 ⟨List.mem_append_left _ (List.mem_append_right _ hu), sortable_of_sorted u hs⟩), fun _ h => h,
     fun h hm => handleOk_of_named hv hm (c.handles h hm)⟩
 
@@ -2543,7 +2543,7 @@ theorem rootUses_form {v : ServiceV} : ∀ r ∈ rootUses v, UsesForm r := by
   simp only [rootUses, List.mem_append, List.mem_cons, List.mem_flatMap, List.mem_map, List.not_mem_nil, or_false,
     or_assoc] at hr
   rcases hr with rfl | rfl | ⟨_, -, rfl | rfl | rfl⟩ | ⟨_, -, rfl | rfl⟩ | ⟨_, -, rfl | rfl | rfl | rfl | rfl⟩ |
-    ⟨_, -, rfl⟩ | ⟨_, -, rfl⟩ | ⟨_, -, rfl | rfl | rfl⟩ | ⟨_, -, rfl⟩ <;> exact ⟨_, _, _, _, _, rfl⟩
+    ⟨_, -, rfl⟩ | ⟨_, -, rfl⟩ | ⟨_, -, rfl | rfl | rfl⟩ <;> exact ⟨_, _, _, _, _, rfl⟩
 
 section
 variable {v : ServiceV}
@@ -2586,24 +2586,24 @@ theorem root_response {r : ResponseV v.records v.event} (hr : r ∈ v.responses)
     r.after.uses ∈ rootUses v ∧ r.then_.uses ∈ rootUses v ∧ r.deadline.uses ∈ rootUses v := by
   simp only [rootUses, List.mem_append, List.mem_cons, List.mem_flatMap, List.mem_map, List.not_mem_nil, or_false,
     or_assoc]
-  exact ⟨.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inl ⟨r, hr, .inl rfl⟩))))))),
-    .inr (.inr (.inr (.inr (.inr (.inr (.inr (.inl ⟨r, hr, .inr (.inl rfl)⟩))))))),
-    .inr (.inr (.inr (.inr (.inr (.inr (.inr (.inl ⟨r, hr, .inr (.inr rfl)⟩)))))))⟩
+  exact ⟨.inr (.inr (.inr (.inr (.inr (.inr (.inr ⟨r, hr, .inl rfl⟩)))))),
+    .inr (.inr (.inr (.inr (.inr (.inr (.inr ⟨r, hr, .inr (.inl rfl)⟩)))))),
+    .inr (.inr (.inr (.inr (.inr (.inr (.inr ⟨r, hr, .inr (.inr rfl)⟩))))))⟩
 
 end
 
 /-- A site of a checked spec's program that a function of the step uses, as a pending request's `on_answer` and
 `ensures` and an own command's `on_answer` are, has a code with no layout gap behind it in each service's layout: it
 is read against what it uses, which the layout covers, and its type reads none of the program's sites or handles. -/
-theorem Site.code_ofService (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.services) (s : AnySite) (hs : s ∈ c.P)
+theorem Site.code_ofService (c : CheckedSpec) {v : ServiceV} {bnd : BoundsV v.records} (hv : v ∈ c.spec.services) (s : AnySite) (hs : s ∈ c.P)
     (hr : ∃ r ∈ rootUses v, s ∈ r.1) :
-    SiteCodeOk (Layout.ofService c.program.defs v) c.P v.declared c.program.defs.handles s := fun σ hσ => by
+    SiteCodeOk (Layout.ofService c.program.defs v bnd) c.P v.declared c.program.defs.handles s := fun σ hσ => by
   obtain ⟨r, hr, hsr⟩ := hr
   obtain ⟨G, Γ, t, D, e, rfl⟩ := rootUses_form r hr
-  have h := sites_ofService c hv _ hs
+  have h := sites_ofService (bnd := bnd) c hv _ hs
   have hu := usesOk_of_defsOk h.2.2.2.2 h.2.2.1 h.2.2.2.1
-  have hC := covers_uses c.program.defs.parts v hu.2.1
-  have hw := sends_covered c.program.defs.parts v hr (Expr.uses_closed nested_sites hsr)
+  have hC := covers_uses (bnd := bnd) c.program.defs.parts v hu.2.1
+  have hw := sends_covered (bnd := bnd) c.program.defs.parts v hr (Expr.uses_closed nested_sites hsr)
     (Expr.uses_closed nested_handles hsr) hu.2.1
   have hΓ : Ty.isDatas s.1 = true := s.2.2.hΓ
   exact sound_free (phFree_of_data _ s.2.2.ht) (Site.code_sound hC s.2.2 h.2.1
@@ -2613,30 +2613,30 @@ theorem Site.code_ofService (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.
 
 /-- A function the step runs, at a site of a checked spec's program, has a code with no layout gap behind it in each
 service's layout, as `Site.code_ofService` says. -/
-theorem Fun.code_ofService (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.services) {t : Ty} (f : Fun t)
+theorem Fun.code_ofService (c : CheckedSpec) {v : ServiceV} {bnd : BoundsV v.records} (hv : v ∈ c.spec.services) {t : Ty} (f : Fun t)
     (hf : f.asSite ∈ c.P) (hr : f.uses ∈ rootUses v) :
-    Sound (fun p => CodeOk (Layout.ofService c.program.defs v) c.P v.declared c.program.defs.handles t p.1)
-      (f.code (Layout.ofService c.program.defs v)) := by
-  have h := sites_ofService c hv _ hf
+    Sound (fun p => CodeOk (Layout.ofService c.program.defs v bnd) c.P v.declared c.program.defs.handles t p.1)
+      (f.code (Layout.ofService c.program.defs v bnd)) := by
+  have h := sites_ofService (bnd := bnd) c hv _ hf
   have hu := usesOk_of_defsOk h.2.2.2.2 h.2.2.1 h.2.2.2.1
-  have hC := covers_uses c.program.defs.parts v hu.2.1
-  have hw := sends_covered c.program.defs.parts v hr (fun _ h => h) (fun _ h => h) hu.2.1
+  have hC := covers_uses (bnd := bnd) c.program.defs.parts v hu.2.1
+  have hw := sends_covered (bnd := bnd) c.program.defs.parts v hr (fun _ h => h) (fun _ h => h) hu.2.1
   exact sound_free (phFree_of_data t f.ht) (Fun.code_sound hC f h.1 h.2.1
     ⟨hu.1, fun _ h => h, fun x hx => ⟨hx, (hu.2.2 x hx).2⟩⟩ (fun x hx => hw x (List.mem_append_left _ hx)))
 
 /-- A function returning effects that the step runs, at an effect site of a checked spec's program, has a code with
 no layout gap behind it in each service's layout, where its type reads none of the program's sites or handles. -/
-theorem EffectFun.code_ofService (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.services) {ps : List Ty} {r : Ty}
+theorem EffectFun.code_ofService (c : CheckedSpec) {v : ServiceV} {bnd : BoundsV v.records} (hv : v ∈ c.spec.services) {ps : List Ty} {r : Ty}
     (f : EffectFun ps r) (hf : f.asSite ∈ c.E) (hr : f.uses ∈ rootUses v) (hfree : (Ty.fn ps r).phFree = true) :
-    Sound (fun p => CodeOk (Layout.ofService c.program.defs v) c.P v.declared c.program.defs.handles (.fn ps r) p.1)
-      (f.code (Layout.ofService c.program.defs v)) := by
+    Sound (fun p => CodeOk (Layout.ofService c.program.defs v bnd) c.P v.declared c.program.defs.handles (.fn ps r) p.1)
+      (f.code (Layout.ofService c.program.defs v bnd)) := by
   have h := effectSiteOk_of c.program.defs
-    ⟨fun u hu hs => ofService_has c.program.defs v u
+    ⟨fun u hu hs => ofService_has c.program.defs v bnd u
       (List.mem_filter.2 ⟨List.mem_append_left _ (List.mem_append_right _ hu), sortable_of_sorted u hs⟩), fun _ h => h,
       fun h hm => handleOk_of_named hv hm (c.handles h hm)⟩ _ hf
   have hu := usesOk_of_defsOk h.2.2.2.2 h.2.2.1 h.2.2.2.1
-  have hC := covers_uses c.program.defs.parts v hu.2.1
-  have hw := sends_covered c.program.defs.parts v hr (fun _ h => h) (fun _ h => h) hu.2.1
+  have hC := covers_uses (bnd := bnd) c.program.defs.parts v hu.2.1
+  have hw := sends_covered (bnd := bnd) c.program.defs.parts v hr (fun _ h => h) (fun _ h => h) hu.2.1
   exact sound_free hfree (EffectFun.code_sound hC f h.1 h.2.1 ⟨hu.1, fun _ h => h, fun x hx => ⟨hx, (hu.2.2 x hx).2⟩⟩
     (fun x hx => hw x (List.mem_append_left _ hx)))
 

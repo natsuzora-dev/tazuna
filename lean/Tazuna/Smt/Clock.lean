@@ -557,7 +557,7 @@ the second term is the codes' condition. -/
 def encodeClock (P : List AnySite) (live : Option (List SiteId)) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
     (apply : Code (Ty.fn [Ty.applyCtx v.records, v.event] v.records)) (invariants : Code (Ty.fn [v.records] Ty.rules))
     (S : SymState v) (time : Term) : Except Refusal (Encoded (ClockOut v)) := do
-  let (ro, cr) ← encodeRounds L T shs v.declared senv v.machines S.records time (v.bounds.cascadeNat + 1) S.machines tt
+  let (ro, cr) ← encodeRounds L T shs v.declared senv v.machines S.records time (v.cascadeNat + 1) S.machines tt
     S.nextId (.int 0)
   let ⟨fo, cf, cfx⟩ ← encodeFinish L T P live v shs senv apply invariants time S.fresh S.pending
     ⟨S.records, ro.tables, ro.nextId, ro.news, ro.owns, ro.queued, []⟩
@@ -911,14 +911,14 @@ theorem clock_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked 
     {live : Option (List SiteId)} (J : Step.Acc v → Prop)
     (hJl : ∀ b, J b → ∀ o ∈ b.own, ∀ l, live = some l → o.site ∈ l)
     (hJr : ∀ b o b', J b → o ∈ b.own → Step.runOwn T b o = .ok b' → J b')
-    (hJ : ∀ s' effs a1, Step.fire { s with now := time } (v.bounds.cascadeNat + 1) = some (s', effs) →
+    (hJ : ∀ s' effs a1, Step.fire { s with now := time } (v.cascadeNat + 1) = some (s', effs) →
       Step.start { state := s' } effs = .ok a1 → J a1)
     (henc : encodeClock L T P live v shs senv apply inv S st = .ok ⟨o, cond, cfx⟩)
     (hcfx : Holds M cfx) :
     let r := step T v s (.clock time)
     (Holds M cond ↔ (s.now ≤ time →
-      roundsFit L.count T { s with now := time } true (v.bounds.cascadeNat + 1) ∧
-      ∀ s' effs, Step.fire { s with now := time } (v.bounds.cascadeNat + 1) = some (s', effs) →
+      roundsFit L.count T { s with now := time } true (v.cascadeNat + 1) ∧
+      ∀ s' effs, Step.fire { s with now := time } (v.cascadeNat + 1) = some (s', effs) →
         finishFits L.count T shs (Step.start { state := s' } effs))) ∧
     (Holds M cond →
       if (o.forward.denote M).toBool then
@@ -926,7 +926,7 @@ theorem clock_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked 
         else Finished M L T shs o.finish s { state := { s with now := time } } .accepted r
       else r = ⟨s, .invalid ["time moves forward"], [], []⟩) ∧
     (Holds M cond → ¬ time < s.now → ∀ s' effs,
-      Step.fire { s with now := time } (v.bounds.cascadeNat + 1) = some (s', effs) →
+      Step.fire { s with now := time } (v.cascadeNat + 1) = some (s', effs) →
       ∀ a, Step.start { state := s' } effs = .ok a → QueueCoded L a) := by
   intro r
   obtain ⟨⟨ro, cr⟩, h1, henc⟩ := bind_ok.1 henc
@@ -942,17 +942,17 @@ theorem clock_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked 
       let s0 : State v := { s with now := time }
       have hinv0 : Step.Inv P s0 := hinv.congr rfl rfl
       have hrec0 : RelV L v.records (Ty.up _ v.records_data s0.records) (S.records.denote M) := hR.records
-      have ER := rounds_encode chk.sites hshs hshp senv hord (v.bounds.cascadeNat + 1) s0 hrec0 hst chk.machines
+      have ER := rounds_encode chk.sites hshs hshp senv hord (v.cascadeNat + 1) s0 hrec0 hst chk.machines
         hR.machines (ab := true) rfl h1
       have er := ER.1
       rw [holds_andT, er]
-      have rest : roundsFit L.count T s0 true (v.bounds.cascadeNat + 1) →
+      have rest : roundsFit L.count T s0 true (v.cascadeNat + 1) →
           (Holds M (.ite ro.over tt cf) ↔ ∀ s' effs,
-            Step.fire s0 (v.bounds.cascadeNat + 1) = some (s', effs) →
+            Step.fire s0 (v.cascadeNat + 1) = some (s', effs) →
             finishFits L.count T shs (Step.start { state := s' } effs)) := fun hf => by
         have hro := ER.2 hR.nextId (q0 := 0) rfl (er.2 hf)
         simp only [Step.fireFrom, ite_true] at hro
-        cases hfire : Step.fire s0 (v.bounds.cascadeNat + 1) with
+        cases hfire : Step.fire s0 (v.cascadeNat + 1) with
         | none =>
           rw [hfire] at hro
           rw [holds_ite]
@@ -992,10 +992,10 @@ theorem clock_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked 
       let s0 : State v := { s with now := time }
       have hinv0 : Step.Inv P s0 := hinv.congr rfl rfl
       have hrec0 : RelV L v.records (Ty.up _ v.records_data s0.records) (S.records.denote M) := hR.records
-      have hro := (rounds_encode chk.sites hshs hshp senv (fun m hm => (chk.keys m hm).2) (v.bounds.cascadeNat + 1) s0
+      have hro := (rounds_encode chk.sites hshs hshp senv (fun m hm => (chk.keys m hm).2) (v.cascadeNat + 1) s0
         hrec0 hst chk.machines hR.machines (ab := true) rfl h1).2 hR.nextId (q0 := 0) rfl hcr
       simp only [Step.fireFrom, ite_true] at hro
-      cases hfire : Step.fire s0 (v.bounds.cascadeNat + 1) with
+      cases hfire : Step.fire s0 (v.cascadeNat + 1) with
       | none =>
         rw [hfire] at hro
         simp only [hro, ite_true, r, step, hlt, ite_false]
@@ -1024,7 +1024,7 @@ theorem clock_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked 
       simp only [Term.denote, hR.now, hst, Val.toInt]; congr 1; simp; omega
     rw [holds_ite, hfw] at hc
     simp only [toBool_bool, ite_true] at hc
-    have hro := (rounds_encode chk.sites hshs hshp senv (fun m hm => (chk.keys m hm).2) (v.bounds.cascadeNat + 1)
+    have hro := (rounds_encode chk.sites hshs hshp senv (fun m hm => (chk.keys m hm).2) (v.cascadeNat + 1)
       { s with now := time } hR.records hst chk.machines hR.machines (ab := true) rfl h1).2 hR.nextId (q0 := 0) rfl
       ((holds_andT _ _).1 hc).1
     simp only [Step.fireFrom, ite_true] at hro

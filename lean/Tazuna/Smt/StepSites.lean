@@ -24,7 +24,7 @@ def ownCodesFit (S : Ty → Nat) : Option (OwnShape v) → Prop
 
 /-- Whether every own kind of the layout runs functions that fit, wherever the cascade may run. -/
 def SitesFit (L : Layout) (P : List AnySite) (v : ServiceV) : Prop :=
-  v.bounds.cascadeNat ≠ 0 → ∀ key ∈ L.ownsOf v.event, ownCodesFit L.count (ownShape v P key)
+  v.cascadeNat ≠ 0 → ∀ key ∈ L.ownsOf v.event, ownCodesFit L.count (ownShape v P key)
 
 end
 

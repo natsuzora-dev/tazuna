@@ -487,12 +487,7 @@ theorem Prim.den_rel (p : Prim) (args : List Ty) (h : p.ok args = true) :
     rintro ⟨sp, scs, rl, ⟨⟩⟩ ⟨sp', scs', rl', ⟨⟩⟩ ⟨hsp, -, -, -⟩ h
     simp only [Prim.den] at h
     obtain ⟨rfl, rfl, -⟩ := ModelV.mk.inj h
-    have hs := hsp rfl
-    intro v hv
-    obtain ⟨w, hw, rfl⟩ := List.mem_map.1 hv
-    split
-    · exact ScopeV.apply_self (hs w hw)
-    · exact hs w hw
+    exact hsp rfl
   | service =>
     rintro ⟨n, ini, app, subs, ds, ms, xs, inv, rsp, bnd, scs, ⟨⟩⟩
       ⟨n', ini', app', subs', ds', ms', xs', inv', rsp', bnd', scs', ⟨⟩⟩

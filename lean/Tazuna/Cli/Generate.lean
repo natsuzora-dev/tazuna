@@ -230,7 +230,9 @@ def generate (root dir path : String) (opts : Options) : Cmd Unit := do
   let start ← IO.monoMsNow
   match ← loadModel root path opts.model with
   | none => pure ()
-  | some (c, name, model) =>
+  | some (cm, name) =>
+    let c := cm.checked
+    let model := cm.model
     let rm : RunModel := ⟨name, model⟩
     -- At most `jobs` solvers run at once, and at most `jobs` depth builds; a search builds its cubes' scripts while
     -- others' solvers run.
@@ -248,7 +250,7 @@ def generate (root dir path : String) (opts : Options) : Cmd Unit := do
     let mut builds : Array Job := #[]
     let mut searches : Array Job := #[]
     let mut jobs : Array GenJob := #[]
-    for sv in c.services do
+    for sv in cm.services do
       let v := sv.v
       let L := sv.L
       let rules := ruleNamesOf v
@@ -264,17 +266,17 @@ def generate (root dir path : String) (opts : Options) : Cmd Unit := do
             (a.t.out.breaks inp.command? g).const?.map Val.toBool != some false
         | .error _ => []).filter fun g => g.byFault && opts.keeps (v.name ++ "/" ++ g.text))
       if gs.isEmpty && bs.isEmpty then continue
-      let (bjs, ds) ← depthJobs solver sv pool v.bounds.stepsNat
+      let (bjs, ds) ← depthJobs solver sv pool sv.b.stepsNat
       builds := builds ++ bjs
       let asks := Thunk.mk fun _ => stepAsks c sv
-      let scope := scopeBounds c.T L v
+      let scope := scopeBounds c.T L v sv.b
       -- A dead target's scope (`runScope`) from each input kind's bound question, the one prove asks: asked once a
       -- target of the service is dead, and not before.
       let deadScope ← once do
         let some xs := asks.get | return .error s!"service {v.name}: a target is dead without step questions"
         let qs := xs.map fun (inp, a) => (["bound", v.name, "", inp.place], Thunk.mk fun _ => some a.bound)
         return (← allUnsat solver cache inputs L.ids qs).map fun u =>
-          runScope (!u) (inputsFit L v && initFits L v) scope (inputBounds c.T L v)
+          runScope (!u) (inputsFit L v && initFits L v) scope (inputBounds c.T L v sv.b)
       -- Whether each kind's step breaks no target a fault breaks (`breakAnyT` unsat), asked once for all of the
       -- service's break targets by its own job; none where `BreakCover.deadLast` does not apply (`stepAsks`).
       let anyDead : IO.Promise (Except String (Option (List (SymInput v (shapes v) sv.senv.nT × StepAsk v × Bool)))) ←

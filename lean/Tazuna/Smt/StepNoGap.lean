@@ -911,20 +911,20 @@ end
 /-! The service's layout has every type the step looks up, and every code it applies has no gap behind it. -/
 
 section
-variable (c : CheckedSpec) (v : ServiceV)
+variable (c : CheckedSpec) (v : ServiceV) {bnd : BoundsV v.records}
 
 theorem avail_use {t : Ty} (ht : t ∈ useTys v (Layout.kindsOf c.program.defs.parts v)) :
-    Avail (Layout.ofService c.program.defs v) t := fun hs =>
-  ofService_has _ v t (List.mem_filter.2 ⟨List.mem_append_right _ ht, sortable_of_sorted t hs⟩)
+    Avail (Layout.ofService c.program.defs v bnd) t := fun hs =>
+  ofService_has _ v bnd t (List.mem_filter.2 ⟨List.mem_append_right _ ht, sortable_of_sorted t hs⟩)
 
-theorem avail_stepTy {t : Ty} (ht : t ∈ stepTys v) : Avail (Layout.ofService c.program.defs v) t := fun hs =>
-  ofService_has _ v t (List.mem_filter.2 ⟨List.mem_append_left _ (List.mem_append_left _ ht), sortable_of_sorted t hs⟩)
+theorem avail_stepTy {t : Ty} (ht : t ∈ stepTys v) : Avail (Layout.ofService c.program.defs v bnd) t := fun hs =>
+  ofService_has _ v bnd t (List.mem_filter.2 ⟨List.mem_append_left _ (List.mem_append_left _ ht), sortable_of_sorted t hs⟩)
 
 theorem got_of_avail {L : Layout} {t : Ty} (h : Avail L t) (hs : t.sorted = true) : Got L t := ⟨h hs, hs⟩
 
-theorem count_ofService {t : Ty} {x : Nat × Nat} (h : (Layout.ofService c.program.defs v).find? t = some x) :
-    x.2 = Layout.effectSlots (listSlots (stepSlots v c.program.defs.lits) c.program.defs.lits) (Layout.kindsOf c.program.defs.parts v) t := by
-  have := ofService_count c.program.defs v (t := t) (by simp [h])
+theorem count_ofService {t : Ty} {x : Nat × Nat} (h : (Layout.ofService c.program.defs v bnd).find? t = some x) :
+    x.2 = Layout.effectSlots (listSlots (stepSlots v bnd c.program.defs.lits) c.program.defs.lits) (Layout.kindsOf c.program.defs.parts v) t := by
+  have := ofService_count c.program.defs v bnd (t := t) (by simp [h])
   simpa [Layout.count, h] using this
 
 end
@@ -942,11 +942,11 @@ theorem sorted_avail_queryCtx {L : Layout} {r i c : Ty} (h : Avail L (Ty.queryCt
   exact (got_adt ⟨h hs, hs⟩ ⟨0, by simp⟩ i (by simp)).1
 
 section
-variable {c : CheckedSpec} {v : ServiceV} (hv : v ∈ c.spec.services)
+variable {c : CheckedSpec} {v : ServiceV} {bnd : BoundsV v.records} (hv : v ∈ c.spec.services)
 include hv
 
 theorem machineGot_ofService {m : MachineV v.records v.event} (hm : m ∈ v.machines) :
-    MachineGot (Layout.ofService c.program.defs v) m := by
+    MachineGot (Layout.ofService c.program.defs v bnd) m := by
   have chk := c.checked v hv
   obtain ⟨⟨her, -⟩, hms, -, -, ⟨hee, -⟩, -⟩ := stateTys_iff.1 chk.stateTys
   have ht := sorted_of_embeddable _ (hms m hm).1
@@ -973,11 +973,11 @@ theorem machineGot_ofService {m : MachineV v.records v.event} (hm : m ∈ v.mach
   rw [count_ofService c v hx, count_ofService c v hy]
   have hany : v.machines.any (fun m' => (Ty.same m'.table m.table).isSome) = true :=
     List.any_eq_true.2 ⟨m, hm, Ty_same_self _⟩
-  have hge : max v.bounds.itemsNat (longestLit c.program.defs.lits (.bag m.key)) ≤
-      stepSlots v c.program.defs.lits (.table m.key m.state) := by
+  have hge : max bnd.itemsNat (longestLit c.program.defs.lits (.bag m.key)) ≤
+      stepSlots v bnd c.program.defs.lits (.table m.key m.state) := by
     have hany' : v.machines.any (fun m' => (Ty.same m'.table (.table m.key m.state)).isSome) = true := hany
     simp only [stepSlots, hany', ↓reduceIte]; exact Nat.le_max_right _ _
-  simp only [Layout.effectSlots, listSlots, MachineV.table, stepSlots_plain v c.program.defs.lits (t := .bag m.key)
+  simp only [Layout.effectSlots, listSlots, MachineV.table, stepSlots_plain v bnd c.program.defs.lits (t := .bag m.key)
     (by simp), boundSlots]
   exact Nat.le_trans hge (Nat.le_max_left _ _)
 
@@ -1016,8 +1016,8 @@ theorem kinds_owner {v : ServiceV} {P : List AnySite} {rs : RequestShape v.event
     · cases hrs
   | command _ _ _ _ | query _ _ _ | source _ _ => simp at hrs
 
-theorem ownersOk_ofService (c : CheckedSpec) (v : ServiceV) :
-    OwnersOk (Layout.ofService c.program.defs v) v.event v.declared := by
+theorem ownersOk_ofService (c : CheckedSpec) (v : ServiceV) {bnd : BoundsV v.records} :
+    OwnersOk (Layout.ofService c.program.defs v bnd) v.event v.declared := by
   intro key hk
   simp only [Layout.effectsOf, List.mem_filter] at hk
   obtain ⟨hk, hev⟩ := hk
@@ -1140,11 +1140,11 @@ theorem ownShape_query {v : ServiceV} {P : List AnySite} {key : OwnKey} {x : Que
 
 
 section
-variable {c : CheckedSpec} {v : ServiceV} (hv : v ∈ c.spec.services)
+variable {c : CheckedSpec} {v : ServiceV} {bnd : BoundsV v.records} (hv : v ∈ c.spec.services)
 include hv
 
 theorem commandOk_ofService {x : CommandV v.records v.event v.caller} (hx : x ∈ v.commands) :
-    CommandOk (Layout.ofService c.program.defs v) c.P v.declared c.program.defs.handles v x := by
+    CommandOk (Layout.ofService c.program.defs v bnd) c.P v.declared c.program.defs.handles v x := by
   have chk := c.checked v hv
   obtain ⟨⟨her, -⟩, -, -, -, -, ⟨hec, -⟩⟩ := stateTys_iff.1 chk.stateTys
   have hu : ∀ t ∈ [Ty.ctx v.records x.input v.caller, Ty.result (.list v.event) x.rejection, x.input],
@@ -1159,7 +1159,7 @@ theorem commandOk_ofService {x : CommandV v.records v.event v.caller} (hx : x �
     avail_use c v (hu _ (by simp)), avail_use c v (hu _ (by simp))⟩
 
 theorem queryOk_ofService {q : QueryV v.records v.caller} (hq : q ∈ v.queries) :
-    QueryOk (Layout.ofService c.program.defs v) c.P v.declared c.program.defs.handles v q := by
+    QueryOk (Layout.ofService c.program.defs v bnd) c.P v.declared c.program.defs.handles v q := by
   have chk := c.checked v hv
   obtain ⟨⟨her, -⟩, -, -, -, -, ⟨hec, -⟩⟩ := stateTys_iff.1 chk.stateTys
   have hu : ∀ t ∈ [Ty.queryCtx v.records q.input v.caller, q.output, q.input],
@@ -1173,13 +1173,14 @@ theorem queryOk_ofService {q : QueryV v.records v.caller} (hq : q ∈ v.queries)
     avail_use c v (hu _ (by simp)), avail_use c v (hu _ (by simp))⟩
 
 theorem Fun.uses_sub {t : Ty} {f : Fun t} (hf : f.asSite ∈ c.P) : ∀ s ∈ f.uses.1, s ∈ c.P := by
-  have h := sites_ofService c hv _ hf
+  -- The uses do not depend on the layout, so any bounds give one to read them through.
+  have h := sites_ofService (bnd := ⟨[], 0, 0⟩) c hv _ hf
   exact (usesOk_of_defsOk h.2.2.2.2 h.2.2.1 h.2.2.2.1).2.1
 
 theorem EffectFun.uses_sub {ps : List Ty} {r : Ty} {f : EffectFun ps r} (hf : f.asSite ∈ c.E) :
     ∀ s ∈ f.uses.1, s ∈ c.P := by
   have h := effectSiteOk_of c.program.defs
-    ⟨fun u hu hs => ofService_has c.program.defs v u
+    ⟨fun u hu hs => ofService_has c.program.defs v ⟨[], 0, 0⟩ u
       (List.mem_filter.2 ⟨List.mem_append_left _ (List.mem_append_right _ hu), sortable_of_sorted u hs⟩), fun _ h => h,
       fun h hm => handleOk_of_named hv hm (c.handles h hm)⟩ _ hf
   exact (usesOk_of_defsOk h.2.2.2.2 h.2.2.1 h.2.2.2.1).2.1
@@ -1191,7 +1192,7 @@ theorem rootUses_sub : ∀ r ∈ rootUses v, ∀ s ∈ r.1, s ∈ c.P := by
   simp only [rootUses, List.mem_append, List.mem_cons, List.mem_flatMap, List.mem_map, List.not_mem_nil, or_false,
     or_assoc] at hr
   rcases hr with rfl | rfl | ⟨x, hx, rfl | rfl | rfl⟩ | ⟨q, hq, rfl | rfl⟩ | ⟨m, hm, rfl | rfl | rfl | rfl | rfl⟩ |
-    ⟨x, hx, rfl⟩ | ⟨x, hx, rfl⟩ | ⟨x, hx, rfl | rfl | rfl⟩ | ⟨x, hx, rfl⟩
+    ⟨x, hx, rfl⟩ | ⟨x, hx, rfl⟩ | ⟨x, hx, rfl | rfl | rfl⟩
   · exact Fun.uses_sub hv chk.reach.apply
   · exact Fun.uses_sub hv chk.reach.invariants
   · exact Fun.uses_sub hv (chk.reach.commands x hx).accepts
@@ -1209,7 +1210,6 @@ theorem rootUses_sub : ∀ r ∈ rootUses v, ∀ s ∈ r.1, s ∈ c.P := by
   · exact Fun.uses_sub hv (chk.reach.responses x hx).1
   · exact Fun.uses_sub hv (chk.reach.responses x hx).2.1
   · exact Fun.uses_sub hv (chk.reach.responses x hx).2.2
-  · exact Fun.uses_sub hv (chk.reach.creates x hx)
 
 /-- A site of the program at an own kind's `on_answer` is one a function of the step uses: the kind pairs a handle with
 a site that function uses, and the program's sites are unique. -/
@@ -1270,8 +1270,8 @@ theorem ownShape_some {key : OwnKey} (hk : key ∈ (Layout.kindsOf c.program.def
     split <;> simp
   · cases hk
 
-theorem ownOk_ofService {key : OwnKey} (hk : key ∈ (Layout.ofService c.program.defs v).ownsOf v.event) :
-    OwnOk (Layout.ofService c.program.defs v) c.P v.declared c.program.defs.handles v key := by
+theorem ownOk_ofService {key : OwnKey} (hk : key ∈ (Layout.ofService c.program.defs v bnd).ownsOf v.event) :
+    OwnOk (Layout.ofService c.program.defs v bnd) c.P v.declared c.program.defs.handles v key := by
   have hkK : key ∈ (Layout.kindsOf c.program.defs.parts v).owns := by
     rw [← (allSorted_ofParts _ v).2.2]; exact (List.mem_filter.1 hk).1
   have hf := ((kindsOf_fields _ v).2 key hkK).1
@@ -1307,7 +1307,7 @@ theorem shapes_root {sh : PendingShape v.event} (hsh : sh ∈ shapes v) :
   · exact ⟨_, (root_machine hm).2.2.2.2, hin⟩
   · exact ⟨_, root_reaction hx, hin⟩
 
-theorem entry_ofService : Got (Layout.ofService c.program.defs v) (pendingEntry (shapes v)) := by
+theorem entry_ofService : Got (Layout.ofService c.program.defs v bnd) (pendingEntry (shapes v)) := by
   have chk := c.checked v hv
   obtain ⟨-, -, hep, -, -, -⟩ := stateTys_iff.1 chk.stateTys
   exact (got_table (got_of_avail (avail_stepTy c v (t := pendingTable (shapes v)) (List.mem_append_left _ (List.mem_append_left _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _
@@ -1315,9 +1315,9 @@ theorem entry_ofService : Got (Layout.ofService c.program.defs v) (pendingEntry 
     (sorted_of_embeddable _ (embeddable_pending hep)))).2.1
 
 theorem answerOk_ofService {sh : PendingShape v.event} (hsh : sh ∈ shapes v) :
-    AnswerOk (Layout.ofService c.program.defs v) c.P v.declared c.program.defs.handles sh := by
+    AnswerOk (Layout.ofService c.program.defs v bnd) c.P v.declared c.program.defs.handles sh := by
   obtain ⟨k, hk, rfl⟩ := List.getElem_of_mem hsh
-  have hf := got_adt (entry_ofService hv) ⟨k, by simpa using hk⟩
+  have hf := got_adt (entry_ofService (bnd := bnd) hv) ⟨k, by simpa using hk⟩
   simp only [List.get_eq_getElem, List.getElem_map, PendingShape.fields, RequestShape.fields] at hf
   have hin := shapes_inSites (c.checked v hv).reach hsh
   obtain ⟨r, hr, hr1⟩ := shapes_root hsh
@@ -1327,7 +1327,7 @@ theorem answerOk_ofService {sh : PendingShape v.event} (hsh : sh ∈ shapes v) :
     fun s hs => Site.code_ofService c hv _ (hin.2 s hs) ⟨r, hr, hr1.2 s hs⟩⟩
 
 theorem serviceGot_ofService :
-    ServiceGot (Layout.ofService c.program.defs v) c.P v.declared c.program.defs.handles v (shapes v) := by
+    ServiceGot (Layout.ofService c.program.defs v bnd) c.P v.declared c.program.defs.handles v (shapes v) := by
   have chk := c.checked v hv
   obtain ⟨⟨her, -⟩, hms, hep, -, ⟨hee, -⟩, ⟨hec, -⟩⟩ := stateTys_iff.1 chk.stateTys
   have hev := sorted_of_embeddable _ hee
@@ -1370,9 +1370,9 @@ theorem serviceGot_ofService :
 
 /-- In each service's layout, built from a checked spec's program, the step encoding never refuses with a layout gap:
 every refusal is the spec's (a limit, a string outside SMT-LIB's, a case the types rule out). -/
-theorem encodeStep_ofService (T : List TypeDecl) (senv : StepEnv (Layout.ofService c.program.defs v) (shapes v))
+theorem encodeStep_ofService (T : List TypeDecl) (senv : StepEnv (Layout.ofService c.program.defs v bnd) (shapes v))
     (S : SymState v) (inp : SymInput v (shapes v) senv.nT) :
-    Sound (fun _ => True) (encodeStep (Layout.ofService c.program.defs v) T c.P v senv S inp) :=
+    Sound (fun _ => True) (encodeStep (Layout.ofService c.program.defs v bnd) T c.P v senv S inp) :=
   encodeStep_sound (serviceGot_ofService hv) (fun _ hsh => answerOk_ofService hv hsh) T senv S inp
 
 end

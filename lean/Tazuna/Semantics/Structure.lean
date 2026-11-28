@@ -161,15 +161,12 @@ structure CreateV (r : Ty) where
   table : Fun (Ty.fn [r] (.table key value))
   atMost : Int
 
-/-- A service's bounds, in Gleam's Int: `cascade`, which the service writes and which is part of its meaning, and the
-slots and run length its model's scope gives (`ModelV.scoped`). A service as `service` builds it has no scope yet:
-no create bound, no other slots and runs of one input, which only prove and generate read, and they read a scoped
-spec. -/
+/-- The slots and run length a model's scope gives a service whose records are `r`, in Gleam's Int: what prove and
+generate read beside the service, which holds only its meaning (`ScopeV.boundsOf`). -/
 structure BoundsV (r : Ty) where
   creates : List (CreateV r)
   /-- `others_at_most`: the items of each bag and of each table no create bounds. -/
   items : Int
-  cascade : Int
   steps : Int
 
 /-! The bounds as counts, for everything after check. Check rejects a negative bound (`Illegal.bounds`), so `toNat`
@@ -177,7 +174,6 @@ loses nothing there; these are the only places that convert. -/
 
 def CreateV.atMostNat {r : Ty} (c : CreateV r) : Nat := c.atMost.toNat
 def BoundsV.itemsNat {r : Ty} (b : BoundsV r) : Nat := b.items.toNat
-def BoundsV.cascadeNat {r : Ty} (b : BoundsV r) : Nat := b.cascade.toNat
 def BoundsV.stepsNat {r : Ty} (b : BoundsV r) : Nat := b.steps.toNat
 
 structure ResponseV (r e : Ty) where
@@ -247,11 +243,16 @@ structure ServiceV where
   reactions : List (ReactionV records event)
   invariants : Fun (Ty.fn [records] Ty.rules)
   responses : List (ResponseV records event)
-  bounds : BoundsV records
+  /-- The most rounds of own commands and timers one input may run; part of the meaning, since a step past it
+  faults. -/
+  cascade : Int
   scenarios : List (ScenarioV records event caller)
   /-- The commands and queries the spec's externals list, each with its external, which `spec` fills in: an effect
   may request only these. -/
   declared : List (String × DeclaredV)
+
+/-- The cascade bound as a count; check rejects a negative one (`Illegal.bounds`). -/
+def ServiceV.cascadeNat (v : ServiceV) : Nat := v.cascade.toNat
 
 structure SpecV where
   services : List ServiceV
@@ -270,18 +271,12 @@ def ScopeV.createsOf (sc : ScopeV) (v : ServiceV) : List (CreateV v.records) :=
   | some ⟨h⟩ => h ▸ sc.creates
   | none => []
 
-/-- The service with the scope's slots and run length. -/
-def ScopeV.apply (sc : ScopeV) (v : ServiceV) : ServiceV :=
-  { v with bounds := { v.bounds with creates := sc.createsOf v, items := sc.items, steps := sc.steps } }
+/-- The slots and run length the scope gives the service. -/
+def ScopeV.boundsOf (sc : ScopeV) (v : ServiceV) : BoundsV v.records :=
+  { creates := sc.createsOf v, items := sc.items, steps := sc.steps }
 
 /-- The scope the model gives the service, by its name. -/
 def ModelV.scopeOf (m : ModelV) (v : ServiceV) : Option ScopeV := m.scopes.find? (·.service == v.name)
-
-/-- The spec with each service in the scope the model gives it. -/
-def ModelV.scoped (m : ModelV) : SpecV :=
-  { m.spec with services := m.spec.services.map fun v => match m.scopeOf v with
-      | some sc => sc.apply v
-      | none => v }
 
 /-- What each structure type means. Structure values have no `==`. -/
 def Dsl.val : Dsl → List Ty → Sem

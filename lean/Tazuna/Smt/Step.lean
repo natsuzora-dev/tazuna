@@ -117,8 +117,8 @@ def stepFits (shs : List (PendingShape v.event)) (s : State v) : Input v → Pro
       finishFits S T shs (Step.applyEvents T { state := s } [ev])
   | .clock time =>
     s.now ≤ time →
-      roundsFit S T { s with now := time } true (v.bounds.cascadeNat + 1) ∧
-      ∀ s' effs, Step.fire { s with now := time } (v.bounds.cascadeNat + 1) = some (s', effs) →
+      roundsFit S T { s with now := time } true (v.cascadeNat + 1) ∧
+      ∀ s' effs, Step.fire { s with now := time } (v.cascadeNat + 1) = some (s', effs) →
         finishFits S T shs (Step.start { state := s' } effs)
 
 end

@@ -39,10 +39,6 @@ namespace Tazuna.Smt
 
 open Tazuna.Ir
 
-/-- No bound is negative, and `steps` is at least 1. -/
-def _root_.Tazuna.Ir.BoundsV.Legal {r : Ty} (b : BoundsV r) : Prop :=
-  0 ≤ b.items ∧ 0 ≤ b.cascade ∧ 1 ≤ b.steps ∧ ∀ c ∈ b.creates, 0 ≤ c.atMost
-
 /-- Whether the state's types, its events' and its callers' have SMT values and well-formedness terms: no function,
 no type variable, ADT 0 only as Bool, and a plain key for every table but the pending table, whose keys are wire
 ids. -/
@@ -72,7 +68,6 @@ structure Checked (P : List AnySite) (E : List AnyEffectSite) (T : List TypeDecl
   keys : ∀ m ∈ v.machines, m.key.orderable = true ∧ m.key.ordered T = true
   outputs : ∀ x ∈ v.queries, x.output.isFn = false
   stored : v.records.wire = true ∧ ∀ m ∈ v.machines, m.state.wire = true
-  bounds : v.bounds.Legal
   sends : ∀ h ∈ v.sentHandles, v.lists h = true
   /-- Not a rule of check's: the loader builds every type of a program's values from the type table, whose ADT 0 is
   Bool, and the program from ground instances; check validates the result, so a loader bug is reported, not assumed. -/
@@ -163,7 +158,7 @@ def _root_.Tazuna.Ir.HandleSite.Named (s : SpecV) (h : HandleSite) : Prop :=
     v.declared.any fun (_, d) => d.kind == h.kind && d.name == n && (Ty.sames d.types h.types).isSome) = true
 
 /-- A spec that passed check: its program, whose root is `spec()` or a model function, the spec it gives (a model's
-scoped spec, `ModelV.scoped`), and what check established of each of its services and of each handle the program
+spec, whose scope stays beside it), and what check established of each of its services and of each handle the program
 makes; and that each service's parts relate to themselves under every renaming, as evaluating the root relates it to
 itself (`Defs.eval_rel`). -/
 structure CheckedSpec where
@@ -191,11 +186,6 @@ theorem none_of_ite {α : Type} {c : Prop} [Decidable c] {x : α} (h : (if c the
   · assumption
   · cases h
 
-theorem not_of_ite {α : Type} {c : Prop} [Decidable c] {x : α} (h : (if c then some x else none) = none) : ¬c := by
-  split at h
-  · cases h
-  · assumption
-
 theorem nodup_of_duplicates {l : List String} (h : duplicates l = []) : l.Nodup := by
   unfold duplicates at h
   have hf : l.filter (fun n => l.count n > 1) = [] := by
@@ -219,7 +209,7 @@ theorem nil_of_eraseDups {α : Type} [BEq α] {l : List α} (h : l.eraseDups = [
 fresh-id source on the wire, so `Checked.wire` fails only for what the loader builds (type variables, the prelude's
 Bool and Nil, a variant's keys and atoms), never for a user's spec. -/
 theorem wireTys_wire {T : List TypeDecl} {s : SpecV} {handles : List HandleSite} {captures : List (SiteId × List Ty)}
-    {sent : ServiceV → List HandleSite} {inScope : Bool} (h : SpecV.illegal T s handles captures sent inScope = []) :
+    {sent : ServiceV → List HandleSite} (h : SpecV.illegal T s handles captures sent = []) :
     ∀ v ∈ s.services, ∀ t ∈ v.wireTys, t.wire = true := by
   intro v hv t ht
   simp only [SpecV.illegal] at h
@@ -230,7 +220,7 @@ theorem wireTys_wire {T : List TypeDecl} {s : SpecV} {handles : List HandleSite}
       w.queries.flatMap (fun q => [(q.name ++ " input", q.input), (q.name ++ " output", q.output)]) ++
       w.sources.map (fun (n, t) => (n ++ " event", t)) → t.wire = true := fun w hw what t hp => by
     have hs := nilL (List.flatMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL htop))))) w hw)
-    have hwire := List.filterMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL hs))))))))))
+    have hwire := List.filterMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL hs)))))))))
     exact none_of_ite (hwire (what, t) hp)
   simp only [ServiceV.wireTys, List.mem_cons, List.mem_append, List.mem_flatMap, List.mem_map] at ht
   rcases ht with (((rfl | rfl | ⟨c, hc, ht⟩) | ⟨q, hq, ht⟩) | ⟨sub, hsub, rfl⟩) | ⟨⟨x, d⟩, hd, ht⟩
@@ -246,7 +236,7 @@ theorem wireTys_wire {T : List TypeDecl} {s : SpecV} {handles : List HandleSite}
     · simp at ht
   · -- A subscription's event is a source's, which its declaring service or external checks.
     have hs := nilL (List.flatMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL htop))))) v hv)
-    have hunk := List.filterMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL (nilL (nilL (nilL hs)))))))) sub hsub
+    have hunk := List.filterMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL (nilL (nilL hs))))))) sub hsub
     have hany := none_of_ite hunk
     obtain ⟨⟨n, u⟩, hm, hnu⟩ := List.any_eq_true.1 hany
     simp only [Bool.and_eq_true, beq_iff_eq] at hnu
@@ -284,34 +274,24 @@ each fact's failure would be a finding. -/
 theorem check_ok {T : List TypeDecl} {P : List AnySite} {E : List AnyEffectSite} {s : SpecV} {handles : List HandleSite}
     {captures : List (SiteId × List Ty)} (hP : SitesUnique P) (hreach : ∀ v ∈ s.services, v.Reach P E)
     (htys : ∀ v ∈ s.services, v.stateTys = true) (hok : ∀ v ∈ s.services, v.wireOk T = true)
-    {inScope : Bool} (h : SpecV.illegal T s handles captures ServiceV.sentHandles inScope = []) : ∀ v ∈ s.services, Checked P E T v := by
+    (h : SpecV.illegal T s handles captures ServiceV.sentHandles = []) : ∀ v ∈ s.services, Checked P E T v := by
   intro v hv
   simp only [SpecV.illegal] at h
   replace h := nilL (nil_of_eraseDups h)
   have hs := nilL (List.flatMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL h))))) v hv)
   have hsent := List.filterMap_eq_nil_iff.1 (List.flatMap_eq_nil_iff.1 (nilR (nilL h)) v hv)
-  have hneg := List.filterMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL hs))))
-  have hkeys := List.filterMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL (nilL hs))))))
-  have hstate := List.filterMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL hs)))))))))
-  have hwire := List.filterMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL hs))))))))))
-  have hnames := nilR (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL hs)))))))))))
-  have hinits := List.filterMap_eq_nil_iff.1 (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL hs))))))))))))
-  refine ⟨hP, hreach v hv, fun m hm => ?_, fun q hq => ?_, ⟨?_, fun m hm => ?_⟩, ⟨?_, ?_, ?_, fun c hc => ?_⟩,
+  have hkeys := List.filterMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL hs)))))
+  have hstate := List.filterMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL (nilL (nilL (nilL hs))))))))
+  have hwire := List.filterMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL hs)))))))))
+  have hnames := nilR (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL hs))))))))))
+  have hinits := List.filterMap_eq_nil_iff.1 (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL hs)))))))))))
+  refine ⟨hP, hreach v hv, fun m hm => ?_, fun q hq => ?_, ⟨?_, fun m hm => ?_⟩,
     fun x hx => ?_, htys v hv, hok v hv, ?_, ?_, fun m hm => ?_⟩
   · simpa using none_of_ite (hkeys m hm)
   · exact isFn_of_wire _ (none_of_ite (hwire (q.name ++ " output", q.output)
       (List.mem_append_left _ (List.mem_append_right _ (List.mem_flatMap.2 ⟨q, hq, by simp⟩)))))
   · exact none_of_ite (hstate ("records", v.records) (by simp))
   · exact none_of_ite (hstate (m.name ++ " state", m.state) (List.mem_cons_of_mem _ (List.mem_map_of_mem hm)))
-  · have := not_of_ite (hneg ("others_at_most", v.bounds.items, 0) (by simp)); simp only at this; omega
-  · have := not_of_ite (hneg ("cascade", v.bounds.cascade, 0) (by simp)); simp only at this; omega
-  · have := not_of_ite (hneg ("steps", v.bounds.steps, 1) (by simp)); simp only at this; omega
-  · obtain ⟨k, hk, rfl⟩ := List.getElem_of_mem hc
-    have := not_of_ite (hneg (_, v.bounds.creates[k].atMost, 0) (List.mem_append_right _ (List.mem_map.2
-      ⟨(v.bounds.creates[k], v.bounds.creates[k].reads (tableProbes T v.records)),
-        List.mem_iff_getElem.2 ⟨k, by simpa using hk, by simp⟩, rfl⟩)))
-    simp only at this
-    omega
   · have hu := hsent x hx
     cases hn : x.name with
     | none => simp [ServiceV.lists, hn]
@@ -332,7 +312,7 @@ theorem check_ok {T : List TypeDecl} {P : List AnySite} {E : List AnyEffectSite}
 
 /-- A check with no finding names every handle by a literal and finds every external one declared. -/
 theorem handles_ok {T : List TypeDecl} {s : SpecV} {handles : List HandleSite} {captures : List (SiteId × List Ty)}
-    {sent : ServiceV → List HandleSite} {inScope : Bool} (h : SpecV.illegal T s handles captures sent inScope = []) :
+    {sent : ServiceV → List HandleSite} (h : SpecV.illegal T s handles captures sent = []) :
     ∀ x ∈ handles, x.Named s := by
   intro x hx
   simp only [SpecV.illegal] at h

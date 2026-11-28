@@ -426,11 +426,11 @@ def ResultSame (r r' : Result v) : Prop :=
 theorem finish_same (ho : Ordered T v) {s0 s0' : State v} (hs0 : StateSame s0 s0') {a a' : Except Fault (Acc v)}
     (ha : ExSame a a') {o o' : Outcome} (hoo : Outcome.Same o o') :
     ResultSame (finish T s0 a o) (finish T s0' a' o') := by
-  have h := ha.bind fun b b' hb => settle_same ho v.bounds.cascadeNat hb
+  have h := ha.bind fun b b' hb => settle_same ho v.cascadeNat hb
   unfold finish
   revert h
-  generalize a >>= settle T v.bounds.cascadeNat = y
-  generalize a' >>= settle T v.bounds.cascadeNat = y'
+  generalize a >>= settle T v.cascadeNat = y
+  generalize a' >>= settle T v.cascadeNat = y'
   intro h
   match y, y', h with
   | .error _, .error _, _ => exact ⟨hs0, trivial, trivial, trivial⟩
@@ -661,7 +661,7 @@ theorem step_same (ho : Ordered T v) {s s' : State v} (hs : StateSame s s') {x x
     rw [hs.2.2.2.1]
     split
     · exact ⟨hs, rfl, trivial, trivial⟩
-    · have hf := fire_same ho (v.bounds.cascadeNat + 1) (s := { s with now := t }) (s' := { s' with now := t })
+    · have hf := fire_same ho (v.cascadeNat + 1) (s := { s with now := t }) (s' := { s' with now := t })
         ⟨hs.1, hs.2.1, hs.2.2.1, rfl, hs.2.2.2.2⟩
       revert hf
       generalize fire _ _ = p

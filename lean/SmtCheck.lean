@@ -333,7 +333,7 @@ def aliceOwnE {G Γ : List Ty} : Expr G Γ (.list (Ty.origin .str)) :=
 /-- The layout `prove` builds for the service (`Layout.ofParts`), with `slots` for every bag and table; `extra` is
 program code the case writes as terms rather than as the service's functions. -/
 def svcLayout (v : ServiceV) (slots : Nat) (extra : ProgramParts := ⟨[], [], [], []⟩) : Layout :=
-  Layout.ofParts (joinParts [svcParts v, extra]) { v with bounds := { v.bounds with items := slots } }
+  Layout.ofParts (joinParts [svcParts v, extra]) v ⟨[], slots, 1⟩
 
 /-- A site as program code: the site, the type of every node of its source and its list literals. -/
 def siteParts {Γ : List Ty} {t : Ty} (s : Site Γ t) : ProgramParts :=
@@ -380,7 +380,7 @@ def querySvc : ServiceV :=
   { name := "s", records := recordsT, event := .int, caller := .str, init := Builtin.tableEmpty,
     apply := .closed (.lam (recsE (.var .here))), subscribes := [], declares := [], commands := [], queries := [getQ],
     sources := [],
-    machines := [], reactions := [], invariants := .closed (.lam (.list .nil)), responses := [], bounds := ⟨[], 0, 0, 0⟩,
+    machines := [], reactions := [], invariants := .closed (.lam (.list .nil)), responses := [], cascade := 0,
     scenarios := [], declared := [] }
 
 def queryLayout : Layout :=
@@ -486,7 +486,7 @@ def eventSvc : ServiceV :=
     apply := .closed applyE,
     subscribes := [⟨"x", "set", evT, .closed wrapE⟩], declares := [], commands := [],
     queries := [], sources := [], machines := [], reactions := [],
-    invariants := .closed invariantsE, responses := [], bounds := ⟨[], 0, 0, 0⟩,
+    invariants := .closed invariantsE, responses := [], cascade := 0,
     scenarios := [], declared := [] }
 
 def eventLayout : Layout :=
@@ -1192,11 +1192,13 @@ def boundSvc : ServiceV :=
     init := ((Builtin.tableEmpty, Builtin.tableEmpty, ()) : recordsB.den0), apply := .closed applyB,
     subscribes := [⟨"x", "set", evT, .closed wrapE⟩], declares := [], commands := [], queries := [], sources := [],
     machines := [], reactions := [], invariants := .closed (.lam (.list .nil)), responses := [],
-    bounds := ⟨createsB 2, 0, 0, 0⟩, scenarios := [], declared := [] }
+    cascade := 0, scenarios := [], declared := [] }
+
+def boundBounds : BoundsV recordsB := ⟨createsB 2, 0, 1⟩
 
 def boundLayout : Layout :=
   let lits := Tazuna.Smt.Expr.lits applyB
-  Layout.addTys (listSlots (boundSlots boundSvc.bounds) lits) {} (recordsB :: evT :: Tazuna.Smt.Expr.tys applyB ++
+  Layout.addTys (listSlots (boundSlots boundBounds) lits) {} (recordsB :: evT :: Tazuna.Smt.Expr.tys applyB ++
     Tazuna.Smt.Expr.tys tableA ++ [Ty.rules, noPending boundSvc, Ty.option (.dsl .effect [evT])])
 
 def boundI : Fin boundSvc.subscribes.length := ⟨0, by decide⟩
@@ -1228,8 +1230,8 @@ def boundAgrees (vs : List (Nat × Val)) (reached : Bool) : Bool :=
       (SymInput.event (shs := []) (slots := 0) boundI (.var 4)).decode M L (v := boundSvc) rfl with
   | some s, some x =>
     let r := step prelude boundSvc s x
-    within boundSvc.bounds.creates s.records && r.outcome.summary == "accepted" &&
-      within boundSvc.bounds.creates r.state.records == !reached &&
+    within boundBounds.creates s.records && r.outcome.summary == "accepted" &&
+      within boundBounds.creates r.state.records == !reached &&
       (reached || sameAs L recordsB rfl r.state.records (vs.lookup 5))
   | _, _ => false
 
@@ -2187,7 +2189,7 @@ step is accepted: the decoded pending table, next id and instance table must be 
 key 3's at 41), and ids by key order must not pass the comparison. With cascade 1 both rounds use the bound, so the
 script must say the bound is exceeded and the step must be the cascade fault. -/
 
-def clockFireSvc (cascade : Int) : ServiceV := { writeSvcOf dueM with name := "k", bounds := ⟨[], 0, cascade, 0⟩ }
+def clockFireSvc (cascade : Int) : ServiceV := { writeSvcOf dueM with name := "k", cascade := cascade }
 
 def dueSites : List AnySite := Tazuna.Ir.Expr.sites .nil (startEffectOf instT)
 
@@ -3183,7 +3185,7 @@ def onceE : Expr [] [] (.fn [Ty.reactionCtx recordsT, .int] (.list (.dsl .effect
 
 def cascSvc (cascade : Int) : ServiceV :=
   { writeSvc with name := "c", commands := [{ twiceC with name := "put" }], reactions := [⟨"once", .closed onceE⟩],
-                  bounds := ⟨[], 0, cascade, 0⟩ }
+                  cascade := cascade }
 
 def cascShapes (cascade : Int) : List (PendingShape (cascSvc cascade).event) := shapes (cascSvc cascade)
 
@@ -3432,7 +3434,7 @@ def tickClockCheck (solver : Solver) : IO Bool := do
         if r.state.fresh != s.fresh + 2 then ok ← fail s!"the step ran {r.state.fresh - s.fresh} internal steps, not 2"
         if !same r.state then
           ok ← fail s!"the model's state (next id {s'.nextId}, fresh {s'.fresh}, ids {ids s'}, table {view s'.machines.toSigma}) is not the step's (next id {r.state.nextId}, fresh {r.state.fresh}, ids {ids r.state}, table {view r.state.machines.toSigma})"
-        match Step.fire { s with now := 100 } (v.bounds.cascadeNat + 1) with
+        match Step.fire { s with now := 100 } (v.cascadeNat + 1) with
         | some (s1, _) => if same s1 then ok ← fail "the rounds without the cascade pass the comparison"
         | none => ok ← fail "the rounds exceed the bound"
         return ok
@@ -3899,7 +3901,7 @@ def taggingSvc : ServiceV :=
   { name := "tagging", records := .int, event := .int, caller := .int, init := (0 : Int),
     apply := .closed (.lam (recsE (.var .here))), subscribes := [], declares := [], commands := [tagC], queries := [],
     sources := [], machines := [], reactions := [], invariants := .closed (.lam (.list .nil)), responses := [],
-    bounds := ⟨[], 3, 2, 5⟩, scenarios := [], declared := [] }
+    cascade := 2, scenarios := [], declared := [] }
 
 def unrollCheck (solver : Solver) : IO Bool := do
   let fail (m : String) : IO Bool := do IO.println s!"smt-check: unrolled run: {m}"; return false
@@ -4000,7 +4002,7 @@ def stampSvc : ServiceV :=
       (.cons (addMs (.field (ft := instT) "now" 1 (by simp) (.var .here)) (.var (.there .here))) .nil))),
     subscribes := [], declares := [.command stampT .int .int stamp], commands := [stamp], queries := [], sources := [],
     machines := [], reactions := [], invariants := .closed (.lam (.list .nil)), responses := [],
-    bounds := { creates := [], items := 3, cascade := 2, steps := 5 }, scenarios := [], declared := [] }
+    cascade := 2, scenarios := [], declared := [] }
 
 /-- After an event satisfying `p`, an event satisfying `q` (of the trigger, then the event) within `within` ms, with
 the deadline `d` of the records and the trigger, on `stamp`'s records and Int events. -/

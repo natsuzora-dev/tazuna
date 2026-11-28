@@ -12,7 +12,7 @@ it: Invalid, rejected, a fault, a query, time moving back. -/
 def settled (s : State v) : Input v → Option (Acc v)
   | .command i caller input =>
     match execCommand T { state := s } (v.commands.get i) (outside caller) input with
-    | .ok (.accepted a) => (settle T v.bounds.cascadeNat a).toOption
+    | .ok (.accepted a) => (settle T v.cascadeNat a).toOption
     | _ => none
   | .query .. => none
   | .answer to ⟨t, value⟩ =>
@@ -23,14 +23,14 @@ def settled (s : State v) : Input v → Option (Acc v)
       | some ⟨h⟩ => match broken (p.request.holds (h ▸ value)) with
         | _ :: _ => none
         | [] => (applyEvents T { state := { s with pending := s.pending.filter (·.id != to) } }
-            (p.request.onAnswer.fn (h ▸ value, ())) >>= settle T v.bounds.cascadeNat).toOption
+            (p.request.onAnswer.fn (h ▸ value, ())) >>= settle T v.cascadeNat).toOption
   | .event i value =>
-    (applyEvents T { state := s } [(v.subscribes.get i).wrap.fn (value, ())] >>= settle T v.bounds.cascadeNat).toOption
+    (applyEvents T { state := s } [(v.subscribes.get i).wrap.fn (value, ())] >>= settle T v.cascadeNat).toOption
   | .clock time =>
     if time < s.now then none else
-    match fire { s with now := time } (v.bounds.cascadeNat + 1) with
+    match fire { s with now := time } (v.cascadeNat + 1) with
     | none => none
-    | some (s', effs) => (start { state := s' } effs >>= settle T v.bounds.cascadeNat).toOption
+    | some (s', effs) => (start { state := s' } effs >>= settle T v.cascadeNat).toOption
 
 end Step
 
@@ -42,13 +42,13 @@ theorem step_settled (T : List TypeDecl) {v : ServiceV} (s : State v) (x : Input
       | n :: _ => ⟨(step T v s x).state, .fault (.invariant n), [], []⟩
       | [] => ⟨a.state, .accepted, a.events, a.out⟩ := by
   have fin : ∀ (s0 : State v) (r : Except Fault (Step.Acc v)) (o : Outcome),
-      (r >>= Step.settle T v.bounds.cascadeNat).toOption = some a →
+      (r >>= Step.settle T v.cascadeNat).toOption = some a →
       Step.finish T s0 r o = match Step.invariants a.state with
         | n :: _ => ⟨s0, .fault (.invariant n), [], []⟩
         | [] => ⟨a.state, o, a.events, a.out⟩ := by
     intro s0 r o hr
     unfold Step.finish
-    cases hs : r >>= Step.settle T v.bounds.cascadeNat with
+    cases hs : r >>= Step.settle T v.cascadeNat with
     | error => simp [hs, Except.toOption] at hr
     | ok b =>
       simp only [hs, Except.toOption, Option.some.injEq] at hr

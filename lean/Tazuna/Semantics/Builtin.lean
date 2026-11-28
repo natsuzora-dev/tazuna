@@ -184,7 +184,7 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
           | _, _ => none
         | _ => none,
       sources := declares.filterMap fun | .source n t => some (n, t) | _ => none,
-      invariants, responses, bounds := { creates := [], items := 0, cascade, steps := 1 }, scenarios,
+      invariants, responses, cascade, scenarios,
       declared := [] }
   | .command, args, h => let d := Prim.dataOf h rfl
     fun (name, callers, accepts, decide, ensures, ()) =>

@@ -1059,14 +1059,14 @@ theorem deadlineT_sound (hL : SortedLayout L) {fd : Code (Ty.fn [v.records, v.ev
 end
 
 /-- In each service's layout, a response's question never refuses with a layout gap. -/
-theorem respStep_ofService (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.services)
+theorem respStep_ofService (c : CheckedSpec) {v : ServiceV} {bnd : BoundsV v.records} (hv : v ∈ c.spec.services)
     {resp : ResponseV v.records v.event} (hr : resp ∈ v.responses) {n : Nat} (inp : SymInput v (shapes v) n)
-    (a : StepAsk v) : Sound (fun _ => True) (respStep (Layout.ofService c.program.defs v) resp inp a) := by
-  have h := serviceGot_ofService hv
+    (a : StepAsk v) : Sound (fun _ => True) (respStep (Layout.ofService c.program.defs v bnd) resp inp a) := by
+  have h := serviceGot_ofService (bnd := bnd) hv
   have chk := c.checked v hv
   have hev := avail_of_got h.event
   have hrec := avail_of_got h.records
-  have hopt : Avail (Layout.ofService c.program.defs v) (Ty.option (.point .ms)) := avail_use c v (by simp [useTys])
+  have hopt : Avail (Layout.ofService c.program.defs v bnd) (Ty.option (.point .ms)) := avail_use c v (by simp [useTys])
   obtain ⟨-, -, -, -, ⟨hee, hep⟩, -⟩ := stateTys_iff.1 chk.stateTys
   have hreach := chk.reach.responses resp hr
   have hroot := root_response hr

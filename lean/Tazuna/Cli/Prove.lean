@@ -452,8 +452,8 @@ def serviceItems (sv : CheckedService c) (only : String → Bool) : ServiceItems
   return {
     items := init ++ items
     shows := dead
-    scope := scopeBounds c.T L v
-    inputScope := inputBounds c.T L v
+    scope := scopeBounds c.T L v sv.b
+    inputScope := inputBounds c.T L v sv.b
     steps
     fits }
 
@@ -540,14 +540,16 @@ def prove (root path : String) (opts : Options) : Cmd Unit := do
   let start ← IO.monoMsNow
   match ← loadModel root path opts.model with
   | none => pure ()
-  | some (c, name, model) =>
+  | some (cm, name) =>
+    let c := cm.checked
+    let model := cm.model
     let rm : RunModel := ⟨name, model⟩
     let solver := { (← Solver.find) with rlimit := model.rlimit.toNat, deadline := opts.timeout.map (start + 1000 * ·) }
     -- The engine's own digest names this build in the direct keys; it is read while the questions are built.
     let engine ← IO.asTask (prio := .dedicated) do return Sha256.hex (← IO.FS.readBinFile (← IO.appPath))
     let mut items : List Item := []
     let mut scopes : List (String × ServiceItems) := []
-    for sv in c.services do
+    for sv in cm.services do
       let r := serviceItems c sv opts.keeps
       if let some m := r.internal then return ← internal m
       items := items ++ r.items
@@ -562,7 +564,7 @@ def prove (root path : String) (opts : Options) : Cmd Unit := do
     let mut placed : Array Placed := #[]
     let mut deads : Array (String × GenTarget × IO.Ref (Option (Except String Bool))) := #[]
     for (s, sc) in scopes do
-      let ids := (c.services.find? (·.v.name == s)).bind (·.L.ids)
+      let ids := (cm.services.find? (·.v.name == s)).bind (·.L.ids)
       for it in sc.shows do
         let mut asks := []
         for (step, q) in it.asks do

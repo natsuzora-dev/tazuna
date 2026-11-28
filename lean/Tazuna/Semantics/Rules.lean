@@ -413,10 +413,9 @@ def ServiceV.lists (v : ServiceV) (h : HandleSite) : Bool :=
 
 /-- Every broken structure rule of `s`, whose user types are `T` and whose program makes `handles` and kept functions
 capturing values of the types `captures`, and whose service `v`'s own sends can name the handles `sent v`, with a
-message naming the definition. The create rules read a model's scope, so they apply only where `s` is `inScope`
-(`ModelV.scoped`). -/
+message naming the definition. -/
 def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) (captures : List (SiteId × List Ty))
-    (sent : ServiceV → List HandleSite) (inScope : Bool) : List (Illegal × String) :=
+    (sent : ServiceV → List HandleSite) : List (Illegal × String) :=
   let tagLabels := T.flatMap fun d => d.variants.filterMap fun var =>
     if var.fields.any (·.label == some "tag") then
       some (Illegal.tagLabel, s!"{d.name}.{var.name} has a field labelled tag, the key its variant's name sits under on the wire; rename the field")
@@ -459,21 +458,7 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) (c
       some (Illegal.rejection, s!"{v.name}.{c.name}: the rejection type is no custom type, Nil or Never")
     let keys := v.machines.filterMap fun m => if m.key.orderable && m.key.ordered T then none else
       some (Illegal.machineKey, s!"{v.name}.{m.name}: the instance key type has no canonical order the solver can compare; use Int, String, Date, Id, Bool, an enumeration, or a tuple or one-variant record of these")
-    let probes := tableProbes T v.records
-    let reads := v.bounds.creates.map (·.reads probes)
-    let creates := if !inScope then [] else (probes.filterMap fun (t, _) => match (reads.filter (·.contains t)).length with
-        | 0 => some (Illegal.creates, s!"{v.name}: the table {t} needs a create bound")
-        | 1 => none
-        | _ => some (Illegal.creates, s!"{v.name}: the table {t} has more than one create bound")) ++
-      ((reads.filter (·.isEmpty)).map fun _ =>
-        (Illegal.creates, s!"{v.name}: a create bound reads no table field of the records"))
-    let b := v.bounds
-    -- Each bound with its least legal value: `steps` 1, since a search of no depth would read as a verdict.
-    let negative := ([("others_at_most", (b.items : Int), (0 : Int)), ("cascade", b.cascade, 0), ("steps", b.steps, 1)] ++
-        (v.bounds.creates.zip reads).map (fun (c, ts) => ("create " ++ ", ".intercalate ts, c.atMost, 0))).filterMap
-      fun (what, n, least) => if n < least then
-        some (Illegal.bounds, if least = 0 then s!"{v.name}: the {what} bound is negative"
-          else s!"{v.name}: the {what} bound is below {least}") else none
+    let negative := if v.cascade < 0 then [(Illegal.bounds, s!"{v.name}: the cascade bound is negative")] else []
     let scenarioNames := (duplicates (v.scenarios.map (·.name))).map fun n =>
       (Illegal.scenario, s!"{v.name}/{n} names more than one scenario")
     let perScenario := v.scenarios.flatMap fun sc =>
@@ -498,7 +483,7 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) (c
         (Illegal.response, s!"{v.name}, response {n}: more than one response has this name")) ++
       v.responses.filterMap fun r => if r.within < 0 then
         some (Illegal.response, s!"{v.name}, response {r.name}: the within is negative") else none
-    inits ++ wireNames ++ owners ++ wireTypes ++ stateTypes ++ unknown ++ rejections ++ keys ++ creates ++ negative ++ scenarioNames ++ perScenario ++
+    inits ++ wireNames ++ owners ++ wireTypes ++ stateTypes ++ unknown ++ rejections ++ keys ++ negative ++ scenarioNames ++ perScenario ++
       tableKeys ++ responses
   let perExternal := s.externals.flatMap fun x =>
     let all := x.declares
@@ -548,9 +533,9 @@ def ServiceV.inputKind (v : ServiceV) : DeclaredV → Bool
   | .source n t => v.subscribes.any fun sub => sub.name == n && (Ty.same sub.event t).isSome
   | d => v.declared.any fun (_, d') => d'.same d
 
-/-- Every broken rule of the model's own: its scopes against its spec's services, and the values of each scope that
-the spec's rules do not read. The create and bound rules read the scoped spec (`SpecV.illegal` with `inScope`). -/
-def ModelV.illegal (m : ModelV) : List (Illegal × String) :=
+/-- Every broken rule of the model's own, whose user types are `T`: its scopes against its spec's services, each table
+of a service's records with one create bound, and no bound below its least value. -/
+def ModelV.illegal (T : List TypeDecl) (m : ModelV) : List (Illegal × String) :=
   let services := m.spec.services.map (·.name)
   let limit := if m.rlimit < 1 then [(Illegal.model, s!"the resource limit {m.rlimit} is below 1")] else []
   let unknown := (m.scopes.filter fun sc => !services.contains sc.service).map fun sc =>
@@ -568,7 +553,22 @@ def ModelV.illegal (m : ModelV) : List (Illegal × String) :=
           (Illegal.model, s!"{v.name}: the values of the {vs.input.kind} {vs.input.name} are of no input kind of the service")) ++
         (duplicates (sc.values.map fun vs => vs.input.kind ++ " " ++ vs.input.name)).map fun n =>
           (Illegal.model, s!"{v.name}: more than one value set is of the {n}")
-      records ++ caps ++ values
+      let b := sc.boundsOf v
+      let probes := tableProbes T v.records
+      let reads := b.creates.map (·.reads probes)
+      let creates := (probes.filterMap fun (t, _) => match (reads.filter (·.contains t)).length with
+          | 0 => some (Illegal.creates, s!"{v.name}: the table {t} needs a create bound")
+          | 1 => none
+          | _ => some (Illegal.creates, s!"{v.name}: the table {t} has more than one create bound")) ++
+        ((reads.filter (·.isEmpty)).map fun _ =>
+          (Illegal.creates, s!"{v.name}: a create bound reads no table field of the records"))
+      -- Each bound with its least legal value: `steps` 1, since a search of no depth would read as a verdict.
+      let bounds : List (String × Int × Int) := [("others_at_most", b.items, 0), ("steps", b.steps, 1)] ++
+        (b.creates.zip reads).map fun (c, ts) => ("create " ++ ", ".intercalate ts, c.atMost, 0)
+      let negative := bounds.filterMap fun (what, n, least) => if n < least then
+          some (Illegal.bounds, if least = 0 then s!"{v.name}: the {what} bound is negative"
+            else s!"{v.name}: the {what} bound is below {least}") else none
+      records ++ caps ++ values ++ creates ++ negative
     | _ => [(Illegal.model, s!"{v.name} has more than one scope")]
   limit ++ unknown ++ perService
 

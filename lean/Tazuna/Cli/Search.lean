@@ -21,12 +21,13 @@ open Tazuna.Ir Tazuna.Ir.Step Tazuna.Smt Tazuna.Trace
 def timeoutWhy (ms : Nat) : String :=
   s!"the solver ran past {ms} ms of wall clock before its resource limit, which decides every other answer"
 
-/-- A service of a checked spec with what its checks give the commands: its membership, so `c.checked` applies, and its
-layout's step environment, which `stepEnv_ofService` proves is found. -/
+/-- A service of a checked spec with what its checks give the commands: its membership, so `c.checked` applies, the
+bounds its model's scope gives it, and its layout's step environment, which `stepEnv_ofService` proves is found. -/
 structure CheckedService (c : CheckedSpec) where
   v : ServiceV
   mem : v ∈ c.spec.services
-  senv : StepEnv (Layout.ofService c.program.defs v) (shapes v)
+  b : BoundsV v.records
+  senv : StepEnv (Layout.ofService c.program.defs v b) (shapes v)
 
 /-- The step environment a found one proves exists. -/
 def stepEnvOf {L : Layout} {v : ServiceV} (h : ∃ senv, StepEnv.of L (shapes v) = .ok senv) : StepEnv L (shapes v) :=
@@ -34,11 +35,12 @@ def stepEnvOf {L : Layout} {v : ServiceV} (h : ∃ senv, StepEnv.of L (shapes v)
   | .ok senv => senv
   | .error _ => False.elim (by obtain ⟨_, h⟩ := h; rw [e] at h; cases h)
 
-/-- Each service of the spec, in order. -/
-def _root_.Tazuna.Smt.CheckedSpec.services (c : CheckedSpec) : List (CheckedService c) :=
-  c.spec.services.attach.map fun ⟨v, hv⟩ => ⟨v, hv, stepEnvOf (stepEnv_ofService c.program.defs (c.checked v hv))⟩
+/-- Each service of the model's spec, in order, within the bounds the model gives it. -/
+def CheckedModel.services (cm : CheckedModel) : List (CheckedService cm.checked) :=
+  cm.checked.spec.services.attach.map fun ⟨v, hv⟩ =>
+    ⟨v, hv, cm.bounds v hv, stepEnvOf (stepEnv_ofService (bnd := cm.bounds v hv) cm.checked.program.defs (cm.checked.checked v hv))⟩
 
-abbrev CheckedService.L {c : CheckedSpec} (s : CheckedService c) : Layout := Layout.ofService c.program.defs s.v
+abbrev CheckedService.L {c : CheckedSpec} (s : CheckedService c) : Layout := Layout.ofService c.program.defs s.v s.b
 
 theorem CheckedService.callerData {c : CheckedSpec} (s : CheckedService c) : s.v.caller.isData = true :=
   (c.checked s.v s.mem).callerData
@@ -108,7 +110,7 @@ def _root_.Tazuna.Smt.Limit.text (T : List TypeDecl) : Limit → String
 requests where the service has a request shape, with the bound its slots come from (`stepBound`), its slots as
 `Layout.count` gives them, the function every slot-fit premise (`StepFits`, `RunIn`, `RespFits`, `inputVals`) reads,
 and the machines whose table of instances has the type. -/
-def boundsOf (T : List TypeDecl) (L : Layout) (v : ServiceV) (keep : Ty → Bool) : List Json :=
+def boundsOf (T : List TypeDecl) (L : Layout) (v : ServiceV) (b : BoundsV v.records) (keep : Ty → Bool) : List Json :=
   L.types.filterMap fun (t, _) =>
     let machines := (v.machines.filter fun m => (Ty.same m.table t).isSome).map (Json.str ·.name)
     let line (name bound : String) : Option Json :=
@@ -116,15 +118,16 @@ def boundsOf (T : List TypeDecl) (L : Layout) (v : ServiceV) (keep : Ty → Bool
         if machines.isEmpty then [] else [("machines", Json.arr machines.toArray)]))
     if !keep t then none
     else if (Ty.same t (pendingTable (shapes v))).isSome then
-      if (shapes v).isEmpty then none else line "pending requests" (stepBound v (L.count t) t)
+      if (shapes v).isEmpty then none else line "pending requests" (stepBound v b (L.count t) t)
     else match t with
-      | .table .. | .bag _ => line (tyText T t) (stepBound v (L.count t) t)
+      | .table .. | .bag _ => line (tyText T t) (stepBound v b (L.count t) t)
       | .list _ => line (tyText T t) "longest literal"
       | _ => none
 
 /-- Every bound a step of the service can go past: each bound of its layout. A list from an input can be longer than
 every literal of its type, so lists are named too. -/
-def scopeBounds (T : List TypeDecl) (L : Layout) (v : ServiceV) : List Json := boundsOf T L v fun _ => true
+def scopeBounds (T : List TypeDecl) (L : Layout) (v : ServiceV) (b : BoundsV v.records) : List Json :=
+  boundsOf T L v b fun _ => true
 
 mutual
 /-- The lists, bags and tables a value of the type can hold, the type itself first. -/
@@ -145,9 +148,9 @@ end
 
 /-- The bounds an input of the service can go past: the lists, bags and tables its inputs carry. A verdict over runs
 covers every run only where every input fits them (`proved_sound`), so a line whose inputs may not fit names them. -/
-def inputBounds (T : List TypeDecl) (L : Layout) (v : ServiceV) : List Json :=
+def inputBounds (T : List TypeDecl) (L : Layout) (v : ServiceV) (b : BoundsV v.records) : List Json :=
   let held := Ty.collectionsOf (inputTys v)
-  boundsOf T L v fun t => held.any fun u => (Ty.same t u).isSome
+  boundsOf T L v b fun t => held.any fun u => (Ty.same t u).isSome
 
 /-- The bounds a line about runs is scoped to, from whether a step can go past the slots (`left`: a bound question is
 not unsat) and whether every input and the initial state fit them: none where neither can leave them, as every state

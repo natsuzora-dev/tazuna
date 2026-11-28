@@ -85,7 +85,7 @@ inductive Fault where
   | invariant (name : String)
   /-- A command's `ensures` rule is broken once its events are applied. -/
   | ensures (name : String)
-  /-- The step took more internal steps than `bounds.cascade`. -/
+  /-- The step took more internal steps than `cascade`. -/
   | cascadeLimit
   /-- An answer names no pending request, or not with the types that request has. The answer's in line names the
   request, so the fault carries no id: wire ids are names, compared only up to renaming. -/
@@ -342,7 +342,7 @@ def settle : Nat → Acc v → Except Fault (Acc v)
 
 /-- Ends a step: runs what waits and checks the invariants. A fault leaves the state as `s0`. -/
 def finish (s0 : State v) (a : Except Fault (Acc v)) (outcome : Outcome) : Result v :=
-  match a >>= settle T v.bounds.cascadeNat with
+  match a >>= settle T v.cascadeNat with
   | .error f => ⟨s0, .fault f, [], []⟩
   | .ok a => match invariants a.state with
     | n :: _ => ⟨s0, .fault (.invariant n), [], []⟩
@@ -431,7 +431,7 @@ def step (T : List TypeDecl) (v : ServiceV) (s : State v) : Input v → Result v
   | .event i value => finish T s (applyEvents T { state := s } [(v.subscribes.get i).wrap.fn (value, ())]) .accepted
   | .clock time =>
     if time < s.now then ⟨s, .invalid ["time moves forward"], [], []⟩ else
-    match fire { s with now := time } (v.bounds.cascadeNat + 1) with
+    match fire { s with now := time } (v.cascadeNat + 1) with
     | none => ⟨s, .fault .cascadeLimit, [], []⟩
     | some (s', effs) => finish T s (start { state := s' } effs) .accepted
 
@@ -455,7 +455,7 @@ inductive Begins (s : State v) : Input v → Acc v → Prop
   | event (i : Fin v.subscribes.length) (value : (v.subscribes.get i).event.den0) (a : Acc v) :
       applyEvents T { state := s } [(v.subscribes.get i).wrap.fn (value, ())] = .ok a → Begins s (.event i value) a
   | clock (time : Int) (s' : State v) (effs : List (Sender × EffectV v.event)) (a : Acc v) : ¬ time < s.now →
-      fire { s with now := time } (v.bounds.cascadeNat + 1) = some (s', effs) → start { state := s' } effs = .ok a →
+      fire { s with now := time } (v.cascadeNat + 1) = some (s', effs) → start { state := s' } effs = .ok a →
       Begins s (.clock time) a
 
 end Step
