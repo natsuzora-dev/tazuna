@@ -64,21 +64,25 @@ private def pingE {Γ : List Ty} : Expr [] Γ (.dsl .effect [.int]) :=
             (.cons (.ctor (vs := [[.int], [.str]]) ⟨1, by decide⟩ (.cons .wild .nil)) (.list .nil) .nil)) ⟨4, rfl⟩)))
           .nil)))
 
-/-- The state of `watch`: a count, and the deadline its last entry set, 10 ms after the event's time. -/
-private abbrev watchT : Ty := .tuple [.int, .point .ms]
+/-- The state of `watch`: a count, and the deadline its last entry set, 10 ms after the event's time; none before
+the first entry, since no spec can write an instant. -/
+private abbrev watchT : Ty := .tuple [.int, Ty.option (.point .ms)]
 private def countE {Γ : List Ty} (x : Expr [] Γ watchT) : Expr [] Γ .int := .index x ⟨0, by decide⟩
-private def dueE {Γ : List Ty} (x : Expr [] Γ watchT) : Expr [] Γ (.point .ms) := .index x ⟨1, by decide⟩
+private def dueE {Γ : List Ty} (x : Expr [] Γ watchT) : Expr [] Γ (Ty.option (.point .ms)) := .index x ⟨1, by decide⟩
 
 def watch : MachineV .int .int :=
   { name := "watch", key := .int, state := watchT,
     instances := .closed (.lam (.call (.prim .bagFromList [.int] rfl)
       (.cons (iteE (.bin .lt (.int 0) (.var .here)) (.list (.cons (.int 0) .nil)) (.list .nil)) .nil))),
-    initial := ((0 : Int), (0 : Int), ()),
+    initial := ((0 : Int), .inr (.inl ()), ()),
     on := .closed (.lam (enterE (.tuple (.cons (.bin .add (countE (mctxE "state" 1 (.var .here))) (.int 1))
-      (.cons (.call (.prim .instantAdd [] rfl) (.cons (mctxE "now" 3 (.var .here)) (.cons (.int 10) .nil))) .nil))))),
+      (.cons (someE (.call (.prim .instantAdd [] rfl) (.cons (mctxE "now" 3 (.var .here)) (.cons (.int 10) .nil))))
+        .nil))))),
     timer := .closed (.lam (iteE (.bin (.eq rfl) (countE (tctxE "state" 1 (.var .here))) (.int 1))
-      (timerE (dueE (tctxE "state" 1 (.var .here)))
-        (.tuple (.cons (.int 5) (.cons (dueE (tctxE "state" 1 (.var .here))) .nil)))) noTimerE)),
+      (.case (dueE (tctxE "state" 1 (.var .here)))
+        (.cons (.ctor (vs := [[.point .ms], []]) ⟨0, by decide⟩ (.cons .bind .nil))
+          (timerE (.var .here) (.tuple (.cons (.int 5) (.cons (someE (.var .here)) .nil))))
+          (.cons (.ctor (vs := [[.point .ms], []]) ⟨1, by decide⟩ .nil) noTimerE .nil)) ⟨4, rfl⟩) noTimerE)),
     effect := .closed (.lam (iteE (.bin (.eq rfl) (countE (mctxE "state" 1 (.var .here))) (.int 5)) (someE pingE) noneE)),
     invariants := .closed (.lam (.list .nil)) }
 
