@@ -23,7 +23,9 @@ def opaqueTypes : List OpaqueType :=
     ⟨"tazuna/table", "Table", ["k", "v"], "A finite map from keys to values; at most one value per key. A table in the records, a machine state, a type that crosses the wire or what a kept function captures has a plain key: Int, String, Date, Id, or a custom type or tuple of these.",
       fun | [k, v] => some (.table k v) | _ => none⟩,
     ⟨"tazuna/date", "Date", [], "A day. Dates have no calendar: a spec adds days and counts the days between two dates.",
-      fun | [] => some .date | _ => none⟩,
+      fun | [] => some (.point .day) | _ => none⟩,
+    ⟨"tazuna/instant", "Instant", [], "A point in time, to the millisecond. No spec can write one: it comes from a context's `now`, from an input, or from moving another by a duration, so what a spec means does not change when every instant moves by the same amount.",
+      fun | [] => some (.point .ms) | _ => none⟩,
     ⟨"tazuna", "Id", [], "An identifier a step makes fresh, or one from outside the service; ids compare with `==` only. Where tazuna needs an order (machine keys), fresh ids come in the order they were made, by step and then index, before outside ids, which come by name.",
       fun | [] => some .id | _ => none⟩ ] ++
   (Dsl.all.filter (!·.kept)).map fun k => ⟨"tazuna", k.name, k.decl.2.1, k.decl.2.2,
@@ -43,20 +45,14 @@ def preludeDocs : List (String × String) :=
 
 /-- Aliases `tazuna` declares, with their documentation. -/
 def builtinAliases : List (Surface.AliasDef × String) :=
-  [ (⟨"tazuna.Instant", [], .con "Int" [], ⟨0, 0⟩⟩, "A point in time, in milliseconds."),
-    (⟨"tazuna.Duration", [], .con "Int" [], ⟨0, 0⟩⟩, "A length of time, in milliseconds."),
+  [ (⟨"tazuna.Duration", [], .con "Int" [], ⟨0, 0⟩⟩, "A length of time, in milliseconds."),
     (⟨"tazuna.Rules", [], .con "List" [.tuple [.con "String" [], .con "Bool" []]], ⟨0, 0⟩⟩,
       "Named rules, as `invariants`, `accepts` and `ensures` return them: each holds or not.") ]
 
-/-- The fields and parameters whose Ints the DSL writes as a time alias, so a signature says which Int is a time:
-(the declaring type or built-in, the field or parameter label, the alias). The alias names every Int in that type,
-such as the result of a `deadline` function. -/
+/-- The fields and parameters whose Ints the DSL writes as the alias `Duration`, so a signature says which Int is a
+length of time: (the declaring type or built-in, the field or parameter label, the alias). -/
 def timeAliases : List (String × String × String) :=
-  [ ("tazuna.Ctx", "now", "Instant"), ("tazuna.MachineCtx", "now", "Instant"), ("tazuna.ReactionCtx", "now", "Instant"),
-    ("tazuna.ApplyCtx", "now", "Instant"),
-    ("tazuna.QueryCtx", "now", "Instant"),
-    ("tazuna.Timer", "at", "Instant"), ("response", "within", "Duration"),
-    ("response", "deadline", "Instant"), ("step_wait", "for", "Duration"), ("scope", "waits", "Duration") ]
+  [ ("response", "within", "Duration"), ("step_wait", "for", "Duration"), ("scope", "waits", "Duration") ]
 
 /-- The built-in functions. -/
 inductive Prim where
@@ -66,6 +62,7 @@ inductive Prim where
   | tableNew | tableFromList | tableInsert | tableRemove | tableGet | tableSize | tableKeys | tableValues
   | tableFilter | tableMap | tableCount | tableAny | tableAll
   | dateAddDays | dateDaysBetween
+  | instantAdd | instantDiff | instantIsBefore | instantIsAfter
   | require | tableLookup
   | spec | service | command | query | machine | reaction
   | external | externalCommand | externalQuery | source
@@ -152,9 +149,17 @@ def sig : Prim → PrimSig :=
   | .tableAll => ⟨"all", "Whether every entry satisfies the predicate.", ["k", "v"],
       [p "table" (.table k v), l "satisfying" (.fn [k, v] .bool)], .bool, [], false⟩
   | .dateAddDays => ⟨"add_days", "The date that many days later (earlier when negative).", [],
-      [p "date" .date, p "days" .int], .date, [], false⟩
+      [p "date" (.point .day), p "days" .int], .point .day, [], false⟩
   | .dateDaysBetween => ⟨"days_between", "The days from the first date to the second: negative when it is earlier.",
-      [], [l "from" .date, l "to" .date], .int, [], false⟩
+      [], [l "from" (.point .day), l "to" (.point .day)], .int, [], false⟩
+  | .instantAdd => ⟨"add", "The instant that many milliseconds later (earlier when negative).", [],
+      [p "instant" (.point .ms), p "ms" .int], .point .ms, [], false⟩
+  | .instantDiff => ⟨"diff", "The milliseconds from the first instant to the second: negative when it is earlier.", [],
+      [l "from" (.point .ms), l "to" (.point .ms)], .int, [], false⟩
+  | .instantIsBefore => ⟨"is_before", "Whether the first instant is earlier than the second.", [],
+      [p "instant" (.point .ms), p "other" (.point .ms)], .bool, [], false⟩
+  | .instantIsAfter => ⟨"is_after", "Whether the first instant is later than the second.", [],
+      [p "instant" (.point .ms), p "other" (.point .ms)], .bool, [], false⟩
   | .require => ⟨"require",
       "`use <- tazuna.require(holds, or: rejection)`: the rest of the block when it holds, else the rejection.",
       ["a", "e"], [p "holds" .bool, ⟨some "or", "rejection", param 1⟩, l "then" (.fn [] (.result a (param 1)))],
@@ -313,7 +318,7 @@ def sig : Prim → PrimSig :=
       doc := "After each event `trigger` satisfying `after`, an event satisfying `then(trigger, event)` within the duration `within`, the deadline included: an answer exactly `within` after the trigger is in time, one a millisecond later is not. A response that does not tie the two ignores `trigger`. `deadline` reads the deadline the records keep for a trigger while it waits for its answer, and none once it waits no more. prove checks each step against it: a trigger the step does not answer has a deadline within `within` after it, a waiting deadline ends or moves later only with its answer, and a clock line passes no waiting deadline. Together these hold the response on runs of any length.",
       tvars := ["records", "event"], dataArgs := true,
       params := [l "name" .str, l "after" (kept (.fn [b] .bool)), l "then" (kept (.fn [b, b] .bool)), l "within" .int,
-        l "deadline" (kept (.fn [a, b] (.option .int)))],
+        l "deadline" (kept (.fn [a, b] (.option (.point .ms))))],
       ret := .dsl .response [a, b] }
   | .scenario =>
     { name := "scenario",
@@ -378,7 +383,8 @@ def all : List Prim :=
   [.length, .bagFromList, .bagInsert, .bagSize, .bagFilter, .bagMap, .bagCount, .bagSum, .bagAny, .bagAll,
    .bagContains, .bagMinBy, .bagMaxBy, .tableNew, .tableFromList, .tableInsert, .tableRemove, .tableGet, .tableSize,
    .tableKeys, .tableValues, .tableFilter, .tableMap, .tableCount, .tableAny, .tableAll, .dateAddDays,
-   .dateDaysBetween, .require, .tableLookup, .spec, .service, .command, .query, .machine, .reaction,
+   .dateDaysBetween, .instantAdd, .instantDiff, .instantIsBefore, .instantIsAfter, .require, .tableLookup, .spec,
+   .service, .command, .query, .machine, .reaction,
    .external, .externalCommand, .externalQuery, .source, .declareCommand, .declareQuery, .declareSource,
    .declareExternalCommand, .declareExternalQuery, .requestCommand, .requestQuery,
    .sendCommand, .sendQuery, .subscribe, .model, .scope, .values, .create, .response, .scenario, .stepCommand, .stepQuery, .stepWait,
@@ -406,6 +412,7 @@ def module : Prim → String
   | .tableNew | .tableFromList | .tableInsert | .tableRemove | .tableGet | .tableSize | .tableKeys | .tableValues
   | .tableFilter | .tableMap | .tableCount | .tableAny | .tableAll | .tableLookup => "tazuna/table"
   | .dateAddDays | .dateDaysBetween => "tazuna/date"
+  | .instantAdd | .instantDiff | .instantIsBefore | .instantIsAfter => "tazuna/instant"
   | _ => "tazuna"
 
 /-- The global name, such as `tazuna/bag.filter`. -/

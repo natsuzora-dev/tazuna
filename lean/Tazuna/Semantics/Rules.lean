@@ -102,7 +102,7 @@ end Illegal
 mutual
 /-- Whether values of a type can cross the wire: data without functions or fresh-id sources. -/
 def Ty.wire : Ty → Bool
-  | .int | .str | .param _ | .date | .id => true
+  | .int | .str | .param _ | .point _ | .id => true
   | .list t | .bag t => Ty.wire t
   | .tuple ts => Ty.wires ts
   | .fn .. | .dsl .. => false
@@ -120,7 +120,7 @@ mutual
 /-- Whether the solver compares values of a type by terms (`Tazuna.Smt.ordT`): Ints, dates, strings and ids, Bool and
 enumerations, and tuples and one-variant records of such types. -/
 def Ty.orderable : Ty → Bool
-  | .int | .date | .str | .id => true
+  | .int | .point _ | .str | .id => true
   | .tuple ts => Ty.orderables ts
   | .adt 0 _ [[], []] => true
   | .adt (_ + 1) _ [fs] => Ty.orderables fs
@@ -134,7 +134,7 @@ end
 mutual
 /-- Whether `==` on the type is equality of values: no list, bag, table, function or type parameter inside. -/
 def Ty.plain : Ty → Bool
-  | .int | .str | .date | .id => true
+  | .int | .str | .point _ | .id => true
   | .tuple ts => Ty.plains ts
   | .adt _ _ vs => Ty.plainss vs
   | _ => false
@@ -166,7 +166,7 @@ mutual
 theorem Ty.beq_plain : (t : Ty) → t.plain = true → (x y : t.den0) → ((Ty.semWith Dsl.base t).2 x y = true ↔ x = y)
   | .int, _, x, y => beq_iff_eq (α := Int) (a := x) (b := y)
   | .str, _, x, y => beq_iff_eq (α := Str) (a := x) (b := y)
-  | .date, _, x, y => beq_iff_eq (α := Int) (a := x) (b := y)
+  | .point _, _, x, y => beq_iff_eq (α := Int) (a := x) (b := y)
   | .id, _, x, y => ⟨fun h => @of_decide_eq_true _ (instDecidableEqIdV x y) h,
       fun h => @decide_eq_true _ (instDecidableEqIdV x y) h⟩
   | .tuple ts, h, x, y => Ty.beq_plains ts h x y
@@ -204,7 +204,7 @@ end
 
 mutual
 theorem Ty.plain_of_orderable : (t : Ty) → t.orderable = true → t.plain = true
-  | .int, _ | .date, _ | .str, _ | .id, _ => rfl
+  | .int, _ | .point _, _ | .str, _ | .id, _ => rfl
   | .tuple ts, h => Ty.plains_of_orderables ts h
   | .adt 0 _ vs, h => by
     rcases vs with _ | ⟨_ | ⟨_, _⟩, _ | ⟨_ | ⟨_, _⟩, _ | ⟨_, _⟩⟩⟩ <;> simp_all [Ty.orderable, Ty.plain, Ty.plainss, Ty.plains]
@@ -280,7 +280,7 @@ def Ty.default? : (t : Ty) → Option t.den0
   | .adt _ _ vs => Ty.defaultAlt? vs
   | .param _ => Option.some ()
   | .table _ _ => Option.some ⟨[], .nil⟩
-  | .date => Option.some (0 : Int)
+  | .point _ => Option.some (0 : Int)
   | .id => Option.some (IdV.fresh 0 0)
   | .dsl k _ => by cases k <;> first | exact Option.some (0 : Nat) | exact Option.some ()
 def Ty.defaults? : (ts : List Ty) → Option (Ty.semsWith Dsl.base ts).1

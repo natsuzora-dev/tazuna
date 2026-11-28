@@ -315,13 +315,13 @@ variable (L : Layout) {v : ServiceV}
 
 /-- The response's `deadline` code applied to the records term `records` and the trigger term `tr`: whether it gives a
 deadline, the deadline, and its condition. -/
-def deadlineT (fd : Code (Ty.fn [v.records, v.event] (Ty.option Ty.int))) (records tr : Term) :
+def deadlineT (fd : Code (Ty.fn [v.records, v.event] (Ty.option (.point .ms)))) (records tr : Term) :
     Except Refusal (Term × Term × Term) := do
   let rc ← Code.ofDataE v.records records
   let ec ← Code.ofDataE v.event tr
   let (o, c) ← fd (rc, ec, ())
   let ot ← Code.dataTermE _ o
-  let (d, _) ← L.findE (Ty.option Ty.int)
+  let (d, _) ← L.findE (Ty.option (.point .ms))
   pure (.is d 0 ot, .sel d 0 0 ot, c)
 
 /-- Where a step of the kind ends accepted: it reaches its end, its cascade does not fault, and the invariants hold
@@ -339,7 +339,7 @@ def SymInput.nowAfter {shs : List (PendingShape v.event)} {n : Nat} (S : SymStat
 
 section
 variable (fa : Code (Ty.fn [v.event] Ty.bool)) (fq : Code (Ty.fn [v.event, v.event] Ty.bool))
-  (fd : Code (Ty.fn [v.records, v.event] (Ty.option Ty.int))) (within : Int)
+  (fd : Code (Ty.fn [v.records, v.event] (Ty.option (.point .ms)))) (within : Int)
 
 /-- The event term `ev` of the step is a trigger that no event of the step answers and whose deadline after the step
 is missing or past `now + within`, with its condition. -/
@@ -405,18 +405,18 @@ section
 variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV} {P : List AnySite} {E : List AnyEffectSite}
 
 /-- A term of an `Option(Int)` value: its variant test and its field. -/
-theorem optionInt_view {dopt n1 : Nat} (h1 : L.find? (Ty.option Ty.int) = some (dopt, n1))
-    (hd : (Ty.option Ty.int).isData = true) (o : (Ty.option Ty.int).den0) {ot : Term}
+theorem optionInt_view {dopt n1 : Nat} (h1 : L.find? (Ty.option (.point .ms)) = some (dopt, n1))
+    (hd : (Ty.option (.point .ms)).isData = true) (o : (Ty.option (.point .ms)).den0) {ot : Term}
     (ho : RelV L _ (Ty.up _ hd o) (ot.denote M)) :
     (Term.is dopt 0 ot).denote M = .bool (Step.optionInt o).isSome ∧
       ∀ dl, Step.optionInt o = some dl → (Term.sel dopt 0 0 ot).denote M = .int dl := by
-  have h1t : (Ty.tuple [Ty.int]).isData = true := by simp [Ty.isData, Ty.isDatas]
-  have hnone : (Ty.adt 3 [Ty.int] [[]]).isData = true := by simp [Ty.isData, Ty.isDatass, Ty.isDatas]
+  have h1t : (Ty.tuple [.point .ms]).isData = true := by simp [Ty.isData, Ty.isDatas]
+  have hnone : (Ty.adt 3 [.point .ms] [[]]).isData = true := by simp [Ty.isData, Ty.isDatass, Ty.isDatas]
   obtain ⟨d', n', hf', hra⟩ := ho
   obtain rfl := find_det hf' h1
   match o with
   | .inl (dl, ()) =>
-    erw [Ty.up_inl 3 _ [Ty.int] [[]] hd h1t] at hra
+    erw [Ty.up_inl 3 _ [.point .ms] [[]] hd h1t] at hra
     obtain ⟨vals, hv, hvals⟩ := hra
     erw [Ty.up_tuple _ _ _ rfl rfl] at hvals
     obtain ⟨v0, _, rfl, hv0, rfl⟩ := hvals
@@ -427,14 +427,14 @@ theorem optionInt_view {dopt n1 : Nat} (h1 : L.find? (Ty.option Ty.int) = some (
     cases h
     simp [Term.denote, hv]
   | .inr (.inl ()) =>
-    erw [Ty.up_inr 3 _ [Ty.int] [[]] hd hnone, Ty.up_inl 3 _ [] [] hnone rfl] at hra
+    erw [Ty.up_inr 3 _ [.point .ms] [[]] hd hnone, Ty.up_inl 3 _ [] [] hnone rfl] at hra
     obtain ⟨vals, hv, -⟩ := hra
     exact ⟨by simp [Term.denote, hv, Step.optionInt], fun _ h => nomatch h⟩
   | .inr (.inr x) => nomatch x
 
 /-- The deadline terms of the records term and the trigger term: the condition holds exactly when `deadline` fits
 there, and then the terms say whether it gives a deadline and which. -/
-theorem deadlineT_encode (resp : ResponseV v.records v.event) {fd : Code (Ty.fn [v.records, v.event] (Ty.option Ty.int))}
+theorem deadlineT_encode (resp : ResponseV v.records v.event) {fd : Code (Ty.fn [v.records, v.event] (Ty.option (.point .ms)))}
     {cd : Term} (hfd : resp.deadline.code L = .ok (fd, cd)) (hcd : Holds M cd) (recs : v.records.den0)
     (tr : v.event.den0) {rt et : Term} (hr : RelV L v.records (Ty.up _ v.records_data recs) (rt.denote M))
     (he : RelV L v.event (Ty.up _ v.event_data tr) (et.denote M)) {has d c : Term}
@@ -455,9 +455,9 @@ theorem deadlineT_encode (resp : ResponseV v.records v.event) {fd : Code (Ty.fn 
   have hnf : ∀ t ∈ [v.records, v.event], t.isFn = false := by
     simp [ofTerm_notFn (need_ok.1 h1), ofTerm_notFn (need_ok.1 h2)]
   refine ⟨resp.deadline.app_exact hfd hcd hnf _ _ (rels2 v.records_data v.event_data hargs hrc hec) h3, fun hc => ?_⟩
-  have hod : (Ty.option Ty.int).isData = true := by simp [Ty.option, Ty.isData, Ty.isDatass, Ty.isDatas]
+  have hod : (Ty.option (.point .ms)).isData = true := by simp [Ty.option, Ty.isData, Ty.isDatass, Ty.isDatas]
   have hb := resp.deadline.code_fn resp.deadline.ht hfd hcd _ _ (rels2 v.records_data v.event_data hargs hrc hec) o c h3 hc
-  erw [Ty.up_fn _ (Ty.option Ty.int) _ hargs hod] at hb
+  erw [Ty.up_fn _ (Ty.option (.point .ms)) _ hargs hod] at hb
   have hot := (rel_term (need_ok.1 h4) _).1 hb
   obtain ⟨his, hsel⟩ := optionInt_view (need_ok.1 h5) hod _ hot
   refine ⟨?_, fun dl hdl => hsel dl hdl⟩
@@ -1047,8 +1047,8 @@ end
 section
 variable {L : Layout} {P : List AnySite} {ds : List (String × DeclaredV)} {H : List HandleSite} {v : ServiceV}
 
-theorem deadlineT_sound (hL : SortedLayout L) {fd : Code (Ty.fn [v.records, v.event] (Ty.option Ty.int))}
-    (hfd : CodeOk L P ds H _ fd) (hr : Avail L v.records) (he : Avail L v.event) (ho : Avail L (Ty.option Ty.int))
+theorem deadlineT_sound (hL : SortedLayout L) {fd : Code (Ty.fn [v.records, v.event] (Ty.option (.point .ms)))}
+    (hfd : CodeOk L P ds H _ fd) (hr : Avail L v.records) (he : Avail L v.event) (ho : Avail L (Ty.option (.point .ms)))
     (records tr : Term) : Sound (fun _ => True) (deadlineT L fd records tr) :=
   sound_bind (ofDataE_sound (P := P) (ds := ds) (H := H) records hr) fun _ hrc =>
     sound_bind (ofDataE_sound (P := P) (ds := ds) (H := H) tr he) fun _ hec =>
@@ -1066,7 +1066,7 @@ theorem respStep_ofService (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.s
   have chk := c.checked v hv
   have hev := avail_of_got h.event
   have hrec := avail_of_got h.records
-  have hopt : Avail (Layout.ofService c.program.defs v) (Ty.option Ty.int) := avail_use c v (by simp [useTys])
+  have hopt : Avail (Layout.ofService c.program.defs v) (Ty.option (.point .ms)) := avail_use c v (by simp [useTys])
   obtain ⟨-, -, -, -, ⟨hee, hep⟩, -⟩ := stateTys_iff.1 chk.stateTys
   have hreach := chk.reach.responses resp hr
   have hroot := root_response hr

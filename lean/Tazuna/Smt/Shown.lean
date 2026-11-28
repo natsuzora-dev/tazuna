@@ -70,7 +70,7 @@ def idsV : (t : Ty) → t.den → List IdV
   | .table k w, x => x.1.flatMap fun e => idsV k e.1 ++ idsV w e.2
   | .tuple ts, x => idsVs ts x
   | .adt _ _ vs, x => idsAltsV vs x
-  | .int, _ | .str, _ | .date, _ | .fn .., _ | .param _, _ | .dsl .., _ => []
+  | .int, _ | .str, _ | .point _, _ | .fn .., _ | .param _, _ | .dsl .., _ => []
 def idsVs : (ts : List Ty) → Ty.dens ts → List IdV
   | [], _ => []
   | t :: ts, (x, xs) => idsV t x ++ idsVs ts xs
@@ -185,7 +185,7 @@ theorem ids_exact : (t : Ty) → (x : Term) → {v : t.den} → RelV L t v (x.de
       exact ⟨v, List.Mem.head _, hx⟩
     · rcases hi with _ | ⟨_, ⟨⟩⟩
       exact ⟨_, List.Mem.head _, holds_tt, hx⟩
-  | .int, _, _, _ | .str, _, _, _ | .date, _, _, _ => by simpa [idsT, idsV] using IdsExact.nil
+  | .int, _, _, _ | .str, _, _, _ | .point _, _, _, _ => by simpa [idsT, idsV] using IdsExact.nil
   | .adt 0 _ vs, _, v, ⟨hvs, _⟩ => by
     subst hvs
     rcases v with _ | _ | e
@@ -257,7 +257,7 @@ variable (T : List TypeDecl)
 mutual
 /-- The trace writer's ids of a data value are the ids it holds at the structure level, up to order. -/
 theorem idsOf_up : (t : Ty) → (h : t.isData = true) → (x : t.den0) → ∀ i, (i ∈ Trace.idsOf T t x ↔ i ∈ idsV t (Ty.up t h x))
-  | .int, _, _, _ | .str, _, _, _ | .date, _, _, _ | .id, _, _, _ | .param _, _, _, _ => Iff.rfl
+  | .int, _, _, _ | .str, _, _, _ | .point _, _, _, _ | .id, _, _, _ | .param _, _, _, _ => Iff.rfl
   | .list t, h, xs, i => by
     have ht : t.isData = true := h
     rw [Ty.up_list t h ht]

@@ -201,7 +201,7 @@ mutual
 /-- Values the same up to the order of their bags and tables have the same trees up to that order. -/
 theorem valTree_same : (t : Ty) → (x y : t.den0) → Ty.Same t x y → (te : Tree Key) → valTree T t x = some te →
     ∃ te', valTree T t y = some te' ∧ Tree.Same te te'
-  | .int, x, y, h, te, hx | .str, x, y, h, te, hx | .date, x, y, h, te, hx => by
+  | .int, x, y, h, te, hx | .str, x, y, h, te, hx | .point _, x, y, h, te, hx => by
     have h : x = y := h; subst h; exact ⟨te, hx, rfl⟩
   | .id, x, y, h, te, hx => by
     have h : IdV.Rel PBij.refl x y := h
@@ -404,12 +404,18 @@ theorem tree_dec : (t : Ty) → t.comparable = true → (x : t.den0) → (w : Wi
     simp only [Tree.map, Tree.same_atom] at hs
     cases Erl.bin.inj hs
     exact ⟨_, Str.of?_val x, rfl⟩
-  | .date, _, x, w, te, tl, hx, hw, hs, _ => by
+  | .point .day, _, x, w, te, tl, hx, hw, hs, _ => by
     cases w <;> simp only [wireTree, reduceCtorEq] at hw
     simp only [valTree, Option.some.injEq] at hx hw; subst hx hw
     simp only [Tree.map, Tree.same_atom] at hs
     cases Erl.bin.inj hs
     exact ⟨_, DateThm.parse_render x, rfl⟩
+  | .point .ms, _, x, w, te, tl, hx, hw, hs, _ => by
+    cases w <;> simp only [wireTree, reduceCtorEq] at hw
+    simp only [valTree, Option.some.injEq] at hx hw; subst hx hw
+    simp only [Tree.map, Tree.same_atom] at hs
+    cases Erl.int.inj hs
+    exact ⟨_, rfl, rfl⟩
   | .id, _, x, w, te, tl, hx, hw, hs, hu => by
     cases w <;> simp only [wireTree, reduceCtorEq] at hw
     simp only [valTree, Option.some.injEq] at hx hw; subst hx hw
@@ -660,10 +666,12 @@ theorem dec_tree : (t : Ty) → (w : Wire) → (y : t.den0) → dec T lookup t w
     split at h
     · cases h; exact ⟨_, _, rfl, rfl, rfl⟩
     · cases h
-  | .date, .str s, y, h => by
+  | .point .day, .str s, y, h => by
     have h : parseDate? s = some y := h
     refine ⟨_, _, rfl, rfl, ?_⟩
     simp only [Tree.map, DateThm.render_parse s y h]; rfl
+  | .point .ms, .num n, y, h => by
+    cases Option.some.inj (show some n = some y from h); exact ⟨_, _, rfl, rfl, rfl⟩
   | .id, .str s, y, h => by
     have h : lookup s = some y := h
     refine ⟨_, _, rfl, rfl, ?_⟩
@@ -766,7 +774,10 @@ theorem dec_tree : (t : Ty) → (w : Wire) → (y : t.den0) → dec T lookup t w
     · cases h
   | .int, .null, _, h | .int, .bool _, _, h | .int, .str _, _, h | .int, .arr _, _, h | .int, .obj _, _, h
   | .str, .null, _, h | .str, .bool _, _, h | .str, .num _, _, h | .str, .arr _, _, h | .str, .obj _, _, h
-  | .date, .null, _, h | .date, .bool _, _, h | .date, .num _, _, h | .date, .arr _, _, h | .date, .obj _, _, h
+  | .point .day, .null, _, h | .point .day, .bool _, _, h | .point .day, .num _, _, h | .point .day, .arr _, _, h
+  | .point .day, .obj _, _, h
+  | .point .ms, .null, _, h | .point .ms, .bool _, _, h | .point .ms, .str _, _, h | .point .ms, .arr _, _, h
+  | .point .ms, .obj _, _, h
   | .id, .null, _, h | .id, .bool _, _, h | .id, .num _, _, h | .id, .arr _, _, h | .id, .obj _, _, h
   | .list _, .null, _, h | .list _, .bool _, _, h | .list _, .num _, _, h | .list _, .str _, _, h
   | .list _, .obj _, _, h | .bag _, .null, _, h | .bag _, .bool _, _, h | .bag _, .num _, _, h

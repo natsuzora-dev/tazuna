@@ -15,7 +15,7 @@ section Lemmas
 
 mutual
 theorem Ty.isData_of_comparable : (t : Ty) → t.comparable = true → t.isData = true
-  | .int, _ | .str, _ | .param _, _ | .date, _ | .id, _ => rfl
+  | .int, _ | .str, _ | .param _, _ | .point _, _ | .id, _ => rfl
   | .list t, h | .bag t, h => Ty.isData_of_comparable t h
   | .table k v, h => by
     simp only [Ty.comparable, Bool.and_eq_true] at h
@@ -392,6 +392,19 @@ theorem Prim.den_rel (p : Prim) (args : List Ty) (h : p.ok args = true) :
     rintro ⟨a, b, ⟨⟩⟩ ⟨a', b', ⟨⟩⟩ ⟨ha, hb, -⟩
     show @HSub.hSub Int Int Int _ b a = @HSub.hSub Int Int Int _ b' a'
     rw [show a = a' from ha, show b = b' from hb]
+  | instantAdd =>
+    rintro ⟨d, n, ⟨⟩⟩ ⟨d', n', ⟨⟩⟩ ⟨hd, hn, -⟩
+    show @HAdd.hAdd Int Int Int _ d n = @HAdd.hAdd Int Int Int _ d' n'
+    rw [show d = d' from hd, show n = n' from hn]
+  | instantDiff =>
+    rintro ⟨a, b, ⟨⟩⟩ ⟨a', b', ⟨⟩⟩ ⟨ha, hb, -⟩
+    show @HSub.hSub Int Int Int _ b a = @HSub.hSub Int Int Int _ b' a'
+    rw [show a = a' from ha, show b = b' from hb]
+  | instantIsBefore | instantIsAfter =>
+    rintro ⟨a, b, ⟨⟩⟩ ⟨a', b', ⟨⟩⟩ ⟨ha, hb, -⟩
+    obtain rfl : a = a' := ha
+    obtain rfl : b = b' := hb
+    exact Ty.relV_ofBool_eq rfl
   | require =>
     rintro ⟨c, j, f, ⟨⟩⟩ ⟨c', j', g, ⟨⟩⟩ ⟨hc, hj, hf, -⟩
     show Ty.relV R _ (if Ty.toBool c then f () else Ty.error j) (if Ty.toBool c' then g () else Ty.error j')

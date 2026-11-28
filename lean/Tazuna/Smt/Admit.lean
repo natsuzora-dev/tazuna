@@ -52,12 +52,12 @@ def ownOriginT (c : Ty) : Except Refusal Term := adtCtor L 12 [c] [[c], []] 1 []
 /-- The context a command's functions read, from the terms of the records, the input, the caller, the time and the
 fresh counter. -/
 def encodeCtx {r i c : Ty} (records now fresh caller input : Term) : Except Refusal (Code (Ty.ctx r i c)) := do
-  let ctx ← adtCtor L 5 [r, i, c] [[r, i, Ty.origin c, .int, .dsl .fresh []]] 0 [records, input, caller, now, fresh]
+  let ctx ← adtCtor L 5 [r, i, c] [[r, i, Ty.origin c, .point .ms, .dsl .fresh []]] 0 [records, input, caller, now, fresh]
   Code.ofDataE (Ty.ctx r i c) (Term.share ctx)
 
 /-- The context a query's `resolve` reads: a command's without the fresh counter, since a query makes no ids. -/
 def encodeQueryCtx {r i c : Ty} (records now caller input : Term) : Except Refusal (Code (Ty.queryCtx r i c)) := do
-  let ctx ← adtCtor L 10 [r, i, c] [[r, i, Ty.origin c, .int]] 0 [records, input, caller, now]
+  let ctx ← adtCtor L 10 [r, i, c] [[r, i, Ty.origin c, .point .ms]] 0 [records, input, caller, now]
   Code.ofDataE (Ty.queryCtx r i c) (Term.share ctx)
 
 end
@@ -176,10 +176,10 @@ theorem up_ctx {v : ServiceV} {r i c : Ty} (hr : r.isData = true) (hi : i.isData
     (hc : (Ty.origin c).isData = true) (h : (Ty.ctx r i c).isData = true) (s : State v) (records : r.den0)
     (caller : (Ty.origin c).den0) (input : i.den0) :
     Ty.up _ h (Step.ctx s records caller input) =
-      Alts.inj (vs := [[r, i, Ty.origin c, .int, .dsl .fresh []]]) ⟨0, by simp⟩
+      Alts.inj (vs := [[r, i, Ty.origin c, .point .ms, .dsl .fresh []]]) ⟨0, by simp⟩
         (Ty.up r hr records, Ty.up i hi input, Ty.up _ hc caller, s.now, s.fresh, ()) := by
   unfold Step.ctx
-  refine (Ty.up_inl 5 [r, i, c] [r, i, Ty.origin c, .int, .dsl .fresh []] [] h
+  refine (Ty.up_inl 5 [r, i, c] [r, i, Ty.origin c, .point .ms, .dsl .fresh []] [] h
     (by simp [Ty.isData, Ty.isDatas, hr, hi, hc]) _).trans ?_
   show Sum.inl _ = Sum.inl _
   congr 1
@@ -194,10 +194,10 @@ theorem up_queryCtx {v : ServiceV} {r i c : Ty} (hr : r.isData = true) (hi : i.i
     (hc : (Ty.origin c).isData = true) (h : (Ty.queryCtx r i c).isData = true) (s : State v) (records : r.den0)
     (caller : (Ty.origin c).den0) (input : i.den0) :
     Ty.up _ h (Step.queryCtx s records caller input) =
-      Alts.inj (vs := [[r, i, Ty.origin c, .int]]) ⟨0, by simp⟩
+      Alts.inj (vs := [[r, i, Ty.origin c, .point .ms]]) ⟨0, by simp⟩
         (Ty.up r hr records, Ty.up i hi input, Ty.up _ hc caller, s.now, ()) := by
   unfold Step.queryCtx
-  refine (Ty.up_inl 10 [r, i, c] [r, i, Ty.origin c, .int] [] h
+  refine (Ty.up_inl 10 [r, i, c] [r, i, Ty.origin c, .point .ms] [] h
     (by simp [Ty.isData, Ty.isDatas, hr, hi, hc]) _).trans ?_
   show Sum.inl _ = Sum.inl _
   congr 1
@@ -274,10 +274,11 @@ theorem commandCtx_rel {v : ServiceV} {i : Ty} (hr : v.records.isData = true) (h
     {cx : Code (Ty.ctx v.records i v.caller)} (henc : encodeCtx L records now fresh sc si = .ok cx) :
     Smt.Rel M L _ (Ty.up _ hctx (Step.ctx s s.records caller input)) cx := by
   obtain ⟨ctx, h6, h7⟩ := bind_ok.1 henc
-  have hctxT := adtCtor_rel (L := L) (M := M) (vs := [[v.records, i, Ty.origin v.caller, .int, .dsl .fresh []]])
+  have hctxT := adtCtor_rel (L := L) (M := M) (vs := [[v.records, i, Ty.origin v.caller, .point .ms, .dsl .fresh []]])
     ⟨0, by simp⟩ _ _ h6
     (Ty.up _ hr s.records, Ty.up _ hi input, Ty.up _ hc caller, s.now, s.fresh, ())
-    ⟨_, _, rfl, hrec, _, _, rfl, hsi, _, _, rfl, hsc, _, _, rfl, hnow, _, _, rfl, hfresh, rfl⟩
+    ⟨_, _, rfl, hrec, _, _, rfl, hsi, _, _, rfl, hsc, _, _, rfl, hnow, _, _, rfl,
+      hfresh, rfl⟩
   rw [← up_ctx hr hi hc hctx] at hctxT
   exact (rel_ofTerm (need_ok.1 h7) _).2 (by rw [Term.denote_share]; exact hctxT)
 
@@ -290,7 +291,7 @@ theorem queryCtx_rel {v : ServiceV} {i : Ty} (hr : v.records.isData = true) (hi 
     {cx : Code (Ty.queryCtx v.records i v.caller)} (henc : encodeQueryCtx L records now sc si = .ok cx) :
     Smt.Rel M L _ (Ty.up _ hctx (Step.queryCtx s s.records caller input)) cx := by
   obtain ⟨ctx, h6, h7⟩ := bind_ok.1 henc
-  have hctxT := adtCtor_rel (L := L) (M := M) (vs := [[v.records, i, Ty.origin v.caller, .int]])
+  have hctxT := adtCtor_rel (L := L) (M := M) (vs := [[v.records, i, Ty.origin v.caller, .point .ms]])
     ⟨0, by simp⟩ _ _ h6
     (Ty.up _ hr s.records, Ty.up _ hi input, Ty.up _ hc caller, s.now, ())
     ⟨_, _, rfl, hrec, _, _, rfl, hsi, _, _, rfl, hsc, _, _, rfl, hnow, rfl⟩

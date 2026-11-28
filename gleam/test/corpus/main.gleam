@@ -4,6 +4,7 @@ import corpus/shapes.{type Count, type Shape, Circle, Rect}
 import gleam/option.{type Option, None, Some}
 import tazuna
 import tazuna/bag
+import tazuna/instant.{type Instant}
 import tazuna/table
 
 pub type Event {
@@ -158,8 +159,8 @@ pub type Rejection {
 pub fn builtins(
   titles: table.Table(Int, String),
   id: Int,
-  at: tazuna.Instant,
-) -> Result(#(Int, tazuna.Instant), Rejection) {
+  at: Instant,
+) -> Result(#(Int, Instant), Rejection) {
   use title <- table.lookup(titles, id, or: Missing)
   use <- tazuna.require(tazuna.length(title) <= 10, or: TooLong)
   let lengths =
@@ -170,7 +171,7 @@ pub fn builtins(
     Error(bag.Empty) -> 0
     Error(bag.Tie) -> -1
   }
-  Ok(#(longest, at))
+  Ok(#(longest, instant.add(at, longest)))
 }
 
 pub fn captures(ids: bag.Bag(Int)) -> #(bag.Bag(Event), Int, Option(Event)) {

@@ -67,6 +67,11 @@ def kept : Dsl → Bool
 
 end Dsl
 
+/-- The grain of a point in time: `day` for `tazuna/date.Date`, `ms` for `tazuna/instant.Instant`. -/
+inductive TimeUnit where
+  | day | ms
+deriving Repr, DecidableEq, Inhabited
+
 /-- A type after elaboration. `adt i args variants` is the `i`-th declaration of the program's type table at `args`,
 carrying each variant's field types. No declaration refers to itself, directly or through others, so every type is a
 finite tree and the meaning of a type follows its structure. `param k` is the `k`-th parameter of the declaration a
@@ -83,8 +88,9 @@ inductive Ty where
   | bag (t : Ty)
   /-- A finite map: equal when it has the same keys, each with an equal value. -/
   | table (k v : Ty)
-  /-- A day, without a calendar: only adding days and counting days between two dates have meaning. -/
-  | date
+  /-- A point in time at the grain `u`, on a line with no origin a spec can name: only moving it by a length and the
+  length between two points have meaning. `Date` is a day, `Instant` a millisecond. -/
+  | point (u : TimeUnit)
   /-- An identifier a step makes fresh; only `==` has meaning. -/
   | id
   /-- A structure type at its type arguments. -/
@@ -113,7 +119,7 @@ def same : (a b : Ty) → Option (PLift (a = b))
   | .table k v, .table k' v' => match same k k', same v v' with
     | some ⟨h⟩, some ⟨h'⟩ => some ⟨h ▸ h' ▸ rfl⟩
     | _, _ => none
-  | .date, .date => some ⟨rfl⟩
+  | .point u, .point u' => if h : u = u' then some ⟨h ▸ rfl⟩ else none
   | .id, .id => some ⟨rfl⟩
   | .dsl k a, .dsl k' b =>
     if hk : k = k' then (sames a b).map fun ⟨h⟩ => ⟨hk ▸ h ▸ rfl⟩ else none
@@ -146,7 +152,7 @@ def inst (args : List Ty) : Ty → Ty
   | .param k => args[k]?.getD (.param k)
   | .bag t => .bag (inst args t)
   | .table k v => .table (inst args k) (inst args v)
-  | .date => .date
+  | .point u => .point u
   | .id => .id
   | .dsl k ts => .dsl k (insts args ts)
 def insts (args : List Ty) : List Ty → List Ty
@@ -160,7 +166,7 @@ end
 mutual
 /-- Whether `==` may compare values of this type: Gleam compares functions by reference, which has no meaning here. -/
 def comparable : Ty → Bool
-  | .int | .str | .param _ | .date | .id => true
+  | .int | .str | .param _ | .point _ | .id => true
   | .list t | .bag t => comparable t
   | .table k v => comparable k && comparable v
   | .tuple ts => comparables ts
@@ -246,24 +252,24 @@ def prelude : List TypeDecl :=
     { name := "tazuna.Ctx", params := ["records", "input", "caller"],
       variants := [⟨"Ctx", [⟨some "records", .param 0⟩, ⟨some "input", .param 1⟩,
         ⟨some "caller", .adt 12 [.param 2] [[.param 2], []]⟩,
-        ⟨some "now", .int⟩, ⟨some "fresh", .dsl .fresh []⟩]⟩] },
+        ⟨some "now", .point .ms⟩, ⟨some "fresh", .dsl .fresh []⟩]⟩] },
     { name := "tazuna.Next", params := ["state"], variants := [⟨"Stay", []⟩, ⟨"Enter", [⟨none, .param 0⟩]⟩] },
     { name := "tazuna.Timer", params := ["state"],
-      variants := [⟨"Timer", [⟨some "at", .int⟩, ⟨some "enter", .param 0⟩]⟩] },
+      variants := [⟨"Timer", [⟨some "at", .point .ms⟩, ⟨some "enter", .param 0⟩]⟩] },
     { name := "tazuna.MachineCtx", params := ["key", "state", "records"],
       variants := [⟨"MachineCtx", [⟨some "key", .param 0⟩, ⟨some "state", .param 1⟩, ⟨some "records", .param 2⟩,
-        ⟨some "now", .int⟩]⟩] },
+        ⟨some "now", .point .ms⟩]⟩] },
     { name := "tazuna.ReactionCtx", params := ["records"],
-      variants := [⟨"ReactionCtx", [⟨some "records", .param 0⟩, ⟨some "now", .int⟩]⟩] },
+      variants := [⟨"ReactionCtx", [⟨some "records", .param 0⟩, ⟨some "now", .point .ms⟩]⟩] },
     { name := "tazuna.QueryCtx", params := ["records", "input", "caller"],
       variants := [⟨"QueryCtx", [⟨some "records", .param 0⟩, ⟨some "input", .param 1⟩,
         ⟨some "caller", .adt 12 [.param 2] [[.param 2], []]⟩,
-        ⟨some "now", .int⟩]⟩] },
+        ⟨some "now", .point .ms⟩]⟩] },
     { name := "tazuna.Never", params := [], variants := [] },
     { name := "tazuna.Origin", params := ["caller"],
       variants := [⟨"Outside", [⟨none, .param 0⟩]⟩, ⟨"Own", []⟩] },
     { name := "tazuna.ApplyCtx", params := ["records"],
-      variants := [⟨"ApplyCtx", [⟨some "records", .param 0⟩, ⟨some "now", .int⟩]⟩] },
+      variants := [⟨"ApplyCtx", [⟨some "records", .param 0⟩, ⟨some "now", .point .ms⟩]⟩] },
     { name := "tazuna.TimerCtx", params := ["key", "state", "records"],
       variants := [⟨"TimerCtx", [⟨some "key", .param 0⟩, ⟨some "state", .param 1⟩, ⟨some "records", .param 2⟩]⟩] } ]
 
@@ -275,17 +281,17 @@ def Ty.result (a e : Ty) : Ty := .adt 2 [a, e] [[a], [e]]
 def Ty.option (a : Ty) : Ty := .adt 3 [a] [[a], []]
 /-- Who runs a command or query: an outside caller, or the service itself through an effect. -/
 def Ty.origin (c : Ty) : Ty := .adt 12 [c] [[c], []]
-def Ty.ctx (r i c : Ty) : Ty := .adt 5 [r, i, c] [[r, i, Ty.origin c, .int, .dsl .fresh []]]
+def Ty.ctx (r i c : Ty) : Ty := .adt 5 [r, i, c] [[r, i, Ty.origin c, .point .ms, .dsl .fresh []]]
 def Ty.next (s : Ty) : Ty := .adt 6 [s] [[], [s]]
-def Ty.timer (s : Ty) : Ty := .adt 7 [s] [[.int, s]]
+def Ty.timer (s : Ty) : Ty := .adt 7 [s] [[.point .ms, s]]
 /-- What a machine's functions see of one instance: its key and state, the records, and the time. -/
-def Ty.machineCtx (k s r : Ty) : Ty := .adt 8 [k, s, r] [[k, s, r, .int]]
+def Ty.machineCtx (k s r : Ty) : Ty := .adt 8 [k, s, r] [[k, s, r, .point .ms]]
 /-- What a reaction sees: the records and the time. -/
-def Ty.reactionCtx (r : Ty) : Ty := .adt 9 [r] [[r, .int]]
+def Ty.reactionCtx (r : Ty) : Ty := .adt 9 [r] [[r, .point .ms]]
 /-- What a query's `resolve` sees: a command's context without the source of fresh ids, since a query makes none. -/
-def Ty.queryCtx (r i c : Ty) : Ty := .adt 10 [r, i, c] [[r, i, Ty.origin c, .int]]
+def Ty.queryCtx (r i c : Ty) : Ty := .adt 10 [r, i, c] [[r, i, Ty.origin c, .point .ms]]
 /-- What `apply` sees: the records before the event, and the time. -/
-def Ty.applyCtx (r : Ty) : Ty := .adt 13 [r] [[r, .int]]
+def Ty.applyCtx (r : Ty) : Ty := .adt 13 [r] [[r, .point .ms]]
 /-- What a machine's `timer` sees of one instance: its key and state and the records, but not the time, so a deadline
 it gives cannot move on with the clock. -/
 def Ty.timerCtx (k s r : Ty) : Ty := .adt 14 [k, s, r] [[k, s, r]]
@@ -310,7 +316,7 @@ def Ty.isData : Ty → Bool
   | .adt _ _ vs => Ty.isDatass vs
   | .table k v => Ty.isData k && Ty.isData v
   | .dsl k _ => k == .fresh
-  | .int | .str | .param _ | .date | .id => true
+  | .int | .str | .param _ | .point _ | .id => true
 def Ty.isDatas : List Ty → Bool
   | [] => true
   | t :: ts => Ty.isData t && Ty.isDatas ts

@@ -43,7 +43,7 @@ mutual
 def decodeV : (t : Ty) → Val → Option t.den
   | .int, .int n => some n
   | .str, .str s => if h : inDomain s then some (⟨s, h⟩ : Str) else none
-  | .date, .int n => some n
+  | .point _, .int n => some n
   | .dsl .fresh _, .int n => if 0 ≤ n then some n.toNat else none
   | .id, .ctor d' k args => match L.find? .id with
     | some (d, _) => if d' = d then decodeId k args else none
@@ -107,7 +107,7 @@ mutual
 the type's sort holds is its own, and an SMT-LIB model holds only such values (`fixV_inSrt`). A free slot's items get
 one this way too. -/
 def fixV : Ty → Val → Val
-  | .int, w | .date, w | .dsl .fresh _, w => match w with
+  | .int, w | .point _, w | .dsl .fresh _, w => match w with
     | .int n => .int n
     | _ => .int 0
   | .str, w => match w with
@@ -162,7 +162,7 @@ mutual
 def embedV : (t : Ty) → t.den → Option Val
   | .int, n => some (.int n)
   | .str, s => some (.str (s : Str).1)
-  | .date, n => some (.int n)
+  | .point _, n => some (.int n)
   | .dsl .fresh _, n => some (.int (Int.ofNat n))
   | .id, x => (L.find? .id).map fun (d, _) => idVal d x
   | .adt 0 _ [[], []], x => some (.bool (altsBool x))
@@ -301,7 +301,7 @@ theorem decodeId_val (d : Nat) {k : Nat} {args : List Val} {x : IdV} (h : decode
 mutual
 /-- T3: a decoded value is the value the SMT value codes. -/
 theorem decode_rel : (t : Ty) → (v : Val) → (x : t.den) → decodeV L t v = some x → RelV L t x v
-  | .int, .int n, x, h | .date, .int n, x, h => by cases h; rfl
+  | .int, .int n, x, h | .point _, .int n, x, h => by cases h; rfl
   | .str, .str s, x, h => by
     simp only [decodeV] at h
     split at h
@@ -425,7 +425,7 @@ theorem mapM_lengths {α : Type} {f : α → Option (List Val)} {w : Nat} (hf : 
 mutual
 /-- T3: decoding inverts the embedding. -/
 theorem decode_embed : (t : Ty) → (x : t.den) → (v : Val) → embedV L t x = some v → decodeV L t v = some x
-  | .int, x, v, h | .date, x, v, h => by cases h; rfl
+  | .int, x, v, h | .point _, x, v, h => by cases h; rfl
   | .str, x, v, h => by cases h; exact Str.of?_val x
   | .dsl .fresh _, x, v, h => by
     cases h

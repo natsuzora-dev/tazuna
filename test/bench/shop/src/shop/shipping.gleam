@@ -7,10 +7,9 @@ import shop/shared.{
   type Caller, type Line, type OrderCancelled, type OrderPlaced,
   type PaymentOutcome, type Scan, Customer, Staff,
 }
-import tazuna.{
-  type Ctx, type Id, type Instant, type MachineCtx, type QueryCtx, type TimerCtx,
-}
+import tazuna.{type Ctx, type Id, type MachineCtx, type QueryCtx, type TimerCtx}
 import tazuna/bag
+import tazuna/instant.{type Instant}
 import tazuna/table.{type Table}
 
 pub type ShipState {
@@ -178,7 +177,7 @@ fn apply(ctx: tazuna.ApplyCtx(Records), event: Event) -> Records {
             ..shipment,
             state: Booked,
             tracking: Some(tracking),
-            late_at: ctx.now + 5 * shared.day,
+            late_at: instant.add(ctx.now, 5 * shared.day),
           )
         },
       )

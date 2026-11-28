@@ -109,7 +109,7 @@ def Layout.exactOwns (p : ProgramParts) (v : ServiceV) : List OwnKey :=
 lists, answers, own commands' answers, and the inputs, whose terms a run's script declares. They are listed after the program's types, which already hold them where a
 function of the program has them, so the layout keeps its order. -/
 def useTys (v : ServiceV) (K : Layout) : List Ty :=
-  [Ty.rules, .list v.event, Ty.applyCtx v.records, Ty.option Ty.int] ++
+  [Ty.rules, .list v.event, Ty.applyCtx v.records, Ty.option (.point .ms)] ++
     v.reactions.flatMap (fun _ => [Ty.reactionCtx v.records, .list (.dsl .effect [v.event])]) ++
     v.machines.flatMap (fun m => [Ty.machineCtx m.key m.state v.records, Ty.next m.state, Ty.option (Ty.timer m.state),
       .bag m.key, Ty.timerCtx m.key m.state v.records]) ++
@@ -209,7 +209,7 @@ theorem slotted_addTyWith (hS : NoSlots S) (hd : ∀ L k a, Slotted S K L → Sl
       (hS _ (by simp) (by simp) (by simp)).symm) _ _ rfl
   | L, h, .fn ps r => slotted_addTyWith hS hd _ (slotted_addTysWith hS hd L h ps) r
   | L, h, .dsl k a => hd L k a h
-  | _, h, .int | _, h, .str | _, h, .date | _, h, .param _ => h
+  | _, h, .int | _, h, .str | _, h, .point _ | _, h, .param _ => h
 theorem slotted_addTysWith (hS : NoSlots S) (hd : ∀ L k a, Slotted S K L → Slotted S K (dsl L k a)) :
     (L : Layout) → Slotted S K L → (ts : List Ty) → Slotted S K (Layout.addTysWith S dsl L ts)
   | _, h, [] => h

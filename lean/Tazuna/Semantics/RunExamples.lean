@@ -11,8 +11,8 @@ namespace Tazuna.Ir.RunExamples
 open StepExamples
 
 /-- No deadline: what a run violates reads none. -/
-def noDeadline : Fun (Ty.fn [Ty.int, Ty.int] (Ty.option Ty.int)) :=
-  .closed (.lam (.ctor (vs := [[Ty.int], []]) ⟨1, by simp⟩ .nil))
+def noDeadline : Fun (Ty.fn [Ty.int, Ty.int] (Ty.option (.point .ms))) :=
+  .closed (.lam (.ctor (vs := [[.point .ms], []]) ⟨1, by simp⟩ .nil))
 
 /-- After an event `a`, an event `b` within 10 ms. -/
 def resp (a b : Int) : ResponseV .int .int :=

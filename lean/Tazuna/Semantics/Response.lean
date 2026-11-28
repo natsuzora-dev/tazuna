@@ -25,7 +25,7 @@ structure Moment (e : Ty) where
 def Result.moment {v : ServiceV} (r : Result v) : Moment v.event := ⟨r.state.now, r.events⟩
 
 /-- An `Option(Int)` value as a Lean option. -/
-def Step.optionInt : (Ty.option Ty.int).den0 → Option Int
+def Step.optionInt : (Ty.option (.point .ms)).den0 → Option Int
   | .inl (d, ()) => some (show Int from d)
   | .inr _ => none
 

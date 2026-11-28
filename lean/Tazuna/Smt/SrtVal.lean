@@ -97,18 +97,18 @@ theorem fixSlots_mem {fix : List Val → List Val} : {n : Nat} → {vals : List 
     · exact fixSlots_mem h
 
 /-- The sort of a found type: the datatype it is declared as. -/
-theorem srt_dt {t : Ty} {σ : Srt} (hs : L.srt? t = some σ) (hi : t ≠ .int) (hdt : t ≠ .date) (hstr : t ≠ .str)
+theorem srt_dt {t : Ty} {σ : Srt} (hs : L.srt? t = some σ) (hi : t ≠ .int) (hdt : ∀ u, t ≠ .point u) (hstr : t ≠ .str)
     (hp : ∀ u, t ≠ .dsl .fresh u) (hb : ∀ a vs, t ≠ .adt 0 a vs) : ∃ d n, L.find? t = some (d, n) ∧ σ = .dt d := by
   unfold Layout.srt? at hs
   split at hs <;> first
-    | (exfalso; first | exact hi rfl | exact hdt rfl | exact hstr rfl | exact hp _ rfl | exact hb _ _ rfl)
+    | (exfalso; first | exact hi rfl | exact hdt _ rfl | exact hstr rfl | exact hp _ rfl | exact hb _ _ rfl)
     | (obtain ⟨⟨d, n⟩, hf, rfl⟩ := Option.map_eq_some_iff.1 hs; exact ⟨d, n, hf, rfl⟩)
 
 mutual
 /-- `fixV` puts any value in the sort of a data type the layout has. -/
 theorem fixV_inSrt (hd : L.datatypes? = some dts) : (t : Ty) → t.isData = true → (w : Val) → (σ : Srt) →
     L.srt? t = some σ → Val.InSrt dts σ (fixV L t w)
-  | .int, _, w, σ, hs | .date, _, w, σ, hs => by
+  | .int, _, w, σ, hs | .point _, _, w, σ, hs => by
     simp only [Layout.srt?, Option.some.injEq] at hs; subst hs
     unfold fixV; split <;> simp [Val.InSrt]
   | .dsl k a, hx, w, σ, hs => by
@@ -262,7 +262,7 @@ mutual
 /-- An embedded value of a data type the layout has is in its sort: its free slots hold `fixV`'s items. -/
 theorem embedV_inSrt (hd : L.datatypes? = some dts) : (t : Ty) → t.isData = true → (x : t.den) → (w : Val) →
     embedV L t x = some w → (σ : Srt) → L.srt? t = some σ → Val.InSrt dts σ w
-  | .int, _, x, w, h, σ, hs | .date, _, x, w, h, σ, hs => by
+  | .int, _, x, w, h, σ, hs | .point _, _, x, w, h, σ, hs => by
     simp only [Layout.srt?, Option.some.injEq] at hs; subst hs
     simp only [embedV, Option.some.injEq] at h; subst h; trivial
   | .dsl k a, hx, x, w, h, σ, hs => by
@@ -445,7 +445,7 @@ theorem fixV_slots {fix : List Val → List Val} {d dt n : Nat} {sv : List (Bool
 set_option linter.tazuna.silentDefault false in
 mutual
 theorem fixV_relD : (t : Ty) → (x : t.den0) → (w : Val) → RelD L t x w → RelD L t x (fixV L t w)
-  | .int, _, _, h | .date, _, _, h => by subst h; rfl
+  | .int, _, _, h | .point _, _, _, h => by subst h; rfl
   | .str, x, _, h => by subst h; simp [fixV, x.2, RelD]
   | .id, x, _, ⟨d, n, hf, h⟩ => by
     subst h
@@ -516,7 +516,7 @@ theorem collView_fix {fix : List Val → List Val} {d dt n w : Nat} {v : Val} {s
 set_option linter.tazuna.silentDefault false in
 mutual
 theorem fixV_sorted : (t : Ty) → (w : Val) → Sorted L t w → Sorted L t (fixV L t w)
-  | .int, _, ⟨n, e⟩ | .date, _, ⟨n, e⟩ => by subst e; exact ⟨n, rfl⟩
+  | .int, _, ⟨n, e⟩ | .point _, _, ⟨n, e⟩ => by subst e; exact ⟨n, rfl⟩
   | .str, _, ⟨s, hs, e⟩ => by subst e; exact ⟨s, hs, by simp [fixV, hs]⟩
   | .id, _, ⟨d, n, hf, h⟩ => by
     refine ⟨d, n, hf, ?_⟩
@@ -600,7 +600,7 @@ end
 theorem srtVal_int {t : Ty} {n : Int} (h : Sorted L t (.int n)) : SrtVal L t (.int n) := by
   intro _ _ σ _ hs
   cases t with
-  | int | date => simp only [Layout.srt?, Option.some.injEq] at hs; subst hs; trivial
+  | int | point _ => simp only [Layout.srt?, Option.some.injEq] at hs; subst hs; trivial
   | dsl k a =>
     cases k <;> simp only [Sorted] at h
     simp only [Layout.srt?, Option.some.injEq] at hs; subst hs; trivial

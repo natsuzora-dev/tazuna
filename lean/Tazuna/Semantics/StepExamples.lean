@@ -31,7 +31,7 @@ private def iteE {Γ : List Ty} {r : Ty} (c : Expr [] Γ Ty.bool) (a b : Expr []
     ⟨4, rfl⟩
 /-- A field of the machine context `MachineCtx(key, state, records, now)`. -/
 private def mctxE {Γ : List Ty} {k st r : Ty} (label : String) (n : Fin 4) (x : Expr [] Γ (Ty.machineCtx k st r)) :
-    Expr [] Γ ([k, st, r, .int].get n) :=
+    Expr [] Γ ([k, st, r, .point .ms].get n) :=
   .field label n.val (by intro fs h; simp at h; subst h; simp) x
 /-- A field of the timer context `TimerCtx(key, state, records)`. -/
 private def tctxE {Γ : List Ty} {k st r : Ty} (label : String) (n : Fin 3) (x : Expr [] Γ (Ty.timerCtx k st r)) :
@@ -41,9 +41,10 @@ private def enterE {Γ : List Ty} {st : Ty} (x : Expr [] Γ st) : Expr [] Γ (Ty
   .ctor (vs := [[], [st]]) ⟨1, by simp⟩ (.cons x .nil)
 private def noTimerE {Γ : List Ty} {st : Ty} : Expr [] Γ (Ty.option (Ty.timer st)) :=
   .ctor (vs := [[Ty.timer st], []]) ⟨1, by simp⟩ .nil
-private def timerE {Γ : List Ty} {st : Ty} (d : Int) (x : Expr [] Γ st) : Expr [] Γ (Ty.option (Ty.timer st)) :=
-  .ctor (vs := [[Ty.timer st], []]) ⟨0, by simp⟩ (.cons (.ctor (vs := [[.int, st]]) ⟨0, by simp⟩
-    (.cons (.int d) (.cons x .nil))) .nil)
+private def timerE {Γ : List Ty} {st : Ty} (d : Expr [] Γ (.point .ms)) (x : Expr [] Γ st) :
+    Expr [] Γ (Ty.option (Ty.timer st)) :=
+  .ctor (vs := [[Ty.timer st], []]) ⟨0, by simp⟩ (.cons (.ctor (vs := [[.point .ms, st]]) ⟨0, by simp⟩
+    (.cons d (.cons x .nil))) .nil)
 
 private def someE {Γ : List Ty} {t : Ty} (x : Expr [] Γ t) : Expr [] Γ (Ty.option t) :=
   .ctor (vs := [[t], []]) ⟨0, by simp⟩ (.cons x .nil)
@@ -63,14 +64,22 @@ private def pingE {Γ : List Ty} : Expr [] Γ (.dsl .effect [.int]) :=
             (.cons (.ctor (vs := [[.int], [.str]]) ⟨1, by decide⟩ (.cons .wild .nil)) (.list .nil) .nil)) ⟨4, rfl⟩)))
           .nil)))
 
+/-- The state of `watch`: a count, and the deadline its last entry set, 10 ms after the event's time. -/
+private abbrev watchT : Ty := .tuple [.int, .point .ms]
+private def countE {Γ : List Ty} (x : Expr [] Γ watchT) : Expr [] Γ .int := .index x ⟨0, by decide⟩
+private def dueE {Γ : List Ty} (x : Expr [] Γ watchT) : Expr [] Γ (.point .ms) := .index x ⟨1, by decide⟩
+
 def watch : MachineV .int .int :=
-  { name := "watch", key := .int, state := .int,
+  { name := "watch", key := .int, state := watchT,
     instances := .closed (.lam (.call (.prim .bagFromList [.int] rfl)
       (.cons (iteE (.bin .lt (.int 0) (.var .here)) (.list (.cons (.int 0) .nil)) (.list .nil)) .nil))),
-    initial := (0 : Int),
-    on := .closed (.lam (enterE (.bin .add (mctxE "state" 1 (.var .here)) (.int 1)))),
-    timer := .closed (.lam (iteE (.bin (.eq rfl) (tctxE "state" 1 (.var .here)) (.int 1)) (timerE 10 (.int 5)) noTimerE)),
-    effect := .closed (.lam (iteE (.bin (.eq rfl) (mctxE "state" 1 (.var .here)) (.int 5)) (someE pingE) noneE)),
+    initial := ((0 : Int), (0 : Int), ()),
+    on := .closed (.lam (enterE (.tuple (.cons (.bin .add (countE (mctxE "state" 1 (.var .here))) (.int 1))
+      (.cons (.call (.prim .instantAdd [] rfl) (.cons (mctxE "now" 3 (.var .here)) (.cons (.int 10) .nil))) .nil))))),
+    timer := .closed (.lam (iteE (.bin (.eq rfl) (countE (tctxE "state" 1 (.var .here))) (.int 1))
+      (timerE (dueE (tctxE "state" 1 (.var .here)))
+        (.tuple (.cons (.int 5) (.cons (dueE (tctxE "state" 1 (.var .here))) .nil)))) noTimerE)),
+    effect := .closed (.lam (iteE (.bin (.eq rfl) (countE (mctxE "state" 1 (.var .here))) (.int 5)) (someE pingE) noneE)),
     invariants := .closed (.lam (.list .nil)) }
 
 private def addAccepts : Expr [] [] (Ty.fn [.int] Ty.rules) := .lam (ruleE "small" (.bin .lt (.var .here) (.int 100)))
@@ -208,7 +217,7 @@ private def rateE {Γ : List Ty} : Expr [] Γ (.dsl .effect [.int]) :=
       (.cons (.str (str! "eur")) (.cons (keptE 7 (.lam (.list (.cons (.var .here) .nil)))) .nil)))
 def asking : ServiceV :=
   { svc with machines := [{ watch with effect := .closed (.lam
-      (iteE (.bin (.eq rfl) (mctxE "state" 1 (.var .here)) (.int 5)) (someE rateE) noneE)) }],
+      (iteE (.bin (.eq rfl) (countE (mctxE "state" 1 (.var .here))) (.int 5)) (someE rateE) noneE)) }],
              declared := [("fx", .externalQuery "rate" .str .int (.closed (.lam (.list .nil))))] }
 def askingUntil : List (Input asking) :=
   [.command ⟨0, by decide⟩ (1 : Int) (5 : Int), .command ⟨0, by decide⟩ (1 : Int) (1 : Int), .clock 10]

@@ -72,7 +72,7 @@ def Ty.semWith (D : Dsl → List Ty → Sem) : Ty → Sem
   -- Each key at most once by construction, so equality of tables is equality of finite maps.
   | .table k v => Sem.table (Ty.semWith D k) (Ty.semWith D v)
   -- Days from an arbitrary origin.
-  | .date => ⟨Int, fun x y => @BEq.beq Int _ x y⟩
+  | .point _ => ⟨Int, fun x y => @BEq.beq Int _ x y⟩
   | .id => ⟨IdV, fun x y => decide (x = y)⟩
   | .dsl k args => D k args
 /-- Values of the types `ts`, in order. -/
@@ -99,7 +99,7 @@ variable {D : Dsl → List Ty → Sem}
 
 mutual
 theorem Ty.semWith_data (hD : ∀ a, D .fresh a = Dsl.base .fresh a) : (t : Ty) → t.isData = true → Ty.semWith D t = Ty.semWith Dsl.base t
-  | .int, _ | .str, _ | .param _, _ | .date, _ | .id, _ => rfl
+  | .int, _ | .str, _ | .param _, _ | .point _, _ | .id, _ => rfl
   | .list t, h => by simp only [Ty.semWith]; rw [Ty.semWith_data hD t (by simpa [Ty.isData] using h)]
   | .bag t, h => by simp only [Ty.semWith]; rw [Ty.semWith_data hD t (by simpa [Ty.isData] using h)]
   | .tuple ts, h => by simp only [Ty.semWith]; exact Ty.semsWith_data hD ts (by simpa [Ty.isData] using h)

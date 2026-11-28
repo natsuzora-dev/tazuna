@@ -243,7 +243,7 @@ def FRel : (t : Ty) → t.den → FT t → Code t → Prop
   | .fn ps r, f, φ, sf => ∀ xs φs ss, Rels M L ps xs ss → FRels ps xs φs ss → ∀ s c, sf ss = .ok (s, c) →
       (Holds M c ↔ (φ xs φs).1) ∧ (Holds M c → FRel r (f xs) (φ xs φs).2 s)
   | .dsl _ _, _, _, _ | .list _, _, _, _ | .int, _, _, _ | .str, _, _, _ | .tuple _, _, _, _ | .adt .., _, _, _
-  | .param _, _, _, _ | .bag _, _, _, _ | .table .., _, _, _ | .date, _, _, _ | .id, _, _, _ => True
+  | .param _, _, _, _ | .bag _, _, _, _ | .table .., _, _, _ | .point _, _, _, _ | .id, _, _, _ => True
 def FRels : (ts : List Ty) → Ty.dens ts → FTs ts → Codes ts → Prop
   | [], _, _, _ => True
   | t :: ts, (x, xs), (φ, φs), (s, ss) => FRel t x φ s ∧ FRels ts xs φs ss
@@ -262,7 +262,7 @@ variable {M : Model} {L : Layout}
 theorem frel_of_notFn : {t : Ty} → t.isFn = false → (x : t.den) → (φ : FT t) → (s : Code t) → FRel M L t x φ s
   | .fn .., h, _, _, _ => nomatch h
   | .dsl _ _, _, _, _, _ | .list _, _, _, _, _ | .int, _, _, _, _ | .str, _, _, _, _ | .tuple _, _, _, _, _
-  | .adt .., _, _, _, _ | .param _, _, _, _, _ | .bag _, _, _, _, _ | .table .., _, _, _, _ | .date, _, _, _, _
+  | .adt .., _, _, _, _ | .param _, _, _, _, _ | .bag _, _, _, _, _ | .table .., _, _, _, _ | .point _, _, _, _, _
   | .id, _, _, _, _ => trivial
 
 theorem frels_of_notFn : {ts : List Ty} → (∀ t ∈ ts, t.isFn = false) → (xs : Ty.dens ts) → (φs : FTs ts) →
@@ -274,7 +274,7 @@ theorem frels_of_notFn : {ts : List Ty} → (∀ t ∈ ts, t.isFn = false) → (
 theorem ofTerm_notFn : {t : Ty} → {x : Term} → {s : Code t} → Code.ofTerm? t x = some s → t.isFn = false
   | .fn .., _, _, h => nomatch h
   | .dsl _ _, _, _, _ | .list _, _, _, _ | .int, _, _, _ | .str, _, _, _ | .tuple _, _, _, _ | .adt .., _, _, _
-  | .param _, _, _, _ | .bag _, _, _, _ | .table .., _, _, _ | .date, _, _, _ | .id, _, _, _ => rfl
+  | .param _, _, _, _ | .bag _, _, _, _ | .table .., _, _, _ | .point _, _, _, _ | .id, _, _, _ => rfl
 
 theorem ofTerms_notFn : {ts : List Ty} → {xs : List Term} → {ss : Codes ts} → Codes.ofTerms? ts xs = some ss →
     ∀ t ∈ ts, t.isFn = false
@@ -297,7 +297,7 @@ theorem frel_share : {t : Ty} → {x : t.den} → {φ : FT t} → {s : Code t} �
     FRel M L t x φ (Code.share t s)
   | .fn .., _, _, _, h => h
   | .dsl _ _, _, _, _, _ | .list _, _, _, _, _ | .int, _, _, _, _ | .str, _, _, _, _ | .tuple _, _, _, _, _
-  | .adt .., _, _, _, _ | .param _, _, _, _, _ | .bag _, _, _, _, _ | .table .., _, _, _, _ | .date, _, _, _, _
+  | .adt .., _, _, _, _ | .param _, _, _, _, _ | .bag _, _, _, _, _ | .table .., _, _, _, _ | .point _, _, _, _, _
   | .id, _, _, _, _ => trivial
 
 theorem frels_share : {ts : List Ty} → {xs : Ty.dens ts} → {φs : FTs ts} → {ss : Codes ts} → FRels M L ts xs φs ss →
@@ -426,6 +426,9 @@ theorem primCode_exact (p : Prim) (args : List Ty) (hp : p.ok args = true) (s : 
     simp only [primCode] at h; cases h
     exact frel_tt rfl fun ss s c hr => by cases hr; rfl
   case dateDaysBetween =>
+    simp only [primCode] at h; cases h
+    exact frel_tt rfl fun ss s c hr => by cases hr; rfl
+  case instantAdd | instantDiff | instantIsBefore | instantIsAfter =>
     simp only [primCode] at h; cases h
     exact frel_tt rfl fun ss s c hr => by cases hr; rfl
   case require =>

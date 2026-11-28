@@ -29,11 +29,11 @@ def reactSlots (dE dP dk : Nat) (dflt : Term) (js : List (Option Nat)) : List (S
 
 /-- The context a reaction reads: the records and the time. -/
 def reactionCtxT (records now : Term) : Except Refusal Term :=
-  adtCtor L 9 [r] [[r, .int]] 0 [records, now]
+  adtCtor L 9 [r] [[r, .point .ms]] 0 [records, now]
 
 /-- The context `apply` reads: the records and the time. -/
 def applyCtxT (records now : Term) : Except Refusal Term :=
-  adtCtor L 13 [r] [[r, .int]] 0 [records, now]
+  adtCtor L 13 [r] [[r, .point .ms]] 0 [records, now]
 
 /-- Every reaction's effects on the event `ev`, reactions in order: the pending table slots of the requests from the
 wire id `n` and the id after them, the own slots of the own commands and queries from the queue place `q` and the place
@@ -127,22 +127,22 @@ section
 variable {L : Layout} {M : Model} {r e : Ty}
 
 /-- A context of the records and the time (a reaction's, `apply`'s), read at the level codes relate to. -/
-theorem up_rctx {i : Nat} (h : (Ty.adt i [r] [[r, .int]]).isData = true) (hrd : r.isData = true) (recs : r.den0)
+theorem up_rctx {i : Nat} (h : (Ty.adt i [r] [[r, .point .ms]]).isData = true) (hrd : r.isData = true) (recs : r.den0)
     (now : Int) :
-    Ty.up _ h (.inl (recs, now, ()) : (Ty.adt i [r] [[r, .int]]).den0) =
-      Alts.inj (vs := [[r, .int]]) ⟨0, by simp⟩ (Ty.up _ hrd recs, now, ()) := by
-  refine (Ty.up_inl i [r] [r, .int] [] h (by simp [Ty.isData, Ty.isDatas, hrd]) _).trans ?_
+    Ty.up _ h (.inl (recs, now, ()) : (Ty.adt i [r] [[r, .point .ms]]).den0) =
+      Alts.inj (vs := [[r, .point .ms]]) ⟨0, by simp⟩ (Ty.up _ hrd recs, now, ()) := by
+  refine (Ty.up_inl i [r] [r, .point .ms] [] h (by simp [Ty.isData, Ty.isDatas, hrd]) _).trans ?_
   show Sum.inl _ = Sum.inl _
   congr 1
   refine (Ty.up_tuple _ _ _ hrd (by simp [Ty.isData, Ty.isDatas]) _).trans (congrArg _ ?_)
   exact (Ty.up_tuple _ _ _ rfl rfl _)
 
 /-- The term of a context of the records and the time denotes it. -/
-theorem rctx_rel {i : Nat} (h : (Ty.adt i [r] [[r, .int]]).isData = true) (hrd : r.isData = true) {recs : r.den0}
+theorem rctx_rel {i : Nat} (h : (Ty.adt i [r] [[r, .point .ms]]).isData = true) (hrd : r.isData = true) {recs : r.den0}
     {tnow : Int} {records now ctxT : Term} (hrec : RelV L r (Ty.up _ hrd recs) (records.denote M))
-    (hnow : now.denote M = .int tnow) (h2 : adtCtor L i [r] [[r, .int]] 0 [records, now] = .ok ctxT) :
-    RelV L (Ty.adt i [r] [[r, .int]]) (Ty.up _ h (.inl (recs, tnow, ()))) (ctxT.denote M) := by
-  have hctx := adtCtor_rel (L := L) (M := M) (vs := [[r, .int]]) ⟨0, by simp⟩ _ _ h2
+    (hnow : now.denote M = .int tnow) (h2 : adtCtor L i [r] [[r, .point .ms]] 0 [records, now] = .ok ctxT) :
+    RelV L (Ty.adt i [r] [[r, .point .ms]]) (Ty.up _ h (.inl (recs, tnow, ()))) (ctxT.denote M) := by
+  have hctx := adtCtor_rel (L := L) (M := M) (vs := [[r, .point .ms]]) ⟨0, by simp⟩ _ _ h2
     (Ty.up _ hrd recs, tnow, ()) ⟨_, _, rfl, hrec, _, _, rfl, hnow, rfl⟩
   rw [← up_rctx h hrd recs tnow] at hctx
   exact hctx

@@ -229,7 +229,7 @@ def Ty.relWith : (t : Ty) → (Ty.semWith D t).1 → (Ty.semWith D t).1 → Prop
   | .param _, _, _ => True
   | .bag t, a, b => Multi (Ty.relWith t) a b
   | .table k v, a, b => Multi (fun e e' => Ty.relWith k e.1 e'.1 ∧ Ty.relWith v e.2 e'.2) a.1 b.1
-  | .date, a, b => a = b
+  | .point _, a, b => a = b
   | .id, a, b => IdV.Rel R a b
   | .dsl k args, a, b => RD k args a b
 def Ty.relsWith : (ts : List Ty) → (Ty.semsWith D ts).1 → (Ty.semsWith D ts).1 → Prop
@@ -269,7 +269,7 @@ mutual
 /-- The inverse renaming relates the other way round. -/
 theorem Ty.relWith_inv (hRD : ∀ k a x y, RD k a x y ↔ RD' k a y x) : (t : Ty) → (x y : (Ty.semWith D t).1) →
     (Ty.relWith D RD R t x y ↔ Ty.relWith D RD' R.inv t y x)
-  | .int, _, _ | .str, _, _ | .date, _, _ => eq_comm
+  | .int, _, _ | .str, _, _ | .point _, _, _ => eq_comm
   | .list t, _, _ => forall2_swap_iff (Ty.relWith_inv hRD t)
   | .tuple ts, x, y => Ty.relsWith_inv hRD ts x y
   | .fn ps r, f, g => by
@@ -326,7 +326,7 @@ def Ty.canonBy (σ : Nat → Nat) : (t : Ty) → t.den0 → Erl
   | .table k v, x =>
     let ps := Erl.sort (x.1.map fun e => (Ty.canonBy σ k e.1, Ty.canonBy σ v e.2))
     .map (ps.map (·.1)) (ps.map (·.2))
-  | .date, d => .int d
+  | .point _, d => .int d
   | .id, .fresh s i => .tuple [.int (σ s), .int i]
   | .id, .named s => .bin s.1
   | .dsl .fresh _, n => .int (σ (show Nat from n))
@@ -359,7 +359,7 @@ theorem Ty.canon_iff : (t : Ty) → t.comparable = true → (x y : t.den0) →
     ((Ty.semWith Dsl.base t).2 x y = true ↔ Ty.canon t x = Ty.canon t y)
   | .int, _, x, y => (beq_iff_eq (α := Int) (a := x) (b := y)).trans ⟨congrArg Erl.int, Erl.int.inj⟩
   | .str, _, x, y => (beq_iff_eq (α := Str) (a := x) (b := y)).trans ⟨fun h => h ▸ rfl, fun h => Subtype.ext (Erl.bin.inj h)⟩
-  | .date, _, x, y => (beq_iff_eq (α := Int) (a := x) (b := y)).trans ⟨congrArg Erl.int, Erl.int.inj⟩
+  | .point _, _, x, y => (beq_iff_eq (α := Int) (a := x) (b := y)).trans ⟨congrArg Erl.int, Erl.int.inj⟩
   | .param _, _, x, y => by simp [Ty.semWith, Ty.canon, Ty.canonBy]
   | .id, _, x, y => by cases x <;> cases y <;> simp [Ty.semWith, Ty.canon, Ty.canonBy, Subtype.ext_iff]; omega
   | .list t, h, xs, ys => by
@@ -427,7 +427,7 @@ mutual
 `Ty.canonBy` reads exactly what `Ty.rel0` compares by equality, and reads functions as nothing. -/
 theorem Ty.canonBy_rel {R : PBij} {σ σ' : Nat → Nat} (hσ : ∀ {c c'}, R.rel c c' → σ' c = σ c') :
     (t : Ty) → (x y : t.den0) → Ty.rel0 R t x y → Ty.canonBy σ' t x = Ty.canonBy σ t y
-  | .int, _, _, h | .str, _, _, h | .date, _, _, h => by
+  | .int, _, _, h | .str, _, _, h | .point _, _, _, h => by
     show Ty.canonBy σ' _ _ = Ty.canonBy σ _ _
     cases h; rfl
   | .list t, _, _, h => congrArg Erl.list (forall2_map_eq _ _ (Ty.canonBy_rel hσ t) h)
@@ -575,7 +575,7 @@ mutual
 /-- `==` on related values of a comparable type gives the same answer. -/
 theorem Ty.rel0_deq {R : PBij} : (t : Ty) → t.comparable = true → {x y x' y' : t.den0} → Ty.rel0 R t x y →
     Ty.rel0 R t x' y' → t.deq0 x x' = t.deq0 y y'
-  | .int, _, _, _, _, _, h, h' | .str, _, _, _, _, _, h, h' | .date, _, _, _, _, _, h, h' => by
+  | .int, _, _, _, _, _, h, h' | .str, _, _, _, _, _, h, h' | .point _, _, _, _, _, _, h, h' => by
     show (_ == _) = (_ == _)
     rw [show _ = _ from h, show _ = _ from h']
   | .param _, _, _, _, _, _, _, _ => rfl
@@ -799,7 +799,7 @@ mutual
 /-- Data relates alike at both levels. -/
 theorem Ty.relV_up {R : PBij} : (t : Ty) → (h : t.isData = true) → (x y : t.den0) →
     (Ty.relV R t (Ty.up t h x) (Ty.up t h y) ↔ Ty.rel0 R t x y)
-  | .int, _, _, _ | .str, _, _, _ | .date, _, _, _ | .id, _, _, _ | .param _, _, _, _ => Iff.rfl
+  | .int, _, _, _ | .str, _, _, _ | .point _, _, _, _ | .id, _, _, _ | .param _, _, _, _ => Iff.rfl
   | .list t, h, xs, ys => by
     have ht : t.isData = true := h
     rw [Ty.up_list t h ht, Ty.up_list t h ht]

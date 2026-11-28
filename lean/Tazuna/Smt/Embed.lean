@@ -69,7 +69,7 @@ mutual
 /-- A value embeds exactly when its collections fit their slots, wherever the layout holds its type. -/
 theorem embed_iff : (t : Ty) → Layout.HasWith L D t → t.embeddable = true → (x : t.den) →
     ((embedV L t x).isSome ↔ FitsV L t x)
-  | .int, _, _, _ | .str, _, _, _ | .date, _, _, _ => by simp [embedV, FitsV]
+  | .int, _, _, _ | .str, _, _, _ | .point _, _, _, _ => by simp [embedV, FitsV]
   | .dsl k a, _, he, _ => by
     simp only [Ty.embeddable, beq_iff_eq] at he; subst he; simp [embedV, FitsV]
   | .id, hh, _, _ => by

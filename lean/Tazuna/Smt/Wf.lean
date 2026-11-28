@@ -45,7 +45,7 @@ mutual
 /-- The well-formedness of the value `x` of type `t`; none for a type without a decoding, or a table whose keys'
 `==` is not SMT-LIB's `=`. -/
 def wfT : Ty → Term → Option Term
-  | .int, _ | .str, _ | .date, _ => some tt
+  | .int, _ | .str, _ | .point _, _ => some tt
   | .dsl .fresh _, x => some (.le (.int 0) x)
   | .id, x => (L.find? .id).map fun (d, _) => .or (.not (.is d 0 x)) (.le (.int 0) (.sel d 0 0 x))
   | .adt 0 _ vs, _ => if (boolVs? vs).isSome then some tt else none
@@ -83,7 +83,7 @@ mutual
 table or list, a declared constructor for an ADT, a string of SMT-LIB's domain (`inDomain`). The items of free slots are
 left open: no value reads them. -/
 def Sorted : Ty → Val → Prop
-  | .int, w | .date, w | .dsl .fresh _, w => ∃ n, w = .int n
+  | .int, w | .point _, w | .dsl .fresh _, w => ∃ n, w = .int n
   | .str, w => ∃ s, inDomain s ∧ w = .str s
   | .id, w => ∃ d n, L.find? .id = some (d, n) ∧
       ((∃ m i, w = .ctor d 0 [.int m, .int i]) ∨ ∃ s, inDomain s ∧ w = .ctor d 1 [.str s])
@@ -213,7 +213,7 @@ mutual
 decodes. -/
 theorem wf_iff : (t : Ty) → (x : Term) → (c : Term) → wfT L t x = some c → Sorted L t (x.denote M) →
     (Holds M c ↔ (decodeV L t (x.denote M)).isSome = true)
-  | .int, x, c, h, ⟨n, hn⟩ | .date, x, c, h, ⟨n, hn⟩ => by
+  | .int, x, c, h, ⟨n, hn⟩ | .point _, x, c, h, ⟨n, hn⟩ => by
     simp only [wfT, Option.some.injEq] at h; subst h; simp [Holds, tt, Term.denote, Val.toBool, hn, decodeV]; rfl
   | .str, x, c, h, ⟨s, hd, hs⟩ => by
     simp only [wfT, Option.some.injEq] at h; subst h; simp [Holds, tt, Term.denote, Val.toBool, hs, decodeV, hd]; rfl
@@ -415,7 +415,7 @@ theorem mapM_mem {α β : Type} {f : α → Option β} {xs : List α} {ys : List
 mutual
 /-- A value that decodes has the shape of its type's sort. -/
 theorem decode_sorted : (t : Ty) → (v : Val) → (x : t.den) → decodeV L t v = some x → Sorted L t v
-  | .int, .int n, _, _ | .date, .int n, _, _ | .dsl .fresh _, .int n, _, _ => ⟨n, rfl⟩
+  | .int, .int n, _, _ | .point _, .int n, _, _ | .dsl .fresh _, .int n, _, _ => ⟨n, rfl⟩
   | .str, .str s, x, h => by
     simp only [decodeV] at h
     split at h

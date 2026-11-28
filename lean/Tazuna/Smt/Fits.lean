@@ -17,7 +17,7 @@ mutual
 whether its application fits and what its result carries; nothing for data. -/
 def FT : Ty → Type
   | .fn ps r => Ty.dens ps → FTs ps → Prop × FT r
-  | .dsl _ _ | .list _ | .int | .str | .tuple _ | .adt .. | .param _ | .bag _ | .table .. | .date | .id => Unit
+  | .dsl _ _ | .list _ | .int | .str | .tuple _ | .adt .. | .param _ | .bag _ | .table .. | .point _ | .id => Unit
 def FTs : List Ty → Type
   | [] => Unit
   | t :: ts => FT t × FTs ts
@@ -27,7 +27,7 @@ mutual
 /-- What a function that always fits carries. -/
 def FT.dflt : (t : Ty) → FT t
   | .fn _ r => fun _ _ => (True, FT.dflt r)
-  | .dsl _ _ | .list _ | .int | .str | .tuple _ | .adt .. | .param _ | .bag _ | .table .. | .date | .id => ()
+  | .dsl _ _ | .list _ | .int | .str | .tuple _ | .adt .. | .param _ | .bag _ | .table .. | .point _ | .id => ()
 def FTs.dflt : (ts : List Ty) → FTs ts
   | [] => ()
   | t :: ts => (FT.dflt t, FTs.dflt ts)

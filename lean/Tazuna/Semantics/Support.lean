@@ -46,7 +46,7 @@ mutual
 every renaming that keeps them. -/
 theorem Ty.self_of_below (hP : P.Fixes n) : (t : Ty) → t.comparable = true → {x y : t.den0} →
     Ty.rel0 (PBij.below n) t x y → Ty.rel0 P t x x
-  | .int, _, _, _, _ | .str, _, _, _, _ | .date, _, _, _, _ => rfl
+  | .int, _, _, _, _ | .str, _, _, _, _ | .point _, _, _, _, _ => rfl
   | .param _, _, _, _, _ => trivial
   | .list t, hw, _, _, h => forall2_self_of (fun _ _ => Ty.self_of_below hP t hw) h
   | .bag t, hw, _, _, h => Multi.self_of (fun _ _ => Ty.self_of_below hP t hw) h

@@ -8,10 +8,9 @@ import shop/shared.{
   type Caller, type Delivery, type Line, type PaymentOutcome, type PriceChanged,
   type Reservation, Customer, Staff,
 }
-import tazuna.{
-  type Ctx, type Id, type Instant, type MachineCtx, type QueryCtx, type TimerCtx,
-}
+import tazuna.{type Ctx, type Id, type MachineCtx, type QueryCtx, type TimerCtx}
 import tazuna/bag.{type Bag}
+import tazuna/instant.{type Instant}
 import tazuna/table.{type Table}
 
 pub type Status {
@@ -119,7 +118,7 @@ fn apply(ctx: tazuna.ApplyCtx(Records), event: Event) -> Records {
             lines: lines,
             total: total,
             status: AwaitingStock,
-            pay_by: ctx.now + 30 * shared.minute,
+            pay_by: instant.add(ctx.now, 30 * shared.minute),
           ),
         ),
       )

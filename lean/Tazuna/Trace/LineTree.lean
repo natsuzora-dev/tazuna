@@ -37,7 +37,8 @@ def valTree : (t : Ty) → t.den0 → Option (Tree Key)
     if i = 0 then (encBool vs x).bind litTree else if i = 1 then (encNil vs x).bind litTree
     else valAlts ((T[i]?.map (·.variants)).getD []) 0 vs x
   | .table k v, x => (x.1.mapM fun (a, b) => do pure (Tree.seq [← valTree k a, ← valTree v b])).map .bag
-  | .date, d => some (.atom (.bin (renderDate d)))
+  | .point .day, d => some (.atom (.bin (renderDate d)))
+  | .point .ms, n => some (.atom (.int n))
   | .id, n => some (.leaf (.id n))
   | .fn .., _ | .param _, _ | .dsl .., _ => none
 def valTrees : (ts : List Ty) → (Ty.semsWith Dsl.base ts).1 → Option (List (Tree Key))
@@ -77,7 +78,8 @@ def wireTree : (t : Ty) → Wire → Option (Tree Name)
   | .table k v, .arr ws => (ws.mapM fun (w : Wire) => match w with
       | .arr [a, b] => do pure (Tree.seq [← wireTree k a, ← wireTree v b])
       | _ => none).map .bag
-  | .date, .str s => some (.atom (.bin s))
+  | .point .day, .str s => some (.atom (.bin s))
+  | .point .ms, .num n => some (.atom (.int n))
   | .id, .str s => some (.leaf (.id s))
   | _, _ => none
 def wireTrees : (ts : List Ty) → List Wire → Option (List (Tree Name))

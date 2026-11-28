@@ -13,6 +13,7 @@ JSON library.
 - A value of any other custom type, `Option` and `Result` included, is an object: `"tag"` names the variant, and each
   field sits under its label, or under its position (`"0"`, `"1"`) when it has none, with no other key.
 - A Date is its ISO 8601 label: `YYYY-MM-DD`, with a sign and six or more year digits outside years 0000 to 9999.
+- An Instant is a number of milliseconds, as a line's `time` is.
 - An Id is a string a binding names it by: a trace names a fresh id by its first appearance, never by the engine's
   numbers, and an id from outside the service by its own name.
 
@@ -119,7 +120,8 @@ def enc : (t : Ty) → t.den0 → Option Wire
     if i = 0 then encBool vs x else if i = 1 then encNil vs x
     else encAlts ((T[i]?.map (·.variants)).getD []) 0 vs x
   | .table k v, x => ((Ty.sortKeys T k v x.1).mapM fun (a, b) => do pure (Wire.arr [← enc k a, ← enc v b])).map .arr
-  | .date, d => some (.str (renderDate d))
+  | .point .day, d => some (.str (renderDate d))
+  | .point .ms, n => some (.num n)
   | .id, n => (name n).map .str
   | .fn .., _ | .param _, _ | .dsl .., _ => none
 def encs : (ts : List Ty) → (Ty.semsWith Dsl.base ts).1 → Option (List Wire)
@@ -153,7 +155,7 @@ mutual
 source, Bool and Nil as the prelude declares them, and every variant of a custom type `writable` with a key for each
 field. -/
 def Ty.encodes : Ty → Bool
-  | .int | .str | .date | .id => true
+  | .int | .str | .point _ | .id => true
   | .list t | .bag t => Ty.encodes t
   | .tuple ts => Ty.encodess ts
   | .adt 0 _ vs => match vs with
@@ -196,7 +198,7 @@ def idsOf : (t : Ty) → t.den0 → List IdV
   | .adt _ _ vs, x => idsOfAlts vs x
   | .table k v, x => (Ty.sortKeys T k v x.1).flatMap fun (a, b) => idsOf k a ++ idsOf v b
   | .id, n => [n]
-  | .int, _ | .str, _ | .date, _ | .fn .., _ | .param _, _ | .dsl .., _ => []
+  | .int, _ | .str, _ | .point _, _ | .fn .., _ | .param _, _ | .dsl .., _ => []
 def idsOfs : (ts : List Ty) → (Ty.semsWith Dsl.base ts).1 → List IdV
   | [], () => []
   | t :: ts, (x, xs) => idsOf t x ++ idsOfs ts xs
@@ -235,7 +237,8 @@ def dec : (t : Ty) → Wire → Option t.den0
       | .arr [a, b] => do pure (← dec k a, ← dec v b)
       | _ => none
     if h : KeysUnique (Ty.semWith Dsl.base k).2 pairs then some ⟨pairs, h⟩ else none
-  | .date, .str s => parseDate? s
+  | .point .day, .str s => parseDate? s
+  | .point .ms, .num n => some n
   | .id, .str s => lookup s
   | _, _ => none
 def decs : (ts : List Ty) → List Wire → Option (Ty.semsWith Dsl.base ts).1

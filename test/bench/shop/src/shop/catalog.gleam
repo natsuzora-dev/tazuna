@@ -3,9 +3,8 @@
 
 import gleam/option.{type Option, None, Some}
 import shop/shared.{type Caller, Customer, Staff}
-import tazuna.{
-  type Ctx, type Instant, type MachineCtx, type QueryCtx, type TimerCtx,
-}
+import tazuna.{type Ctx, type MachineCtx, type QueryCtx, type TimerCtx}
+import tazuna/instant.{type Instant}
 import tazuna/table.{type Table}
 
 pub type Product {
@@ -100,7 +99,7 @@ fn apply(ctx: tazuna.ApplyCtx(Records), event: Event) -> Records {
         sales: table.insert(
           records.sales,
           sku,
-          Sale(percent: percent, ends: ctx.now + shared.day),
+          Sale(percent: percent, ends: instant.add(ctx.now, shared.day)),
         ),
       )
     SaleEnded(sku) ->

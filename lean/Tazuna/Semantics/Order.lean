@@ -274,7 +274,7 @@ def Ty.erl : (t : Ty) → t.den0 → Erl
   | .table k v, x =>
     let ps := Erl.sort (x.1.map fun e => (Ty.erl k e.1, Ty.erl v e.2))
     .map (ps.map (·.1)) (ps.map (·.2))
-  | .date, d => .int d
+  | .point _, d => .int d
   -- An id made fresh compares by when it was made (its step, then its index), before every id from outside, which
   -- compares by its name.
   | .id, .fresh s i => .tuple [.int s, .int i]
@@ -298,7 +298,7 @@ mutual
 /-- Whether the canonical order on the type is total with `==` as its equality: the type is `comparable`, and the
 variants of each custom type have distinct atoms, which Gleam's naming rules give and loading checks. -/
 def Ty.ordered : Ty → Bool
-  | .int | .str | .date | .id | .param _ => true
+  | .int | .str | .point _ | .id | .param _ => true
   | .dsl k _ => k == .fresh
   | .list t | .bag t => Ty.ordered t
   | .tuple ts => Ty.ordereds ts
@@ -508,7 +508,7 @@ theorem Ty.erl_iff : (t : Ty) → t.ordered T = true → (x y : t.den0) →
     ((Ty.semWith Dsl.base t).2 x y = true ↔ t.erl T x = t.erl T y)
   | .int, _, x, y => (beq_iff_eq (α := Int) (a := x) (b := y)).trans ⟨congrArg Erl.int, Erl.int.inj⟩
   | .str, _, x, y => (beq_iff_eq (α := Str) (a := x) (b := y)).trans ⟨fun h => h ▸ rfl, fun h => Subtype.ext (Erl.bin.inj h)⟩
-  | .date, _, x, y => (beq_iff_eq (α := Int) (a := x) (b := y)).trans ⟨congrArg Erl.int, Erl.int.inj⟩
+  | .point _, _, x, y => (beq_iff_eq (α := Int) (a := x) (b := y)).trans ⟨congrArg Erl.int, Erl.int.inj⟩
   | .param _, _, x, y => by simp [Ty.semWith, Ty.erl]
   | .id, _, x, y => by cases x <;> cases y <;> simp [Ty.semWith, Ty.erl, Subtype.ext_iff]; omega
   | .list t, h, xs, ys => by

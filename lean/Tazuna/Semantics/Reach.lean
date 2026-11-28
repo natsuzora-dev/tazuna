@@ -101,7 +101,7 @@ mutual
 /-- Every kept function the value holds, or a function returns at arguments that reach only `P`, is a record of
 `P`. -/
 def Reach : (t : Ty) → t.den → Prop
-  | .int, _ | .str, _ | .param _, _ | .date, _ | .id, _ => True
+  | .int, _ | .str, _ | .param _, _ | .point _, _ | .id, _ => True
   | .list t, xs => ∀ x ∈ Ty.listItems xs, Reach t x
   | .bag t, xs => ∀ x ∈ Ty.bagItems xs, Reach t x
   | .table k v, x => ∀ e ∈ Ty.entries x, Reach k e.1 ∧ Reach v e.2
@@ -141,7 +141,7 @@ variable {E}
 mutual
 /-- Data holds no kept function. -/
 theorem reach_data : (t : Ty) → t.isData = true → (x : t.den) → Reach P E t x
-  | .int, _, _ | .str, _, _ | .param _, _, _ | .date, _, _ | .id, _, _ => trivial
+  | .int, _, _ | .str, _, _ | .param _, _, _ | .point _, _, _ | .id, _, _ => trivial
   | .list t, h, xs => fun x _ => reach_data t (by simpa [Ty.isData] using h) x
   | .bag t, h, xs => fun x _ => reach_data t (by simpa [Ty.isData] using h) x
   | .table k v, h, x => by

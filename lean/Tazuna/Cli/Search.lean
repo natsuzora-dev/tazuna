@@ -85,7 +85,8 @@ def tyText (T : List TypeDecl) : Ty → String
   | .param k => s!"t{k}"
   | .bag t => s!"Bag({tyText T t})"
   | .table k v => s!"Table({tyText T k}, {tyText T v})"
-  | .date => "Date"
+  | .point .day => "Date"
+  | .point .ms => "Instant"
   | .id => "Id"
   | .dsl k args =>
     let name := k.decl.1

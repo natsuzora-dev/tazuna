@@ -18,7 +18,7 @@ variable (L : Layout) (n : Term)
 mutual
 /-- Every fresh id and counter the value `x` of type `t` holds is below `n`; none for a type without a code. -/
 def namesT : Ty → Term → Option Term
-  | .int, _ | .str, _ | .date, _ | .adt 0 _ _, _ => some tt
+  | .int, _ | .str, _ | .point _, _ | .adt 0 _ _, _ => some tt
   | .dsl .fresh _, x => some (.lt x n)
   | .id, x => (L.find? .id).map fun (d, _) => .or (.not (.is d 0 x)) (.lt (.sel d 0 0 x) n)
   | .adt (i + 1) a vs, x => (L.find? (.adt (i + 1) a vs)).bind fun (d, _) => namesAlts d 0 vs x
@@ -110,7 +110,7 @@ mutual
 below `N`, that is, when every fresh id and counter it holds is below `N`. -/
 theorem names_iff (hn : n.denote M = .int (N : Int)) : (t : Ty) → t.comparable = true → (x c : Term) →
     namesT L n t x = some c → {v : t.den} → RelV L t v (x.denote M) → (Holds M c ↔ Ty.relV (PBij.below N) t v v)
-  | .int, _, _, c, h, _, _ | .str, _, _, c, h, _, _ | .date, _, _, c, h, _, _ => by
+  | .int, _, _, c, h, _, _ | .str, _, _, c, h, _, _ | .point _, _, _, c, h, _, _ => by
     simp only [namesT, Option.some.injEq] at h
     subst h
     exact iff_of_true holds_tt rfl

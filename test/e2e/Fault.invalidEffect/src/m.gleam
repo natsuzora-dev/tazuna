@@ -1,9 +1,10 @@
-import gleam/option.{None, Some}
+import gleam/option.{type Option, None, Some}
 import tazuna.{type Ctx, type Id, type QueryCtx}
 import tazuna/bag
+import tazuna/instant.{type Instant}
 
 pub type Records {
-  Records(total: Int, moved_at: Int)
+  Records(total: Int, moved_at: Option(Instant))
 }
 
 pub type Event {
@@ -35,7 +36,7 @@ fn apply(ctx: tazuna.ApplyCtx(Records), e: Event) -> Records {
   case e {
     Added(n) ->
       Records(total: r.total + n, moved_at: case r.total {
-        0 -> ctx.now
+        0 -> Some(ctx.now)
         _ -> r.moved_at
       })
     Tagged(_) | Pinged -> r
@@ -83,10 +84,10 @@ fn watch() -> tazuna.Machine(Records, Event) {
       }
     },
     timer: fn(c: tazuna.TimerCtx(Int, Phase, Records)) {
-      case c.state {
-        Waiting ->
-          Some(tazuna.Timer(at: c.records.moved_at + 10, enter: Pinging))
-        _ -> None
+      case c.state, c.records.moved_at {
+        Waiting, Some(moved_at) ->
+          Some(tazuna.Timer(at: instant.add(moved_at, 10), enter: Pinging))
+        _, _ -> None
       }
     },
     effect: fn(c: tazuna.MachineCtx(Int, Phase, Records)) {
@@ -114,7 +115,7 @@ fn watch() -> tazuna.Machine(Records, Event) {
 fn counter() -> tazuna.Service {
   tazuna.service(
     name: "counter",
-    init: Records(total: 0, moved_at: 0),
+    init: Records(total: 0, moved_at: None),
     apply: apply,
     subscribes: [],
     declares: [tazuna.declare_command(add()), tazuna.declare_query(total())],

@@ -20,7 +20,7 @@ mutual
 /-- On data, `RelD` at a value is `RelV` at the value read at the structure level. -/
 theorem relD_up : (t : Ty) → (h : t.isData = true) → (y : t.den0) → (v : Val) → RelD L t y v →
     RelV L t (Ty.up t h y) v
-  | .int, _, _, _, hv | .str, _, _, _, hv | .date, _, _, _, hv | .id, _, _, _, hv | .dsl .fresh _, _, _, _, hv => hv
+  | .int, _, _, _, hv | .str, _, _, _, hv | .point _, _, _, _, hv | .id, _, _, _, hv | .dsl .fresh _, _, _, _, hv => hv
   | .adt 0 a vs, h, y, v, hv => by
     obtain ⟨e, hv⟩ := hv
     subst e

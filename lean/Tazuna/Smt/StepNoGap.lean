@@ -37,7 +37,7 @@ theorem ruleTerms_sound (hL : SortedLayout L) (hr : Got L Ty.rules) (rs : Term) 
 mutual
 theorem ordT_some (T : List TypeDecl) : (t : Ty) → t.orderable = true → L.Has t → (x y : Term) →
     (ordT L T t x y).isSome = true
-  | .int, _, _, _, _ | .date, _, _, _, _ | .str, _, _, _, _ => rfl
+  | .int, _, _, _, _ | .point _, _, _, _, _ | .str, _, _, _, _ => rfl
   | .id, _, h, _, _ => by
     obtain ⟨x, hx⟩ := Option.isSome_iff_exists.1 (show (L.find? .id).isSome = true from h)
     simp [ordT, hx]

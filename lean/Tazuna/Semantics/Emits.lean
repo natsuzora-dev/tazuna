@@ -24,7 +24,7 @@ def Ty.mentions (i : Nat) : Ty → Bool
   | .fn ps r => Ty.mentionsL i ps || Ty.mentions i r
   | .table k w => Ty.mentions i k || Ty.mentions i w
   | .dsl _ a => Ty.mentionsL i a
-  | .int | .str | .param _ | .date | .id => false
+  | .int | .str | .param _ | .point _ | .id => false
 def Ty.mentionsL (i : Nat) : List Ty → Bool
   | [] => false
   | t :: ts => Ty.mentions i t || Ty.mentionsL i ts
@@ -49,7 +49,7 @@ this holds, is built with a constructor `okV` allows. A kept function is read by
 its `on_answer` returns at any answer of a type that cannot hold such a value. A request's `on_answer` runs only in a
 later step, so a request is not read. -/
 def Ok : (t : Ty) → t.den → Prop
-  | .int, _ | .str, _ | .param _, _ | .date, _ | .id, _ => True
+  | .int, _ | .str, _ | .param _, _ | .point _, _ | .id, _ => True
   | .list t, xs => ∀ x ∈ Ty.listItems xs, Ok t x
   | .bag t, xs => ∀ x ∈ Ty.bagItems xs, Ok t x
   | .table k w, x => ∀ e ∈ Ty.entries x, Ok k e.1 ∧ Ok w e.2
@@ -79,7 +79,7 @@ variable {i okV}
 mutual
 /-- A type that cannot hold a value of the declaration: every value of it is `Ok`. -/
 theorem ok_free : (t : Ty) → t.mentions i = false → (x : t.den) → Ok i okV t x
-  | .int, _, _ | .str, _, _ | .param _, _, _ | .date, _, _ | .id, _, _ => trivial
+  | .int, _, _ | .str, _, _ | .param _, _, _ | .point _, _, _ | .id, _, _ => trivial
   | .list t, h, _ => fun x _ => ok_free t (by simpa [Ty.mentions] using h) x
   | .bag t, h, _ => fun x _ => ok_free t (by simpa [Ty.mentions] using h) x
   | .table k w, h, _ => by
@@ -115,7 +115,7 @@ theorem ok_free : (t : Ty) → t.mentions i = false → (x : t.den) → Ok i okV
     | .effectClosure, _ :: _ :: _, _, _ => simp [Ok]
     | .effectClosure, [.int], _, _ | .effectClosure, [.str], _, _ | .effectClosure, [.list _], _, _
     | .effectClosure, [.tuple _], _, _ | .effectClosure, [.adt ..], _, _ | .effectClosure, [.param _], _, _
-    | .effectClosure, [.bag _], _, _ | .effectClosure, [.table ..], _, _ | .effectClosure, [.date], _, _
+    | .effectClosure, [.bag _], _, _ | .effectClosure, [.table ..], _, _ | .effectClosure, [.point _], _, _
     | .effectClosure, [.id], _, _ | .effectClosure, [.dsl ..], _, _ => trivial
 theorem oks_free : (ts : List Ty) → Ty.mentionsL i ts = false → (xs : Ty.dens ts) → Oks i okV ts xs
   | [], _, _ => trivial
@@ -1446,7 +1446,7 @@ theorem stateIndex_some : {t : Ty} → {x : t.den0} → {j k : Nat} → stateInd
       refine ⟨hc.1, fun okV hk h => ⟨fun _ => by rw [altIndex_up vs h x]; exact hk, ?_⟩⟩
       exact okAlts_free vs hc.2 _
     · cases hs
-  | .int, _, _, _, hs | .str, _, _, _, hs | .param _, _, _, _, hs | .date, _, _, _, hs | .id, _, _, _, hs
+  | .int, _, _, _, hs | .str, _, _, _, hs | .param _, _, _, _, hs | .point _, _, _, _, hs | .id, _, _, _, hs
   | .list _, _, _, _, hs | .bag _, _, _, _, hs | .table .., _, _, _, hs | .tuple _, _, _, _, hs
   | .fn .., _, _, _, hs | .dsl .., _, _, _, hs => by cases hs
 
@@ -1499,7 +1499,7 @@ theorem MachineV.reach_live_effectAt {r e : Ty} (m : MachineV r e) {P P' : List 
   have hx := EffectFun.reach_live h15 (fun k => ⟨List.elem_eq_true_of_mem, List.mem_of_elem_eq_true⟩) m.effect hm
     hP' hΓ (.inl (key, st, records, now, ()), ()) (by
       refine oks_up_cons _ _ _ (fun hc => ?_) (fun _ => trivial)
-      have hfs : (Ty.tuple [m.key, m.state, r, .int]).isData = true := by
+      have hfs : (Ty.tuple [m.key, m.state, r, .point .ms]).isData = true := by
         simp_all [Ty.machineCtx, Ty.isData, Ty.isDatass, Ty.isDatas]
       erw [Ty.up_inl 8 _ _ [] hc hfs]
       refine ⟨fun h8 => absurd h8 (by omega), ?_⟩

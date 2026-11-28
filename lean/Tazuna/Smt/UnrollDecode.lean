@@ -447,7 +447,7 @@ theorem forall2_items2 {k w : Ty} : {xs : List (k.den × w.den)} → {items : Li
 mutual
 /-- A value's constant denotes it. -/
 theorem dataT_rel : (t : Ty) → (x : t.den) → (a : Term) → dataT L t x = some a → RelV L t x (a.denote M)
-  | .int, x, a, h | .date, x, a, h => by cases h; rfl
+  | .int, x, a, h | .point _, x, a, h => by cases h; rfl
   | .str, x, a, h => by cases h; rfl
   | .dsl .fresh _, x, a, h => by cases h; rfl
   | .id, x, a, h => by

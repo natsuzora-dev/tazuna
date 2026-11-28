@@ -54,7 +54,7 @@ variable (L : Layout) (T : List TypeDecl)
 mutual
 /-- Whether `x` comes before `y`, and whether no later, in the canonical order of `t`. -/
 def ordT : (t : Ty) → Term → Term → Option (Term × Term)
-  | .int, x, y | .date, x, y => some (.lt x y, .le x y)
+  | .int, x, y | .point _, x, y => some (.lt x y, .le x y)
   | .str, x, y => some (.slt x y, .or (.slt x y) (.eq x y))
   | .id, x, y => (L.find? .id).map fun (d, _) => idOrd d x y
   | .tuple ts, x, y => (L.find? (.tuple ts)).bind fun (d, _) => ordFields d ts x y 0
@@ -231,7 +231,7 @@ theorem ordT_rel (L : Layout) (T : List TypeDecl) : (t : Ty) → (x y : Term) �
     simp only [ordT, Option.some.injEq] at h; subst h
     change x.denote M = .int a at ha; change y.denote M = .int b at hb
     exact int_ord ha hb
-  | .date, x, y, p, h, _, a, b, ha, hb => by
+  | .point _, x, y, p, h, _, a, b, ha, hb => by
     simp only [ordT, Option.some.injEq] at h; subst h
     change x.denote M = .int a at ha; change y.denote M = .int b at hb
     exact int_ord ha hb

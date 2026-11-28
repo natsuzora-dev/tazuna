@@ -65,7 +65,7 @@ def HasWith : Ty → Prop
   | .table k v => HasWith k ∧ HasWith v ∧ (L.find? (.tuple [Ty.bool, k, v])).isSome ∧ (L.find? (.table k v)).isSome
   | .fn ps r => HasWiths ps ∧ HasWith r
   | .dsl k a => D k a
-  | .int | .str | .date | .param _ => True
+  | .int | .str | .point _ | .param _ => True
 def HasWiths : List Ty → Prop
   | [] => True
   | t :: ts => HasWith t ∧ HasWiths ts
@@ -110,7 +110,7 @@ theorem HasWith.mono {L L' : Layout} (h : Le L L') {D D' : Dsl → List Ty → P
     exact ⟨HasWith.mono h hD k a, HasWith.mono h hD v a', by simp [find?_le h hx], by simp [find?_le h hy]⟩
   | .fn ps r, ⟨a, b⟩ => ⟨HasWiths.mono h hD ps a, HasWith.mono h hD r b⟩
   | .dsl k a, hk => hD k a hk
-  | .int, _ | .str, _ | .date, _ | .param _, _ => trivial
+  | .int, _ | .str, _ | .point _, _ | .param _, _ => trivial
 theorem HasWiths.mono {L L' : Layout} (h : Le L L') {D D' : Dsl → List Ty → Prop} (hD : ∀ k a, D k a → D' k a) : (ts : List Ty) → HasWiths L D ts → HasWiths L' D' ts
   | [], _ => trivial
   | t :: ts, ⟨a, b⟩ => ⟨HasWith.mono h hD t a, HasWiths.mono h hD ts b⟩
@@ -151,7 +151,7 @@ theorem addTyWith_le (hd : ∀ L k a, Le L (dsl L k a)) : (L : Layout) → (t : 
     (((addTyWith_le hd L k).trans (addTyWith_le hd _ v)).trans (push_le _ _ _)).trans (push_le _ _ _)
   | L, .fn ps r => (addTysWith_le hd L ps).trans (addTyWith_le hd _ r)
   | L, .dsl k a => hd L k a
-  | L, .int | L, .str | L, .date | L, .param _ => Le.refl L
+  | L, .int | L, .str | L, .point _ | L, .param _ => Le.refl L
 theorem addTysWith_le (hd : ∀ L k a, Le L (dsl L k a)) : (L : Layout) → (ts : List Ty) →
     Le L (addTysWith slots dsl L ts)
   | L, [] => Le.refl L
@@ -196,7 +196,7 @@ theorem addTyWith_has (hd : ∀ L k a, Le L (dsl L k a)) (hDm : ∀ L L', Le L L
     have h1 := addTyWith_le hd (addTysWith slots dsl L ps) r
     ⟨HasWiths.mono h1 (hDm _ _ h1) ps (addTysWith_has hd hDm hD L ps), addTyWith_has hd hDm hD _ r⟩
   | L, .dsl k a => hD L k a
-  | _, .int | _, .str | _, .date | _, .param _ => trivial
+  | _, .int | _, .str | _, .point _ | _, .param _ => trivial
 theorem addTysWith_has (hd : ∀ L k a, Le L (dsl L k a)) (hDm : ∀ L L', Le L L' → ∀ k a, D L k a → D L' k a)
     (hD : ∀ L k a, D (dsl L k a) k a) : (L : Layout) → (ts : List Ty) →
     HasWiths (addTysWith slots dsl L ts) (D (addTysWith slots dsl L ts)) ts

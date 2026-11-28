@@ -17,7 +17,7 @@ namespace Tazuna.Ir
 mutual
 /-- Whether a value of the type has an SMT value: data without functions or type variables, ADT 0 only as Bool. -/
 def Ty.embeddable : Ty → Bool
-  | .int | .str | .date | .id => true
+  | .int | .str | .point _ | .id => true
   | .dsl k _ => k == .fresh
   | .adt 0 _ vs => (Tazuna.Smt.boolVs? vs).isSome
   | .adt (_ + 1) _ vs => Ty.embeddabless vs
@@ -95,7 +95,7 @@ theorem Checked.reactions {P : List AnySite} {E : List AnyEffectSite} {T : List 
 
 mutual
 theorem comparable_of_plain : (t : Ty) → t.plain = true → t.comparable = true
-  | .int, _ | .date, _ | .str, _ | .id, _ => rfl
+  | .int, _ | .point _, _ | .str, _ | .id, _ => rfl
   | .tuple ts, h => comparables_of_plains ts h
   | .adt _ _ vs, h => comparabless_of_plainss vs h
   | .list _, h | .bag _, h | .table .., h | .fn .., h | .param _, h | .dsl .., h => by simp [Ty.plain] at h
@@ -113,7 +113,7 @@ end
 
 mutual
 theorem comparable_of_embeddable : (t : Ty) → t.embeddable = true → t.comparable = true
-  | .int, _ | .date, _ | .str, _ | .id, _ => rfl
+  | .int, _ | .point _, _ | .str, _ | .id, _ => rfl
   | .dsl k _, h => h
   | .adt 0 _ vs, h => by
     simp only [Ty.embeddable, Option.isSome_iff_exists] at h
@@ -180,7 +180,7 @@ abbrev CheckedSpec.E (c : CheckedSpec) : List AnyEffectSite := c.program.defs.ef
 
 theorem isFn_of_wire : (t : Ty) → t.wire = true → t.isFn = false
   | .fn .., h => by simp [Ty.wire] at h
-  | .int, _ | .str, _ | .param _, _ | .date, _ | .id, _ | .list _, _ | .bag _, _ | .tuple _, _ | .adt .., _
+  | .int, _ | .str, _ | .param _, _ | .point _, _ | .id, _ | .list _, _ | .bag _, _ | .tuple _, _ | .adt .., _
   | .table .., _ | .dsl .., _ => rfl
 
 theorem nilL {α : Type} {a b : List α} (h : a ++ b = []) : a = [] := (List.append_eq_nil_iff.1 h).1

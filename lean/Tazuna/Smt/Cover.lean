@@ -14,7 +14,7 @@ namespace Tazuna.Smt
 open Tazuna.Ir
 
 theorem isData_of_embeddable : (t : Ty) → t.embeddable = true → t.isData = true
-  | .int, _ | .str, _ | .date, _ | .id, _ => rfl
+  | .int, _ | .str, _ | .point _, _ | .id, _ => rfl
   | .dsl k _, h => by simpa [Ty.embeddable, Ty.isData] using h
   | .adt 0 _ vs, h => by
     unfold Ty.embeddable at h

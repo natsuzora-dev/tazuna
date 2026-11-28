@@ -18,6 +18,7 @@ def dslModules : List DslModule :=
       "The tazuna DSL: a spec's services, the externals they talk to, and their scenarios.",
       "import gleam/option.{type Option}\n" ++
       "import tazuna/bag.{type Bag}\n" ++
+      "import tazuna/instant.{type Instant}\n" ++
       "import tazuna/internal/launch\n" ++
       "import tazuna/table.{type Table}\n\n" ++
       "/// `gleam run -m tazuna -- <command> <root> [...]` checks the spec whose\n" ++
@@ -28,7 +29,8 @@ def dslModules : List DslModule :=
     ⟨"tazuna/bag", "tazuna/bag.gleam", "Bags: multisets, whose items have no order.", ""⟩,
     ⟨"tazuna/table", "tazuna/table.gleam", "Tables: finite maps from keys to values.",
       "import gleam/option.{type Option}\nimport tazuna/bag.{type Bag}\n\n"⟩,
-    ⟨"tazuna/date", "tazuna/date.gleam", "Dates: days without a calendar.", ""⟩ ]
+    ⟨"tazuna/date", "tazuna/date.gleam", "Dates: days without a calendar.", ""⟩,
+    ⟨"tazuna/instant", "tazuna/instant.gleam", "Instants: points in time a spec cannot write, only move and compare.", ""⟩ ]
 
 def moduleHead (m : DslModule) : String :=
   s!"//// {m.doc}\n" ++
@@ -57,7 +59,8 @@ partial def gleamTy (tvars : List String) (int : String) : Ty → String
   | .param k => tvars[k]?.getD s!"t{k}"
   | .bag t => s!"Bag({gleamTy tvars int t})"
   | .table k v => s!"Table({gleamTy tvars int k}, {gleamTy tvars int v})"
-  | .date => "Date"
+  | .point .day => "Date"
+  | .point .ms => "Instant"
   | .id => "Id"
   | .dsl .closure [t] | .dsl .effectClosure [t] => gleamTy tvars int t
   | .dsl k args =>

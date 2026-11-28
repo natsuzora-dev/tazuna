@@ -7,10 +7,9 @@ import gleam/option.{type Option, None, Some}
 import shop/shared.{
   type Caller, type OrderCancelled, type OrderPlaced, type Reservation, Staff,
 }
-import tazuna.{
-  type Ctx, type Id, type Instant, type MachineCtx, type QueryCtx, type TimerCtx,
-}
+import tazuna.{type Ctx, type Id, type MachineCtx, type QueryCtx, type TimerCtx}
 import tazuna/bag
+import tazuna/instant.{type Instant}
 import tazuna/table.{type Table}
 
 pub type PayState {
@@ -108,7 +107,7 @@ fn calls(to: PayState, until: Instant) -> fn(Payment) -> Payment {
 
 fn apply(ctx: tazuna.ApplyCtx(Records), event: Event) -> Records {
   let records = ctx.records
-  let gives_up = ctx.now + 2 * shared.minute
+  let gives_up = instant.add(ctx.now, 2 * shared.minute)
   case event {
     Ordered(placed) ->
       case table.get(records.payments, placed.order) {
@@ -437,7 +436,7 @@ fn gateway_call() -> tazuna.Machine(Records, Event) {
         #(
           "a call waits no longer than its time",
           case table.get(ctx.records.payments, ctx.key) {
-            Some(payment) -> ctx.now <= payment.call_by
+            Some(payment) -> !instant.is_after(ctx.now, payment.call_by)
             None -> True
           },
         ),
@@ -520,7 +519,8 @@ pub fn service() -> tazuna.Service {
               case table.get(records.payments, order) {
                 Some(payment) ->
                   case payment.state {
-                    Screening -> Some(payment.call_by + 2 * shared.minute)
+                    Screening ->
+                      Some(instant.add(payment.call_by, 2 * shared.minute))
                     Charging -> Some(payment.call_by)
                     _ -> None
                   }

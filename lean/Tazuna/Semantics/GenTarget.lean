@@ -45,7 +45,7 @@ def variantsOf : Ty → List (Option String)
 theorem variantOf_mem : (t : Ty) → (x : t.den0) → variantOf T t x ∈ variantsOf T t
   | .adt _ _ vs, x => List.mem_map.2 ⟨altIndex vs x, List.mem_range.2 (altIndex_lt vs x), rfl⟩
   | .int, _ | .str, _ | .list _, _ | .tuple _, _ | .fn _ _, _ | .param _, _ | .bag _, _ | .table _ _, _
-  | .date, _ | .id, _ | .dsl _ _, _ => List.mem_singleton.2 rfl
+  | .point _, _ | .id, _ | .dsl _ _, _ => List.mem_singleton.2 rfl
 
 /-- A value's constructor is the same as data and as evaluation holds it. -/
 theorem view_up (i : Nat) (as : List Ty) : (vs : List (List Ty)) → (h : (Ty.adt i as vs).isData = true) →
@@ -102,7 +102,7 @@ theorem coversOutside_sound : (c : Ty) → {callers : List (Ty.origin c).den0} �
     | none => rw [hxs] at h; cases h
     | some xs => rw [hxs] at h; exact List.all_eq_true.1 h x (mem_nullaryVals vs hxs x)
   | .int, _, h, _ | .str, _, h, _ | .list _, _, h, _ | .tuple _, _, h, _ | .fn _ _, _, h, _ | .param _, _, h, _
-  | .bag _, _, h, _ | .table _ _, _, h, _ | .date, _, h, _ | .id, _, h, _ | .dsl _ _, _, h, _ => by
+  | .bag _, _, h, _ | .table _ _, _, h, _ | .point _, _, h, _ | .id, _, h, _ | .dsl _ _, _, h, _ => by
     simp [coversOutside] at h
 
 /-- Whether `callers` lists some outside caller. -/

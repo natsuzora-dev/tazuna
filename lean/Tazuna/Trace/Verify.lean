@@ -267,7 +267,7 @@ set_option linter.tazuna.silentDefault false in
 mutual
 /-- Reading a value looks ids up only by the strings its wire form holds. -/
 theorem dec_congr : (t : Ty) → (w : Wire) → (∀ s ∈ w.strs, f s = g s) → dec T f t w = dec T g t w
-  | .int, .num _, _ | .str, .str _, _ | .date, .str _, _ => rfl
+  | .int, .num _, _ | .str, .str _, _ | .point .day, .str _, _ | .point .ms, .num _, _ => rfl
   | .list t, .arr ws, h => by
     show ws.mapM (dec T f t) = ws.mapM (dec T g t)
     exact mapM_congr_strs ws (fun w _ hw => dec_congr t w hw) (by simpa [Wire.strs] using h)
@@ -310,7 +310,10 @@ theorem dec_congr : (t : Ty) → (w : Wire) → (∀ s ∈ w.strs, f s = g s) �
   | .id, .str s, h => h s (by simp [Wire.strs])
   | .int, .null, _ | .int, .bool _, _ | .int, .str _, _ | .int, .arr _, _ | .int, .obj _, _ => rfl
   | .str, .null, _ | .str, .bool _, _ | .str, .num _, _ | .str, .arr _, _ | .str, .obj _, _ => rfl
-  | .date, .null, _ | .date, .bool _, _ | .date, .num _, _ | .date, .arr _, _ | .date, .obj _, _ => rfl
+  | .point .day, .null, _ | .point .day, .bool _, _ | .point .day, .num _, _ | .point .day, .arr _, _
+  | .point .day, .obj _, _ => rfl
+  | .point .ms, .null, _ | .point .ms, .bool _, _ | .point .ms, .str _, _ | .point .ms, .arr _, _
+  | .point .ms, .obj _, _ => rfl
   | .id, .null, _ | .id, .bool _, _ | .id, .num _, _ | .id, .arr _, _ | .id, .obj _, _ => rfl
   | .list _, .null, _ | .list _, .bool _, _ | .list _, .num _, _ | .list _, .str _, _ | .list _, .obj _, _ => rfl
   | .bag _, .null, _ | .bag _, .bool _, _ | .bag _, .num _, _ | .bag _, .str _, _ | .bag _, .obj _, _ => rfl

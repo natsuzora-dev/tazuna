@@ -12,7 +12,7 @@ open Tazuna.Ir
 mutual
 /-- A plain type with an SMT value compares by SMT-LIB's `=`. -/
 theorem eqable_of_plain : (t : Ty) → t.embeddable = true → t.plain = true → t.eqable = true
-  | .int, _, _ | .str, _, _ | .date, _, _ | .id, _, _ => rfl
+  | .int, _, _ | .str, _, _ | .point _, _, _ | .id, _, _ => rfl
   | .tuple ts, he, hp => by
     simp only [Ty.embeddable, Ty.plain, Ty.eqable] at he hp ⊢; exact eqables_of_plains ts he hp
   | .adt 0 _ vs, he, _ => by simpa [Ty.embeddable, Ty.eqable] using he
@@ -35,7 +35,7 @@ end
 
 mutual
 theorem plainKeys_of_plain : (t : Ty) → t.plain = true → t.plainKeys = true
-  | .int, _ | .str, _ | .date, _ | .id, _ => rfl
+  | .int, _ | .str, _ | .point _, _ | .id, _ => rfl
   | .tuple ts, hp => by simp only [Ty.plain, Ty.plainKeys] at hp ⊢; exact plainKeyss_of_plains ts hp
   | .adt _ _ vs, hp => by simp only [Ty.plain, Ty.plainKeys] at hp ⊢; exact plainKeysss_of_plainss vs hp
   | .list _, hp | .bag _, hp | .table .., hp | .fn .., hp | .param _, hp | .dsl .., hp => by simp [Ty.plain] at hp
@@ -63,7 +63,7 @@ mutual
 holds the type's datatypes. -/
 theorem wfT_isSome : (t : Ty) → Layout.HasWith L D t → t.embeddable = true → t.plainKeys = true → (x : Term) →
     (wfT L t x).isSome = true
-  | .int, _, _, _, _ | .str, _, _, _, _ | .date, _, _, _, _ => rfl
+  | .int, _, _, _, _ | .str, _, _, _, _ | .point _, _, _, _, _ => rfl
   | .id, hh, _, _, _ => by simp only [wfT, Option.isSome_map]; exact hh
   | .dsl k a, _, he, _, x => by
     simp only [Ty.embeddable, beq_iff_eq] at he; subst he; rfl
@@ -163,7 +163,7 @@ theorem wfMachines_isSome {L : Layout} : (ms : List (MachineV v.records v.event)
 
 mutual
 theorem sorted_of_embeddable : (t : Ty) → t.embeddable = true → t.sorted = true
-  | .int, _ | .str, _ | .date, _ | .id, _ => rfl
+  | .int, _ | .str, _ | .point _, _ | .id, _ => rfl
   | .dsl k _, h => by simp only [Ty.embeddable, beq_iff_eq] at h; subst h; rfl
   | .adt 0 _ vs, h => by
     simp only [Ty.embeddable, Option.isSome_iff_exists] at h
@@ -189,7 +189,7 @@ end
 
 theorem sortable_of_sorted : (t : Ty) → t.sorted = true → t.sortable = true
   | .fn .., h => by simp [Ty.sorted] at h
-  | .int, h | .str, h | .date, h | .id, h | .param _, h | .list _, h | .bag _, h | .tuple _, h | .adt .., h
+  | .int, h | .str, h | .point _, h | .id, h | .param _, h | .list _, h | .bag _, h | .tuple _, h | .adt .., h
   | .table .., h | .dsl .., h => by simpa [Ty.sortable] using h
 
 theorem sortable_of_embeddable (t : Ty) (h : t.embeddable = true) : t.sortable = true :=

@@ -33,7 +33,7 @@ value holds, such as an effect's input and the values its kept functions capture
 def RelD : (t : Ty) → t.den0 → Val → Prop
   | .int, x, v => v = .int x
   | .str, x, v => v = .str (x : Str).1
-  | .date, x, v => v = .int x
+  | .point _, x, v => v = .int x
   | .id, x, v => ∃ d n, L.find? .id = some (d, n) ∧ v = idVal d x
   | .adt 0 _ vs, x, v => ∃ h : vs = [[], []], v = .bool (altsBool0 (h ▸ x))
   | .adt (i + 1) a vs, x, v => ∃ d n, L.find? (.adt (i + 1) a vs) = some (d, n) ∧ RelDAlts d 0 vs x v
@@ -102,7 +102,7 @@ mutual
 def RelV : (t : Ty) → t.den → Val → Prop
   | .int, x, v => v = .int x
   | .str, x, v => v = .str (x : Str).1
-  | .date, x, v => v = .int x
+  | .point _, x, v => v = .int x
   | .id, x, v => ∃ d n, L.find? .id = some (d, n) ∧ v = idVal d x
   | .adt 0 _ vs, x, v => ∃ h : vs = [[], []], v = .bool (altsBool (h ▸ x))
   | .adt (i + 1) a vs, x, v => ∃ d n, L.find? (.adt (i + 1) a vs) = some (d, n) ∧ RelAlts d 0 vs x v
@@ -180,7 +180,7 @@ def Rel : (t : Ty) → t.den → Code t → Prop
   | .param k, x, s => RelV L (.param k) x (Term.denote M s)
   | .bag t, x, s => RelV L (.bag t) x (Term.denote M s)
   | .table k v, x, s => RelV L (.table k v) x (Term.denote M s)
-  | .date, x, s => RelV L .date x (Term.denote M s)
+  | .point u, x, s => RelV L (.point u) x (Term.denote M s)
   | .id, x, s => RelV L .id x (Term.denote M s)
   | .dsl k a, x, s => DslRel M L k a x s
 def Rels : (ts : List Ty) → Ty.dens ts → Codes ts → Prop
@@ -201,7 +201,7 @@ mutual
 /-- On data, `RelV` at a value read at the structure level is `RelD` at the value. -/
 theorem relV_up : (t : Ty) → (h : t.isData = true) → (y : t.den0) → (v : Val) → RelV L t (Ty.up t h y) v →
     RelD L t y v
-  | .int, _, _, _, hv | .str, _, _, _, hv | .date, _, _, _, hv | .id, _, _, _, hv | .dsl .fresh _, _, _, _, hv => hv
+  | .int, _, _, _, hv | .str, _, _, _, hv | .point _, _, _, _, hv | .id, _, _, _, hv | .dsl .fresh _, _, _, _, hv => hv
   | .adt 0 a vs, h, y, v, hv => by
     obtain ⟨e, hv⟩ := hv
     subst e
@@ -289,7 +289,7 @@ theorem rel_term : {t : Ty} → {s : Code t} → {x : Term} → Code.term? t s =
   | .dsl k _, _, _, h, _ => by
     cases k <;> simp only [Code.term?, DslCode.term?, reduceCtorEq] at h <;> cases h <;> exact Iff.rfl
   | .list _, _, _, h, _ | .int, _, _, h, _ | .str, _, _, h, _ | .tuple _, _, _, h, _ | .adt .., _, _, h, _ | .param _, _, _, h, _
-  | .bag _, _, _, h, _ | .table .., _, _, h, _ | .date, _, _, h, _ | .id, _, _, h, _ => by
+  | .bag _, _, _, h, _ | .table .., _, _, h, _ | .point _, _, _, h, _ | .id, _, _, h, _ => by
     cases h; exact Iff.rfl
 
 theorem rel_ofTerm : {t : Ty} → {x : Term} → {s : Code t} → Code.ofTerm? t x = some s → (v : t.den) →
@@ -299,13 +299,13 @@ theorem rel_ofTerm : {t : Ty} → {x : Term} → {s : Code t} → Code.ofTerm? t
     cases k <;> simp only [Code.ofTerm?, DslCode.ofTerm?, reduceCtorEq] at h <;> cases h <;>
       exact Iff.rfl
   | .list _, _, _, h, _ | .int, _, _, h, _ | .str, _, _, h, _ | .tuple _, _, _, h, _ | .adt .., _, _, h, _ | .param _, _, _, h, _
-  | .bag _, _, _, h, _ | .table .., _, _, h, _ | .date, _, _, h, _ | .id, _, _, h, _ => by
+  | .bag _, _, _, h, _ | .table .., _, _, h, _ | .point _, _, _, h, _ | .id, _, _, h, _ => by
     cases h; exact Iff.rfl
 
 theorem rel_share : {t : Ty} → {v : t.den} → {s : Code t} → Rel M L t v s → Rel M L t v (Code.share t s)
   | .fn .., _, _, h => h
   | .list _, _, s, h | .int, _, s, h | .str, _, s, h | .tuple _, _, s, h | .adt .., _, s, h | .param _, _, s, h | .bag _, _, s, h
-  | .table .., _, s, h | .date, _, s, h | .id, _, s, h => by
+  | .table .., _, s, h | .point _, _, s, h | .id, _, s, h => by
     simp only [Code.share, Rel] at h ⊢; rw [Term.denote_share M s]; exact h
   | .dsl k _, _, s, h => by
     cases k <;> first
@@ -701,7 +701,7 @@ theorem relV_beq : (t : Ty) → t.eqable = true → (x y : t.den) → (vx vy : V
     simp only [RelV] at hx hy; subst hx hy; rfl
   | .str, _, x, y, _, _, hx, hy => by
     simp only [RelV] at hx hy; subst hx hy; rfl
-  | .date, _, x, y, _, _, hx, hy => by
+  | .point _, _, x, y, _, _, hx, hy => by
     simp only [RelV] at hx hy; subst hx hy; rfl
   | .dsl .fresh a, _, x, y, _, _, hx, hy => by
     change _ = Val.int (Int.ofNat x) at hx
@@ -1497,7 +1497,7 @@ theorem tableEqT_den {k v : Ty} {eq : Term → Term → Term} (heq : EqOk M L v 
 
 mutual
 theorem eqFn_ok : (t : Ty) → {f : Term → Term → Term} → eqFn L t = .ok f → EqOk M L t f
-  | .int, _, h | .str, _, h | .date, _, h | .id, _, h => by cases h; exact eqOk_eq rfl
+  | .int, _, h | .str, _, h | .point _, _, h | .id, _, h => by cases h; exact eqOk_eq rfl
   | .dsl k a, _, h => by
     simp only [eqFn] at h
     split at h
@@ -1933,20 +1933,56 @@ theorem primCode_agrees (p : Prim) (args : List Ty) (hp : p.ok args = true) (s :
     simp only [primCode] at h; cases h
     intro ⟨x, y, ()⟩ ⟨sx, sy, ()⟩ ⟨hx, hy, _⟩ r c hr _
     cases hr
-    change Rel M L .date x sx at hx
+    change Rel M L (.point .day) x sx at hx
     change Rel M L .int y sy at hy
-    show Rel M L .date _ (Term.add sx sy)
+    show Rel M L (.point .day) _ (Term.add sx sy)
     simp only [Rel, RelV] at hx hy ⊢
     simp [Term.denote, hx, hy, Val.toInt]; rfl
   case dateDaysBetween =>
     simp only [primCode] at h; cases h
     intro ⟨x, y, ()⟩ ⟨sx, sy, ()⟩ ⟨hx, hy, _⟩ r c hr _
     cases hr
-    change Rel M L .date x sx at hx
-    change Rel M L .date y sy at hy
+    change Rel M L (.point .day) x sx at hx
+    change Rel M L (.point .day) y sy at hy
     show Rel M L .int _ (Term.sub sy sx)
     simp only [Rel, RelV] at hx hy ⊢
     simp [Term.denote, hx, hy, Val.toInt]; rfl
+  case instantAdd =>
+    simp only [primCode] at h; cases h
+    intro ⟨x, y, ()⟩ ⟨sx, sy, ()⟩ ⟨hx, hy, _⟩ r c hr _
+    cases hr
+    change Rel M L (.point .ms) x sx at hx
+    change Rel M L .int y sy at hy
+    show Rel M L (.point .ms) _ (Term.add sx sy)
+    simp only [Rel, RelV] at hx hy ⊢
+    simp [Term.denote, hx, hy, Val.toInt]; rfl
+  case instantDiff =>
+    simp only [primCode] at h; cases h
+    intro ⟨x, y, ()⟩ ⟨sx, sy, ()⟩ ⟨hx, hy, _⟩ r c hr _
+    cases hr
+    change Rel M L (.point .ms) x sx at hx
+    change Rel M L (.point .ms) y sy at hy
+    show Rel M L .int _ (Term.sub sy sx)
+    simp only [Rel, RelV] at hx hy ⊢
+    simp [Term.denote, hx, hy, Val.toInt]; rfl
+  case instantIsBefore =>
+    simp only [primCode] at h; cases h
+    intro ⟨x, y, ()⟩ ⟨sx, sy, ()⟩ ⟨hx, hy, _⟩ r c hr _
+    cases hr
+    change Rel M L (.point .ms) x sx at hx
+    change Rel M L (.point .ms) y sy at hy
+    simp only [Rel, RelV] at hx hy
+    refine (rel_bool _ _).2 ?_
+    simp only [Term.denote]; rw [hx, hy]; simp only [Val.toInt, toBool_ofBool, Prim.den]; rfl
+  case instantIsAfter =>
+    simp only [primCode] at h; cases h
+    intro ⟨x, y, ()⟩ ⟨sx, sy, ()⟩ ⟨hx, hy, _⟩ r c hr _
+    cases hr
+    change Rel M L (.point .ms) x sx at hx
+    change Rel M L (.point .ms) y sy at hy
+    simp only [Rel, RelV] at hx hy
+    refine (rel_bool _ _).2 ?_
+    simp only [Term.denote]; rw [hx, hy]; simp only [Val.toInt, toBool_ofBool, Prim.den]; rfl
   case require =>
     simp only [primCode] at h; cases h
     intro ⟨b, rej, next, ()⟩ ⟨sb, srej, snext, ()⟩ ⟨hb, hrej, hnext, _⟩ r c hr hc

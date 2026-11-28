@@ -45,7 +45,7 @@ variable (L : Layout) (T : List TypeDecl) {r e : Ty}
 
 /-- The context a machine's functions see of the instance with these terms. -/
 def instCtxT (m : MachineV r e) (key state records now : Term) : Except Refusal Term :=
-  adtCtor L 8 [m.key, m.state, r] [[m.key, m.state, r, .int]] 0 [key, state, records, now]
+  adtCtor L 8 [m.key, m.state, r] [[m.key, m.state, r, .point .ms]] 0 [key, state, records, now]
 
 /-- The context `timer` sees of the instance with these terms: no time. -/
 def timerCtxT (m : MachineV r e) (key state records : Term) : Except Refusal Term :=
@@ -206,7 +206,7 @@ end
 mutual
 /-- Whether the order terms exist depends on the type alone, not on the compared terms. -/
 theorem ordT_isSome (L : Layout) (T : List TypeDecl) : (t : Ty) → (x y x' y' : Term) → (ordT L T t x y).isSome = (ordT L T t x' y').isSome
-  | .int, _, _, _, _ | .date, _, _, _, _ | .str, _, _, _, _ => rfl
+  | .int, _, _, _, _ | .point _, _, _, _, _ | .str, _, _, _, _ => rfl
   | .id, _, _, _, _ => by simp only [ordT]; cases L.find? .id <;> rfl
   | .tuple ts, x, y, x', y' => by
     simp only [ordT]
@@ -244,9 +244,9 @@ variable {L : Layout} {T : List TypeDecl} {M : Model} {r e : Ty}
 theorem up_mctx (m : MachineV r e) (h : (Ty.machineCtx m.key m.state r).isData = true) (k : m.key.den0)
     (st : m.state.den0) (recs : r.den0) (now : Int) :
     Ty.up _ h (.inl (k, st, recs, now, ()) : (Ty.machineCtx m.key m.state r).den0) =
-      Alts.inj (vs := [[m.key, m.state, r, .int]]) ⟨0, by simp⟩
+      Alts.inj (vs := [[m.key, m.state, r, .point .ms]]) ⟨0, by simp⟩
         (Ty.up _ m.key_data k, Ty.up _ m.state_data st, Ty.up _ m.records_data recs, now, ()) := by
-  refine (Ty.up_inl 8 [m.key, m.state, r] [m.key, m.state, r, .int] [] h
+  refine (Ty.up_inl 8 [m.key, m.state, r] [m.key, m.state, r, .point .ms] [] h
     (by simp [Ty.isData, Ty.isDatas, m.key_data, m.state_data, m.records_data]) _).trans ?_
   show Sum.inl _ = Sum.inl _
   congr 1
@@ -286,7 +286,7 @@ theorem inst_check (m : MachineV r e) {inv : Code (Ty.fn [Ty.machineCtx m.key m.
   refine ⟨rfl, htk, ?_⟩
   have hc1 : Holds M c1 := by
     have := (holds_ite _ _ _).1 hcj; simpa [hf, Val.toBool] using this
-  have hctx := adtCtor_rel (L := L) (M := M) (vs := [[m.key, m.state, r, .int]]) ⟨0, by simp⟩ _ _ h1
+  have hctx := adtCtor_rel (L := L) (M := M) (vs := [[m.key, m.state, r, .point .ms]]) ⟨0, by simp⟩ _ _ h1
     (Ty.up _ m.key_data k0, Ty.up _ m.state_data e0, Ty.up _ m.records_data recs, tnow, ())
     ⟨_, _, rfl, htk ▸ hk, _, _, rfl, hte ▸ he, _, _, rfl, hrec, _, _, rfl, hnow, rfl⟩
   rw [← up_mctx m m.ctx_data] at hctx
@@ -518,7 +518,7 @@ theorem timer_view (m : MachineV r e) {dopt n1 dtm n2 : Nat}
         RelV L m.state (Ty.up _ m.state_data tg) ((Term.sel dtm 0 1 (.sel dopt 0 0 tm)).denote M) := by
   have hs := m.state_data
   have htm1 : (Ty.tuple [Ty.timer m.state]).isData = true := by simp [Ty.timer, Ty.isData, Ty.isDatas, Ty.isDatass, hs]
-  have hpair : (Ty.tuple [.int, m.state]).isData = true := by simp [Ty.isData, Ty.isDatas, hs]
+  have hpair : (Ty.tuple [.point .ms, m.state]).isData = true := by simp [Ty.isData, Ty.isDatas, hs]
   have hnone : (Ty.adt 3 [Ty.timer m.state] [[]]).isData = true := by simp [Ty.isData, Ty.isDatass, Ty.isDatas]
   obtain ⟨d', n', hf', hra⟩ := ha
   obtain rfl := find_det hf' h1
@@ -530,7 +530,7 @@ theorem timer_view (m : MachineV r e) {dopt n1 dtm n2 : Nat}
     obtain ⟨v0, _, rfl, hv0, rfl⟩ := hvals
     obtain ⟨d7, n7, hf7, hr7⟩ := hv0
     obtain rfl := find_det hf7 h2
-    erw [Ty.up_inl 7 _ [.int, m.state] [] (by simp [Ty.isData, Ty.isDatas, Ty.isDatass, hs]) hpair] at hr7
+    erw [Ty.up_inl 7 _ [.point .ms, m.state] [] (by simp [Ty.isData, Ty.isDatas, Ty.isDatass, hs]) hpair] at hr7
     obtain ⟨vals7, hv7, hvals7⟩ := hr7
     erw [Ty.up_tuple _ _ _ rfl (by simp [Ty.isData, Ty.isDatas, hs])] at hvals7
     obtain ⟨vd, vs7, rfl, hvd, hvals7⟩ := hvals7
@@ -590,7 +590,7 @@ theorem ctx_rel (m : MachineV r e) {key st records now ctxT : Term} {k : m.key.d
     (h : instCtxT L m key st records now = .ok ctxT) {cx : Code (Ty.machineCtx m.key m.state r)}
     (hcx : Code.ofTerm? _ ctxT = some cx) :
     Smt.Rel M L _ (Ty.up _ m.ctx_data (.inl (k, sv, recs, tnow, ()))) cx := by
-  have hctx := adtCtor_rel (L := L) (M := M) (vs := [[m.key, m.state, r, .int]]) ⟨0, by simp⟩ _ _ h
+  have hctx := adtCtor_rel (L := L) (M := M) (vs := [[m.key, m.state, r, .point .ms]]) ⟨0, by simp⟩ _ _ h
     (Ty.up _ m.key_data k, Ty.up _ m.state_data sv, Ty.up _ m.records_data recs, tnow, ())
     ⟨_, _, rfl, hk, _, _, rfl, hs, _, _, rfl, hrec, _, _, rfl, hnow, rfl⟩
   rw [← up_mctx m m.ctx_data] at hctx

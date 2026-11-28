@@ -34,7 +34,7 @@ theorem enc_tree : (t : Ty) → (x : t.den0) → (w : Wire) → enc T name t x =
     simp only [enc, Option.some.injEq] at h; subst h; exact ⟨_, _, rfl, rfl, rfl⟩
   | .str, x, w, h => by
     simp only [enc, Option.some.injEq] at h; subst h; exact ⟨_, _, rfl, rfl, rfl⟩
-  | .date, x, w, h => by
+  | .point .day, x, w, h | .point .ms, x, w, h => by
     simp only [enc, Option.some.injEq] at h; subst h; exact ⟨_, _, rfl, rfl, rfl⟩
   | .id, x, w, h => by
     simp only [enc, Option.map_eq_some_iff] at h
@@ -232,7 +232,7 @@ mutual
 /-- A value's tree holds its ids at its leaves, as often as its wire form names them. -/
 theorem valTree_leaves : (t : Ty) → (x : t.den0) → (te : Tree Key) → valTree T t x = some te →
     te.leaves.Perm ((idsOf T t x).map Key.id)
-  | .int, _, te, hx | .str, _, te, hx | .date, _, te, hx => by
+  | .int, _, te, hx | .str, _, te, hx | .point .day, _, te, hx | .point .ms, _, te, hx => by
     simp only [valTree, Option.some.injEq] at hx; subst hx; simp [Tree.leaves, idsOf]
   | .id, _, te, hx => by
     simp only [valTree, Option.some.injEq] at hx; subst hx; exact .refl _

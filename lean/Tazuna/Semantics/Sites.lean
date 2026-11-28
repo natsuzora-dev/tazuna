@@ -295,7 +295,8 @@ theorem Defs.collect_handles : {G : List Ty} → (D : Defs G) → D.collect hand
 
 mutual
 theorem Ty_same_self : (t : Ty) → (Ty.same t t).isSome = true
-  | .int | .str | .date | .id => rfl
+  | .int | .str | .id => rfl
+  | .point _ => by simp [Ty.same]
   | .param i => by simp [Ty.same]
   | .list a => by obtain ⟨x, e⟩ := Option.isSome_iff_exists.1 (Ty_same_self a); simp [Ty.same, e]
   | .bag a => by obtain ⟨x, e⟩ := Option.isSome_iff_exists.1 (Ty_same_self a); simp [Ty.same, e]

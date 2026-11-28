@@ -2,9 +2,8 @@
 //// task is added, if it is still open, the service mails a reminder.
 
 import gleam/option.{None, Some}
-import tazuna.{
-  type Ctx, type Id, type Instant, type MachineCtx, type QueryCtx, type TimerCtx,
-}
+import tazuna.{type Ctx, type Id, type MachineCtx, type QueryCtx, type TimerCtx}
+import tazuna/instant.{type Instant}
 import tazuna/table.{type Table}
 
 /// An open task: its title, when it is due for a reminder, and whether the
@@ -57,7 +56,11 @@ fn apply(ctx: tazuna.ApplyCtx(Records), event: Event) -> Records {
       Records(tasks: table.insert(
         records.tasks,
         id,
-        Task(title: title, remind_at: ctx.now + hour, reminded: False),
+        Task(
+          title: title,
+          remind_at: instant.add(ctx.now, hour),
+          reminded: False,
+        ),
       ))
     Completed(id) -> Records(tasks: table.remove(records.tasks, id))
     ReminderDue(id, _title) ->
@@ -88,7 +91,7 @@ fn add() -> tazuna.Command(Records, Event, Caller, String, tazuna.Never) {
           table.get(after.tasks, tazuna.fresh(ctx.fresh, 0))
             == Some(Task(
             title: ctx.input,
-            remind_at: ctx.now + hour,
+            remind_at: instant.add(ctx.now, hour),
             reminded: False,
           )),
         ),

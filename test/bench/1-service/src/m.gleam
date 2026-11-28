@@ -1,6 +1,7 @@
 import gleam/option.{None, Some}
 import tazuna.{type Ctx}
 import tazuna/bag
+import tazuna/instant.{type Instant}
 import tazuna/table.{type Table}
 
 pub type Caller {
@@ -22,11 +23,11 @@ fn tick() -> tazuna.Source(Int) {
 }
 
 pub type R1 {
-  R1(items: Table(Int, Int), total: Int)
+  R1(items: Table(Int, Instant), total: Int)
 }
 
 pub type E1 {
-  Put1(key: Int, value: Int)
+  Put1(key: Int, value: Instant)
   Del1(key: Int)
   Bumped1(amount: Int)
   Ping1
@@ -47,9 +48,11 @@ fn put1() -> tazuna.Command(R1, E1, Caller, Int, Nil) {
     name: "put1",
     callers: [tazuna.Outside(User)],
     accepts: fn(k: Int) { [#("small key", k < 10)] },
-    decide: fn(c: Ctx(R1, Int, Caller)) { Ok([Put1(c.input, c.now + 10)]) },
+    decide: fn(c: Ctx(R1, Int, Caller)) {
+      Ok([Put1(c.input, instant.add(c.now, 10))])
+    },
     ensures: fn(c: Ctx(R1, Int, Caller), r: R1) {
-      [#("kept", table.get(r.items, c.input) == Some(c.now + 10))]
+      [#("kept", table.get(r.items, c.input) == Some(instant.add(c.now, 10)))]
     },
   )
 }

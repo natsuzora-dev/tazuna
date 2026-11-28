@@ -30,10 +30,10 @@ theorem datatype_of_find {dts : List Datatype} (hd : L.datatypes? = some dts) {t
   exact List.all_eq_true.1 hall.symm _ (List.fst_mem_of_mem_zipIdx (List.mem_of_find?_eq_some hfind))
 
 theorem srt_found {t : Ty} (h : (L.srt? t).isSome = true) (hp : ∀ u, t ≠ .dsl .fresh u) (hi : t ≠ .int)
-    (hdt : t ≠ .date) (hs : t ≠ .str) (hb : ∀ a vs, t ≠ .adt 0 a vs) : ∃ x, L.find? t = some x := by
+    (hdt : ∀ u, t ≠ .point u) (hs : t ≠ .str) (hb : ∀ a vs, t ≠ .adt 0 a vs) : ∃ x, L.find? t = some x := by
   unfold Layout.srt? at h
   split at h <;> first
-    | (exfalso; first | exact hi rfl | exact hdt rfl | exact hs rfl | exact hp _ rfl | exact hb _ _ rfl)
+    | (exfalso; first | exact hi rfl | exact hdt _ rfl | exact hs rfl | exact hp _ rfl | exact hb _ _ rfl)
     | exact Option.isSome_iff_exists.1 (by simpa using h)
 
 theorem mapM_some_mem {α β : Type} {f : α → Option β} {xs : List α} (h : (xs.mapM f).isSome = true) :
@@ -62,7 +62,7 @@ mutual
 /-- A data type whose sort a script can declare holds a value of that sort. -/
 theorem sorted_exists (hd : L.datatypes? = some dts) : (t : Ty) → (L.srt? t).isSome = true → t.isData = true →
     ∃ w, Sorted L t w
-  | .int, _, _ | .date, _, _ => ⟨.int 0, 0, rfl⟩
+  | .int, _, _ | .point _, _, _ => ⟨.int 0, 0, rfl⟩
   | .str, _, _ => ⟨.str "", "", rfl, rfl⟩
   | .dsl k a, _, hx => by
     obtain rfl := sorted_dsl_data hx

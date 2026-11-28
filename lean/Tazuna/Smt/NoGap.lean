@@ -141,7 +141,7 @@ def CodeOk : (t : Ty) → Code t → Prop
   | .dsl k a, c => DslOk L P ds H k a c
   | .int, _ => Avail L .int
   | .str, _ => Avail L .str
-  | .date, _ => Avail L .date
+  | .point u, _ => Avail L (.point u)
   | .id, _ => Avail L .id
   | .param i, _ => Avail L (.param i)
   | .list t, _ => Avail L (.list t)
@@ -163,14 +163,14 @@ theorem codeOk_ofTerm : {t : Ty} → {x : Term} → {c : Code t} → Code.ofTerm
     CodeOk L P ds H t c
   | .fn .., _, _, h, _ => by simp [Code.ofTerm?] at h
   | .dsl k a, _, _, h, ha => by cases k <;> simp_all [Code.ofTerm?, DslCode.ofTerm?, CodeOk, DslOk]
-  | .int, _, _, _, ha | .str, _, _, _, ha | .date, _, _, _, ha | .id, _, _, _, ha | .param _, _, _, _, ha
+  | .int, _, _, _, ha | .str, _, _, _, ha | .point _, _, _, _, ha | .id, _, _, _, ha | .param _, _, _, _, ha
   | .list _, _, _, _, ha | .bag _, _, _, _, ha | .tuple _, _, _, _, ha | .adt .., _, _, _, ha | .table .., _, _, _, ha => ha
 
 theorem avail_of_term : {t : Ty} → {c : Code t} → {x : Term} → Code.term? t c = some x → CodeOk L P ds H t c →
     Avail L t
   | .fn .., _, _, h, _ => by simp [Code.term?] at h
   | .dsl k a, _, _, h, ha => by cases k <;> simp_all [Code.term?, DslCode.term?, CodeOk, DslOk]
-  | .int, _, _, _, ha | .str, _, _, _, ha | .date, _, _, _, ha | .id, _, _, _, ha | .param _, _, _, _, ha
+  | .int, _, _, _, ha | .str, _, _, _, ha | .point _, _, _, _, ha | .id, _, _, _, ha | .param _, _, _, _, ha
   | .list _, _, _, _, ha | .bag _, _, _, _, ha | .tuple _, _, _, _, ha | .adt .., _, _, _, ha | .table .., _, _, _, ha => ha
 
 theorem codesOk_ofTerms : {ts : List Ty} → {xs : List Term} → {cs : Codes ts} → Codes.ofTerms? ts xs = some cs →
@@ -192,7 +192,7 @@ theorem codesOk_ofTerms : {ts : List Ty} → {xs : List Term} → {cs : Codes ts
 theorem codeOk_share : (t : Ty) → (c : Code t) → CodeOk L P ds H t c → CodeOk L P ds H t (Code.share t c)
   | .fn .., _, h => h
   | .dsl k a, _, h => by cases k <;> exact h
-  | .int, _, h | .str, _, h | .date, _, h | .id, _, h | .param _, _, h
+  | .int, _, h | .str, _, h | .point _, _, h | .id, _, h | .param _, _, h
   | .list _, _, h | .bag _, _, h | .tuple _, _, h | .adt .., _, h | .table .., _, h => h
 
 theorem codesOk_share : (ts : List Ty) → (cs : Codes ts) → CodesOk L P ds H ts cs →
@@ -227,7 +227,7 @@ mutual
 holds (`fx` false: only data, so no effect). -/
 theorem defaultWith_isSome (hd : DslDefaults D dsl fx) : (t : Ty) → Layout.HasWith L D t → t.sorted = true → (fx = false → t.isData = true) →
     (defaultWith L dsl t).isSome = true
-  | .int, _, _, _ | .date, _, _, _ | .str, _, _, _ => rfl
+  | .int, _, _, _ | .point _, _, _, _ | .str, _, _, _ => rfl
   | .adt 0 _ vs, _, hs, _ => by simp only [Ty.sorted] at hs; simp [defaultWith, hs]
   | .adt (i + 1) a vs, ⟨hv, hf⟩, hs, hx => by
     obtain ⟨⟨d, n⟩, hd'⟩ := Option.isSome_iff_exists.1 hf
@@ -544,7 +544,7 @@ theorem slotTerms_sound2 {k v r : Ty} {w : Nat} {f : Code (.fn [k, v] r)} (hf : 
 
 mutual
 theorem eqFn_sound (hL : SortedLayout L) : (t : Ty) → Avail L t → Sound (fun _ => True) (eqFn L t)
-  | .int, _ | .str, _ | .date, _ | .id, _ => trivial
+  | .int, _ | .str, _ | .point _, _ | .id, _ => trivial
   | .dsl _ _, _ | .adt 0 _ _, _ => by unfold eqFn; split <;> trivial
   | .tuple ts, ha => by
     unfold eqFn; split
@@ -856,7 +856,7 @@ end
 section
 variable {L : Layout} {P : List AnySite} {ds : List (String × DeclaredV)} {H : List HandleSite}
 
-theorem avail_date : Avail L .date := fun _ => trivial
+theorem avail_date {u : TimeUnit} : Avail L (.point u) := fun _ => trivial
 
 /-- The code of every built-in but the handle-making ones (which only a call with a literal name makes) has no gap
 behind it. -/
@@ -868,6 +868,9 @@ theorem primCode_sound (hC : Covers L P ds) (p : Prim) (args : List Ty) (h : p.o
   | .length, _, _ => intro _ _ _; exact avail_int
   | .dateAddDays, _, _ => intro _ _ _; exact avail_date
   | .dateDaysBetween, _, _ => intro _ _ _; exact avail_int
+  | .instantAdd, _, _ => intro _ _ _; exact avail_date
+  | .instantDiff, _, _ => intro _ _ _; exact avail_int
+  | .instantIsBefore, _, _ | .instantIsAfter, _, _ => intro _ _ _; exact avail_bool
   | .require, args, _ =>
     intro ⟨holds, rej, next, ()⟩ ⟨_, _, hn, _⟩ hr
     exact sound_bind (hn () trivial hr) fun _ _ => sound_bind sound_termE fun _ _ =>
@@ -1682,7 +1685,7 @@ theorem allSorted_addTyWith (hd : ∀ L k a, AllSorted K L → (Ty.dsl k a).sort
     simp only [Ty.sortable, Bool.and_eq_true] at ht
     exact allSorted_addTyWith hd _ (allSorted_addTysWith hd L h ps (sortables_mem ht.1)) r ht.2
   | L, h, .dsl k a, ht => hd L k a h ht
-  | _, h, .int, _ | _, h, .str, _ | _, h, .date, _ | _, h, .param _, _ => h
+  | _, h, .int, _ | _, h, .str, _ | _, h, .point _, _ | _, h, .param _, _ => h
 theorem allSorted_addTysWith (hd : ∀ L k a, AllSorted K L → (Ty.dsl k a).sortable = true → AllSorted K (dsl L k a)) :
     (L : Layout) → AllSorted K L → (ts : List Ty) → (∀ t ∈ ts, t.sortable = true) → AllSorted K (addTysWith slots dsl L ts)
   | _, h, [], _ => h
@@ -2341,7 +2344,7 @@ theorem codeOk_free : (t : Ty) → t.phFree = true → (c : Code t) → (CodeOk 
       exact sound_mono (hf xs ((codesOk_free ps h.1 xs).1 hxs) ha) fun p hp => (codeOk_free r h.2 p.1).2 hp
   | .dsl k a, h, c => by
     cases k <;> simp only [Ty.phFree, Bool.false_eq_true] at h <;> simp [CodeOk, DslOk]
-  | .int, _, _ | .str, _, _ | .date, _, _ | .id, _, _ | .param _, _, _ | .list _, _, _ | .bag _, _, _
+  | .int, _, _ | .str, _, _ | .point _, _, _ | .id, _, _ | .param _, _, _ | .list _, _, _ | .bag _, _, _
   | .tuple _, _, _ | .adt .., _, _ | .table .., _, _ => Iff.rfl
 theorem codesOk_free : (ts : List Ty) → Ty.phFrees ts = true → (cs : Codes ts) →
     (CodesOk L P ds H ts cs ↔ CodesOk L P' ds H' ts cs)
@@ -2360,7 +2363,7 @@ theorem phFree_of_data : (t : Ty) → t.isData = true → t.phFree = true
   | .dsl k _, h => by
     obtain rfl := sorted_dsl_data h
     rfl
-  | .int, _ | .str, _ | .date, _ | .id, _ | .param _, _ | .list _, _ | .bag _, _ | .tuple _, _ | .adt .., _
+  | .int, _ | .str, _ | .point _, _ | .id, _ | .param _, _ | .list _, _ | .bag _, _ | .tuple _, _ | .adt .., _
   | .table .., _ => rfl
 theorem phFrees_of_data : (ts : List Ty) → Ty.isDatas ts = true → Ty.phFrees ts = true
   | [], _ => rfl

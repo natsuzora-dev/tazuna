@@ -102,7 +102,7 @@ mutual
 /-- On a comparable type, a value `==` to one related to `y` is itself related to `y`. -/
 theorem Ty.rel0_deq_left : (t : Ty) → t.comparable = true → {x x1 y : t.den0} → t.deq0 x x1 = true →
     Ty.rel0 R t x1 y → Ty.rel0 R t x y
-  | .int, _, _, _, _, e, h | .str, _, _, _, _, e, h | .date, _, _, _, _, e, h => by
+  | .int, _, _, _, _, e, h | .str, _, _, _, _, e, h | .point _, _, _, _, _, e, h => by
     have e := beq_iff_eq.1 e
     exact e ▸ h
   | .id, _, x, x1, y, e, h => by
@@ -551,7 +551,7 @@ theorem Ty.deq0_refl {t : Ty} (hc : t.comparable = true) (x : t.den0) : t.deq0 x
 mutual
 /-- Every comparable value relates to itself with every name kept. -/
 theorem Ty.rel0_refl : (t : Ty) → t.comparable = true → (x : t.den0) → Ty.rel0 PBij.refl t x x
-  | .int, _, _ | .str, _, _ | .date, _, _ => rfl
+  | .int, _, _ | .str, _, _ | .point _, _, _ => rfl
   | .param _, _, _ => trivial
   | .id, _, .named _ => .inl ⟨_, rfl, rfl⟩
   | .id, _, .fresh _ _ => .inr ⟨_, _, _, rfl, rfl, rfl⟩

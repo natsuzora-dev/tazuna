@@ -181,7 +181,7 @@ theorem variantT_holds (t : Ty) (h : t.isData = true) (y : t.den0) {x : Term} (h
     refine (holds_anyT _).2 ⟨.is d (altIndex vs y) x,
       List.mem_filterMap.2 ⟨altIndex vs y, List.mem_range.2 (altIndex_lt _ y), by simp⟩, ?_⟩
     simp [Holds, Term.denote, hv, Val.toBool]
-  | .int, _, _, _ | .str, _, _, _ | .date, _, _, _ | .id, _, _, _ | .list _, _, _, _ | .tuple _, _, _, _
+  | .int, _, _, _ | .str, _, _, _ | .point _, _, _, _ | .id, _, _, _ | .list _, _, _, _ | .tuple _, _, _, _
   | .fn _ _, _, _, _ | .param _, _, _, _ | .bag _, _, _, _ | .table _ _, _, _, _ | .dsl _ _, _, _, _ =>
     simp [variantT, variantOf, Holds, Term.denote, Val.toBool]
 
@@ -258,7 +258,7 @@ theorem variantT_sound (t : Ty) (h : t.isData = true) (y : t.den0) {x : Term} {V
       subst ht
       simpa using hV
     · cases hkt
-  | .int, _, _, _ | .str, _, _, _ | .date, _, _, _ | .id, _, _, _ | .list _, _, _, _ | .tuple _, _, _, _
+  | .int, _, _, _ | .str, _, _, _ | .point _, _, _, _ | .id, _, _, _ | .list _, _, _, _ | .tuple _, _, _, _
   | .fn _ _, _, _, _ | .param _, _, _, _ | .bag _, _, _, _ | .table _ _, _, _, _ | .dsl _ _, _, _, _ =>
     simp only [variantT, variantOf, Holds, Term.denote, Val.toBool, beq_iff_eq] at hv ⊢
     exact hv.symm

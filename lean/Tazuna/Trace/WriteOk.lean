@@ -37,7 +37,7 @@ set_option linter.unusedSectionVars false
 mutual
 theorem enc_isSome : (t : Ty) → t.encodes T = true → (x : t.den0) → (∀ i ∈ idsOf T t x, (name i).isSome) →
     (enc T name t x).isSome
-  | .int, _, _, _ | .str, _, _, _ | .date, _, _, _ => rfl
+  | .int, _, _, _ | .str, _, _, _ | .point .day, _, _, _ | .point .ms, _, _, _ => rfl
   | .id, _, x, h => by simpa [enc] using h x (List.mem_singleton_self x)
   | .list t, he, xs, h => by
     simp only [enc, Option.isSome_map]

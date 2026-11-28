@@ -41,7 +41,7 @@ mutual
 /-- A code of a value of a comparable type decodes. -/
 theorem decode_isSome_of_relV : (t : Ty) → t.comparable = true → (x : t.den) → (z : Val) → RelV L t x z →
     (decodeV L t z).isSome = true
-  | .int, _, _, _, h | .date, _, _, _, h => by cases h; rfl
+  | .int, _, _, _, h | .point _, _, _, _, h => by cases h; rfl
   | .str, _, x, _, h => by cases h; simp [decodeV, (x : Str).2]; rfl
   | .dsl .fresh _, _, x, _, h => by
     cases h

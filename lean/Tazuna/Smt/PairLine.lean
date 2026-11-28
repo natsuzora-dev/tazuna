@@ -33,7 +33,7 @@ theorem occupied_mem {sv : List (Bool × List Val)} {p : Bool × List Val} (hp :
 mutual
 /-- A value that codes data has its type's sort. -/
 theorem sorted_of_relD : (t : Ty) → (x : t.den0) → (z : Val) → RelD L t x z → Sorted L t z
-  | .int, x, _, h | .date, x, _, h => ⟨x, h⟩
+  | .int, x, _, h | .point _, x, _, h => ⟨x, h⟩
   | .str, x, _, h => ⟨(x : Str).1, (x : Str).2, h⟩
   | .dsl .fresh _, x, _, h => ⟨_, h⟩
   | .id, x, _, ⟨d, n, hf, h⟩ => by

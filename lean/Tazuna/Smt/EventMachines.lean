@@ -126,7 +126,7 @@ theorem instCheck_exact (m : MachineV r e) {inv : Code (Ty.fn [Ty.machineCtx m.k
   obtain ⟨⟨rs, c1⟩, h3, hg⟩ := bind_ok.1 hg
   obtain ⟨rules, h4, hg⟩ := bind_ok.1 hg
   cases pure_ok.1 hg
-  have hctx := adtCtor_rel (L := L) (M := M) (vs := [[m.key, m.state, r, .int]]) ⟨0, by simp⟩ _ _ h1
+  have hctx := adtCtor_rel (L := L) (M := M) (vs := [[m.key, m.state, r, .point .ms]]) ⟨0, by simp⟩ _ _ h1
     (Ty.up _ m.key_data k0, Ty.up _ m.state_data e0, Ty.up _ m.records_data recs, tnow, ())
     ⟨_, _, rfl, htk ▸ hk, _, _, rfl, hte ▸ he, _, _, rfl, hrec, _, _, rfl, hnow, rfl⟩
   rw [← up_mctx m m.ctx_data] at hctx

@@ -19,7 +19,7 @@ mutual
 /-- A value related to an SMT value embeds: the relation holds each collection's items in its slots. -/
 theorem embed_of_relV : (t : Ty) → t.embeddable = true → (x : t.den) → (z : Val) → RelV L t x z →
     (embedV L t x).isSome
-  | .int, _, _, _, _ | .str, _, _, _, _ | .date, _, _, _, _ => by simp [embedV]
+  | .int, _, _, _, _ | .str, _, _, _, _ | .point _, _, _, _, _ => by simp [embedV]
   | .dsl k a, he, _, _, _ => by
     simp only [Ty.embeddable, beq_iff_eq] at he; subst he; simp [embedV]
   | .id, _, _, _, ⟨d, n, hf, _⟩ => by simp [embedV, hf]
@@ -224,7 +224,7 @@ def inputTys (v : ServiceV) : List Ty :=
 mutual
 /-- Whether every value of the type embeds: it holds no list, bag or table, and the layout holds its datatypes. -/
 def fitsAll (L : Layout) : Ty → Bool
-  | .int | .str | .date => true
+  | .int | .str | .point _ => true
   | .id => (L.find? .id).isSome
   | .dsl k _ => k == .fresh
   | .adt 0 _ vs => (boolVs? vs).isSome
@@ -244,7 +244,7 @@ variable {L : Layout}
 
 mutual
 theorem embed_of_fitsAll : (t : Ty) → fitsAll L t = true → (x : t.den) → (embedV L t x).isSome
-  | .int, _, _ | .str, _, _ | .date, _, _ => by simp [embedV]
+  | .int, _, _ | .str, _, _ | .point _, _, _ => by simp [embedV]
   | .id, h, _ => by
     obtain ⟨⟨d, n⟩, hf⟩ := Option.isSome_iff_exists.1 h
     simp [embedV, hf]

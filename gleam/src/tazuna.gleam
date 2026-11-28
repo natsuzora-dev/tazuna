@@ -8,6 +8,7 @@
 
 import gleam/option.{type Option}
 import tazuna/bag.{type Bag}
+import tazuna/instant.{type Instant}
 import tazuna/internal/launch
 import tazuna/table.{type Table}
 
@@ -136,10 +137,6 @@ pub type ApplyCtx(records) {
 pub type TimerCtx(key, state, records) {
   TimerCtx(key: key, state: state, records: records)
 }
-
-/// A point in time, in milliseconds.
-pub type Instant =
-  Int
 
 /// A length of time, in milliseconds.
 pub type Duration =

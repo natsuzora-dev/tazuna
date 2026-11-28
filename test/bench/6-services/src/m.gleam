@@ -1,6 +1,7 @@
 import gleam/option.{None, Some}
 import tazuna.{type Ctx}
 import tazuna/bag
+import tazuna/instant.{type Instant}
 import tazuna/table.{type Table}
 
 pub type Caller {
@@ -22,11 +23,11 @@ fn tick() -> tazuna.Source(Int) {
 }
 
 pub type R1 {
-  R1(items: Table(Int, Int), total: Int)
+  R1(items: Table(Int, Instant), total: Int)
 }
 
 pub type E1 {
-  Put1(key: Int, value: Int)
+  Put1(key: Int, value: Instant)
   Del1(key: Int)
   Bumped1(amount: Int)
   Ping1
@@ -47,9 +48,11 @@ fn put1() -> tazuna.Command(R1, E1, Caller, Int, Nil) {
     name: "put1",
     callers: [tazuna.Outside(User)],
     accepts: fn(k: Int) { [#("small key", k < 10)] },
-    decide: fn(c: Ctx(R1, Int, Caller)) { Ok([Put1(c.input, c.now + 10)]) },
+    decide: fn(c: Ctx(R1, Int, Caller)) {
+      Ok([Put1(c.input, instant.add(c.now, 10))])
+    },
     ensures: fn(c: Ctx(R1, Int, Caller), r: R1) {
-      [#("kept", table.get(r.items, c.input) == Some(c.now + 10))]
+      [#("kept", table.get(r.items, c.input) == Some(instant.add(c.now, 10)))]
     },
   )
 }
@@ -196,11 +199,11 @@ fn s1() -> tazuna.Service {
 }
 
 pub type R2 {
-  R2(items: Table(Int, Int), total: Int)
+  R2(items: Table(Int, Instant), total: Int)
 }
 
 pub type E2 {
-  Put2(key: Int, value: Int)
+  Put2(key: Int, value: Instant)
   Del2(key: Int)
   Bumped2(amount: Int)
   Ping2
@@ -221,9 +224,11 @@ fn put2() -> tazuna.Command(R2, E2, Caller, Int, Nil) {
     name: "put2",
     callers: [tazuna.Outside(User)],
     accepts: fn(k: Int) { [#("small key", k < 10)] },
-    decide: fn(c: Ctx(R2, Int, Caller)) { Ok([Put2(c.input, c.now + 10)]) },
+    decide: fn(c: Ctx(R2, Int, Caller)) {
+      Ok([Put2(c.input, instant.add(c.now, 10))])
+    },
     ensures: fn(c: Ctx(R2, Int, Caller), r: R2) {
-      [#("kept", table.get(r.items, c.input) == Some(c.now + 10))]
+      [#("kept", table.get(r.items, c.input) == Some(instant.add(c.now, 10)))]
     },
   )
 }
@@ -370,11 +375,11 @@ fn s2() -> tazuna.Service {
 }
 
 pub type R3 {
-  R3(items: Table(Int, Int), total: Int)
+  R3(items: Table(Int, Instant), total: Int)
 }
 
 pub type E3 {
-  Put3(key: Int, value: Int)
+  Put3(key: Int, value: Instant)
   Del3(key: Int)
   Bumped3(amount: Int)
   Ping3
@@ -395,9 +400,11 @@ fn put3() -> tazuna.Command(R3, E3, Caller, Int, Nil) {
     name: "put3",
     callers: [tazuna.Outside(User)],
     accepts: fn(k: Int) { [#("small key", k < 10)] },
-    decide: fn(c: Ctx(R3, Int, Caller)) { Ok([Put3(c.input, c.now + 10)]) },
+    decide: fn(c: Ctx(R3, Int, Caller)) {
+      Ok([Put3(c.input, instant.add(c.now, 10))])
+    },
     ensures: fn(c: Ctx(R3, Int, Caller), r: R3) {
-      [#("kept", table.get(r.items, c.input) == Some(c.now + 10))]
+      [#("kept", table.get(r.items, c.input) == Some(instant.add(c.now, 10)))]
     },
   )
 }
@@ -544,11 +551,11 @@ fn s3() -> tazuna.Service {
 }
 
 pub type R4 {
-  R4(items: Table(Int, Int), total: Int)
+  R4(items: Table(Int, Instant), total: Int)
 }
 
 pub type E4 {
-  Put4(key: Int, value: Int)
+  Put4(key: Int, value: Instant)
   Del4(key: Int)
   Bumped4(amount: Int)
   Ping4
@@ -569,9 +576,11 @@ fn put4() -> tazuna.Command(R4, E4, Caller, Int, Nil) {
     name: "put4",
     callers: [tazuna.Outside(User)],
     accepts: fn(k: Int) { [#("small key", k < 10)] },
-    decide: fn(c: Ctx(R4, Int, Caller)) { Ok([Put4(c.input, c.now + 10)]) },
+    decide: fn(c: Ctx(R4, Int, Caller)) {
+      Ok([Put4(c.input, instant.add(c.now, 10))])
+    },
     ensures: fn(c: Ctx(R4, Int, Caller), r: R4) {
-      [#("kept", table.get(r.items, c.input) == Some(c.now + 10))]
+      [#("kept", table.get(r.items, c.input) == Some(instant.add(c.now, 10)))]
     },
   )
 }
@@ -718,11 +727,11 @@ fn s4() -> tazuna.Service {
 }
 
 pub type R5 {
-  R5(items: Table(Int, Int), total: Int)
+  R5(items: Table(Int, Instant), total: Int)
 }
 
 pub type E5 {
-  Put5(key: Int, value: Int)
+  Put5(key: Int, value: Instant)
   Del5(key: Int)
   Bumped5(amount: Int)
   Ping5
@@ -743,9 +752,11 @@ fn put5() -> tazuna.Command(R5, E5, Caller, Int, Nil) {
     name: "put5",
     callers: [tazuna.Outside(User)],
     accepts: fn(k: Int) { [#("small key", k < 10)] },
-    decide: fn(c: Ctx(R5, Int, Caller)) { Ok([Put5(c.input, c.now + 10)]) },
+    decide: fn(c: Ctx(R5, Int, Caller)) {
+      Ok([Put5(c.input, instant.add(c.now, 10))])
+    },
     ensures: fn(c: Ctx(R5, Int, Caller), r: R5) {
-      [#("kept", table.get(r.items, c.input) == Some(c.now + 10))]
+      [#("kept", table.get(r.items, c.input) == Some(instant.add(c.now, 10)))]
     },
   )
 }
@@ -892,11 +903,11 @@ fn s5() -> tazuna.Service {
 }
 
 pub type R6 {
-  R6(items: Table(Int, Int), total: Int)
+  R6(items: Table(Int, Instant), total: Int)
 }
 
 pub type E6 {
-  Put6(key: Int, value: Int)
+  Put6(key: Int, value: Instant)
   Del6(key: Int)
   Bumped6(amount: Int)
   Ping6
@@ -917,9 +928,11 @@ fn put6() -> tazuna.Command(R6, E6, Caller, Int, Nil) {
     name: "put6",
     callers: [tazuna.Outside(User)],
     accepts: fn(k: Int) { [#("small key", k < 10)] },
-    decide: fn(c: Ctx(R6, Int, Caller)) { Ok([Put6(c.input, c.now + 10)]) },
+    decide: fn(c: Ctx(R6, Int, Caller)) {
+      Ok([Put6(c.input, instant.add(c.now, 10))])
+    },
     ensures: fn(c: Ctx(R6, Int, Caller), r: R6) {
-      [#("kept", table.get(r.items, c.input) == Some(c.now + 10))]
+      [#("kept", table.get(r.items, c.input) == Some(instant.add(c.now, 10)))]
     },
   )
 }

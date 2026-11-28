@@ -67,7 +67,7 @@ def Ty.ofPick {a : Ty} : Except Bool a.den → (Ty.result a .pickError).den
 mutual
 theorem Ty.isData_inst {args : List Ty} (h : ∀ t ∈ args, t.isData = true) :
     (t : Ty) → t.isData = true → (t.inst args).isData = true
-  | .int, _ | .str, _ | .date, _ | .id, _ => rfl
+  | .int, _ | .str, _ | .point _, _ | .id, _ => rfl
   | .param k, _ => by
     simp only [Ty.inst]
     cases e : args[k]? with
@@ -148,6 +148,10 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
   | .tableAll, _, _ => fun (t, f, ()) => Ty.ofBool (t.1.all fun (k, v) => Ty.toBool (f (k, v, ())))
   | .dateAddDays, _, _ => fun (d, n, ()) => @HAdd.hAdd Int Int Int _ d n
   | .dateDaysBetween, _, _ => fun (a, b, ()) => @HSub.hSub Int Int Int _ b a
+  | .instantAdd, _, _ => fun (d, n, ()) => @HAdd.hAdd Int Int Int _ d n
+  | .instantDiff, _, _ => fun (a, b, ()) => @HSub.hSub Int Int Int _ b a
+  | .instantIsBefore, _, _ => fun (a, b, ()) => Ty.ofBool (decide ((show Int from a) < (show Int from b)))
+  | .instantIsAfter, _, _ => fun (a, b, ()) => Ty.ofBool (decide ((show Int from b) < (show Int from a)))
   | .require, _, _ => fun (holds, rejection, next, ()) => if Ty.toBool holds then next () else Ty.error rejection
   | .spec, _, _ => fun (services, externals, ()) =>
     let services : List ServiceV := services

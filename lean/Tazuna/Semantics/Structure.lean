@@ -186,7 +186,7 @@ structure ResponseV (r e : Ty) where
   then_ : Fun (Ty.fn [e, e] Ty.bool)
   within : Int
   /-- The deadline the records keep for a trigger, while it waits for its answer; none once it waits no more. -/
-  deadline : Fun (Ty.fn [r, e] (Ty.option Ty.int))
+  deadline : Fun (Ty.fn [r, e] (Ty.option (.point .ms)))
 
 /-- A response's time limit as a count, for everything after check, which rejects a negative one
 (`Illegal.response`); the only place that converts. -/

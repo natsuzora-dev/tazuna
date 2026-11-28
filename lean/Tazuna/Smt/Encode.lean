@@ -222,7 +222,7 @@ is a term too: slots, like a bag's, whose occupied ones hold the items in order.
 def Code : Ty → Type
   | .fn ps r => Codes ps → Except Refusal (Code r × Term)
   | .dsl k a => DslCode k a
-  | .list _ | .int | .str | .tuple _ | .adt .. | .param _ | .bag _ | .table .. | .date | .id => Term
+  | .list _ | .int | .str | .tuple _ | .adt .. | .param _ | .bag _ | .table .. | .point _ | .id => Term
 def Codes : List Ty → Type
   | [] => Unit
   | t :: ts => Code t × Codes ts
@@ -264,20 +264,20 @@ def andT : Term → Term → Term
 def Code.term? : (t : Ty) → Code t → Option Term
   | .fn .., _ => none
   | .dsl k a, s => DslCode.term? k a s
-  | .list _, s | .int, s | .str, s | .tuple _, s | .adt .., s | .param _, s | .bag _, s | .table .., s | .date, s | .id, s =>
+  | .list _, s | .int, s | .str, s | .tuple _, s | .adt .., s | .param _, s | .bag _, s | .table .., s | .point _, s | .id, s =>
     some s
 
 def Code.ofTerm? : (t : Ty) → Term → Option (Code t)
   | .fn .., _ => none
   | .dsl k a, s => DslCode.ofTerm? k a s
-  | .list _, s | .int, s | .str, s | .tuple _, s | .adt .., s | .param _, s | .bag _, s | .table .., s | .date, s | .id, s =>
+  | .list _, s | .int, s | .str, s | .tuple _, s | .adt .., s | .param _, s | .bag _, s | .table .., s | .point _, s | .id, s =>
     some s
 
 /-- The code shared (`Term.share`) when it is a term: a bound variable may be used any number of times. -/
 def Code.share : (t : Ty) → Code t → Code t
   | .fn .., s => s
   | .dsl k a, s => DslCode.share k a s
-  | .list _, s | .int, s | .str, s | .tuple _, s | .adt .., s | .param _, s | .bag _, s | .table .., s | .date, s | .id, s =>
+  | .list _, s | .int, s | .str, s | .tuple _, s | .adt .., s | .param _, s | .bag _, s | .table .., s | .point _, s | .id, s =>
     Term.share s
 
 def Codes.share : (ts : List Ty) → Codes ts → Codes ts
@@ -330,7 +330,7 @@ mutual
 of such an event type, or a fresh-id source. The program's types include those of the spec's structure (lists of declarations, services);
 those values are never coded, so they get no datatype. -/
 def Ty.sorted : Ty → Bool
-  | .int | .str | .date | .id => true
+  | .int | .str | .point _ | .id => true
   | .param _ | .fn .. => false
   | .list t | .bag t => Ty.sorted t
   | .tuple ts => Ty.sorteds ts
@@ -363,7 +363,7 @@ mutual
 /-- Whether SMT-LIB's `=` on codes is Gleam's `==`: the code of a value is unique, so no bag or table (whose slots
 can hold the same items in another order) and nothing without a term. -/
 def Ty.eqable : Ty → Bool
-  | .int | .str | .date | .id | .dsl .fresh _ => true
+  | .int | .str | .point _ | .id | .dsl .fresh _ => true
   | .tuple ts => Ty.eqables ts
   | .adt 0 _ vs => (Smt.boolVs? vs).isSome
   | .adt (_ + 1) _ vs => Ty.eqabless vs
@@ -379,7 +379,7 @@ end
 mutual
 /-- Data with a sort is comparable: a sort rules out functions and type variables, data rules out structure values. -/
 theorem Ty.comparable_of_sorted : (t : Ty) → t.sorted = true → t.isData = true → t.comparable = true
-  | .int, _, _ | .str, _, _ | .date, _, _ | .id, _, _ | .param _, _, _ => rfl
+  | .int, _, _ | .str, _, _ | .point _, _, _ | .id, _, _ | .param _, _, _ => rfl
   | .fn .., h, _ => by simp [Ty.sorted] at h
   | .list t, h, hd | .bag t, h, hd =>
     Ty.comparable_of_sorted t (by simpa [Ty.sorted] using h) (by simpa [Ty.isData] using hd)
@@ -538,7 +538,7 @@ variable (dsl : Dsl → List Ty → Option Term)
 mutual
 /-- A term of the type's sort, with `dsl` giving one for a structure type. -/
 def defaultWith : Ty → Option Term
-  | .int | .date => some (.int 0)
+  | .int | .point _ => some (.int 0)
   | .str => some (.str "")
   | .adt 0 _ vs => if (boolVs? vs).isSome then some (.bool false) else none
   | .adt (i + 1) a vs => do
@@ -731,7 +731,7 @@ slots of bags and tables, whose slots can hold the same items in another order, 
 and custom types that hold them. A list's free slots may sit between occupied ones, so its code is not unique and
 its `==` is refused. -/
 def eqFn : Ty → Except Refusal (Term → Term → Term)
-  | .int | .str | .date | .id => .ok .eq
+  | .int | .str | .point _ | .id => .ok .eq
   | .dsl k a => if k == .fresh then .ok .eq else .error (.limit (.equality (.dsl k a)))
   | .adt 0 a vs => if (boolVs? vs).isSome then .ok .eq else .error (.limit (.equality (.adt 0 a vs)))
   | .tuple ts => if Ty.eqables ts then .ok .eq else do
@@ -823,6 +823,10 @@ def primCode (p : Prim) (args : List Ty) (h : p.ok args = true) : Except Refusal
   | .length, _, _ => .ok fun (s, ()) => .ok (.len s, tt)
   | .dateAddDays, _, _ => .ok fun (d, n, ()) => .ok (.add d n, tt)
   | .dateDaysBetween, _, _ => .ok fun (a, b, ()) => .ok (.sub b a, tt)
+  | .instantAdd, _, _ => .ok fun (d, n, ()) => .ok (.add d n, tt)
+  | .instantDiff, _, _ => .ok fun (a, b, ()) => .ok (.sub b a, tt)
+  | .instantIsBefore, _, _ => .ok fun (a, b, ()) => .ok (.lt a b, tt)
+  | .instantIsAfter, _, _ => .ok fun (a, b, ()) => .ok (.lt b a, tt)
   | .require, args, _ => .ok fun (holds, rej, next, ()) => do
     let (v, c) ← next ()
     let r ← Code.termE _ rej
@@ -1159,7 +1163,7 @@ def addTyWith (L : Layout) : Ty → Layout
   | .bag t => ((addTyWith L t).push (.tuple [Ty.bool, t])).push (.bag t) (slots (.bag t))
   | .table k v => (((addTyWith (addTyWith L k) v)).push (.tuple [Ty.bool, k, v])).push (.table k v) (slots (.table k v))
   | .dsl k a => dsl L k a
-  | .int | .str | .date | .param _ => L
+  | .int | .str | .point _ | .param _ => L
 def addTysWith (L : Layout) : List Ty → Layout
   | [] => L
   | t :: ts => addTysWith (addTyWith L t) ts
@@ -1192,7 +1196,7 @@ def addEffects (slots : Ty → Nat) (L : Layout) : Layout :=
 /-- The sort that codes values of a first-order type. -/
 def srt? (L : Layout) (t : Ty) : Option Srt :=
   match t with
-  | .int | .date | .dsl .fresh _ => some .int
+  | .int | .point _ | .dsl .fresh _ => some .int
   | .str => some .str
   | .adt 0 _ vs => if (boolVs? vs).isSome then some .bool else none
   | t => (L.find? t).map fun (d, _) => .dt d

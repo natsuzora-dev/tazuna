@@ -215,7 +215,7 @@ items, so the term is well sorted. -/
 def dataT : (t : Ty) → t.den → Option Term
   | .int, n => some (.int n)
   | .str, s => some (.str (s : Str).1)
-  | .date, n => some (.int n)
+  | .point _, n => some (.int n)
   | .dsl .fresh _, n => some (.int (Int.ofNat n))
   | .id, x => (L.find? .id).map fun (d, _) => (idVal d x).term
   | .adt 0 _ [[], []], x => some (.bool (altsBool x))

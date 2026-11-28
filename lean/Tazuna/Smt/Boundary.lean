@@ -17,7 +17,7 @@ open Tazuna.Ir
 namespace Layout
 
 theorem srt_isSome_le {L L' : Layout} (h : Le L L') : (t : Ty) → (L.srt? t).isSome = true → (L'.srt? t).isSome = true
-  | .int, _ | .str, _ | .date, _ => rfl
+  | .int, _ | .str, _ | .point _, _ => rfl
   | .adt 0 _ vs, hs => by simpa [srt?] using hs
   | .dsl .fresh _, _ => rfl
   | .tuple _, hs | .adt (_ + 1) _ _, hs | .id, hs | .list _, hs | .bag _, hs | .table _ _, hs | .fn _ _, hs
@@ -64,7 +64,7 @@ theorem datatype_isSome_iff (L : Layout) (t : Ty) (n : Nat) : (L.datatype? (t, n
     | .reaction, _ | .external, _ | .externalCommand, _ | .externalQuery, _ | .source, _ | .declared, _
     | .subscription, _ | .model, _ | .scope, _ | .values, _ | .create, _ | .response, _ | .scenario, _ | .step, _ | .sender, _
     | .closure, _ | .effectClosure, _ | .fresh, _ => simp [datatype?, DtCond]
-  | int | str | date | fn | param => simp [datatype?, DtCond]
+  | int | str | point _ | fn | param => simp [datatype?, DtCond]
 
 theorem dtCond_le {L L' : Layout} (h : Le L L') : (t : Ty) → L.DtCond t → L'.DtCond t
   | .tuple _, c => fun u hu => srt_isSome_le h u (c u hu)
@@ -73,12 +73,12 @@ theorem dtCond_le {L L' : Layout} (h : Le L L') : (t : Ty) → L.DtCond t → L'
   | .bag _, c | .list _, c | .table _ _, c => srt_isSome_le h _ c
   | .dsl .effect [e], c => by
     simp only [DtCond, effectFields_le h] at c ⊢; exact fun fs hfs u hu => srt_isSome_le h u (c fs hfs u hu)
-  | .int, c | .str, c | .date, c | .fn _ _, c | .param _, c => c.elim
+  | .int, c | .str, c | .point _, c | .fn _ _, c | .param _, c => c.elim
   | .dsl .fresh _, c => c.elim
 
 
 theorem srt_of_find {L : Layout} : (t : Ty) → t.sorted = true → (L.find? t).isSome = true → (L.srt? t).isSome = true
-  | .int, _, _ | .str, _, _ | .date, _, _ => rfl
+  | .int, _, _ | .str, _, _ | .point _, _, _ => rfl
   | .adt 0 _ vs, ht, _ => by simpa [srt?, Ty.sorted] using ht
   | .dsl .fresh _, _, _ => rfl
   | .tuple _, _, hf | .adt (_ + 1) _ _, _, hf | .id, _, hf | .list _, _, hf | .bag _, _, hf | .table _ _, _, hf
@@ -122,7 +122,7 @@ theorem addTyWith_srt
     | .reaction, _ | .external, _ | .externalCommand, _ | .externalQuery, _ | .source, _ | .declared, _
     | .subscription, _ | .model, _ | .scope, _ | .values, _ | .create, _ | .response, _ | .scenario, _ | .step, _ | .sender, _
     | .closure, _ | .effectClosure, _ => simp [Ty.sorted] at ht
-  | int | str | date => rfl
+  | int | str | point _ => rfl
   | fn | param => simp [Ty.sorted] at ht
 
 theorem addTysWith_srt (hd : ∀ L k a, Le L (dsl L k a))
@@ -224,7 +224,7 @@ theorem addTyWith_dts : (L : Layout) → Le K L → DtsOk L → (t : Ty) → ok 
     exact addTyWith_dts _ (hK.trans (addTysWith_le hd L ps)) (addTysWith_dts L hK h ps fun p hp => ⟨(hc.fn ps r hok).1 p hp, sortables_mem (slots := slots) (dsl := dsl) (K := L) ht.1 p hp⟩) r
       (hc.fn ps r hok).2 ht.2
   | L, hK, h, .dsl k a, hok, ht => hds L k a hK h hok ht
-  | _, _, h, .int, _, _ | _, _, h, .str, _, _ | _, _, h, .date, _, _ | _, _, h, .param _, _, _ => h
+  | _, _, h, .int, _, _ | _, _, h, .str, _, _ | _, _, h, .point _, _, _ | _, _, h, .param _, _, _ => h
 theorem addTysWith_dts : (L : Layout) → Le K L → DtsOk L → (ts : List Ty) → (∀ t ∈ ts, ok t ∧ t.sortable = true) →
     DtsOk (addTysWith slots dsl L ts)
   | _, _, h, [], _ => h
@@ -340,7 +340,7 @@ theorem srt_of_has : (t : Ty) → L.Has t → t.sorted = true → (L.srt? t).isS
   | .list _, ⟨_, _, hf⟩, hs | .bag _, ⟨_, _, hf⟩, hs => Layout.srt_of_find _ hs hf
   | .table _ _, ⟨_, _, _, hf⟩, hs => Layout.srt_of_find _ hs hf
   | .adt 0 _ _, _, hs => by simpa [Layout.srt?, Ty.sorted] using hs
-  | .int, _, _ | .str, _, _ | .date, _, _ => rfl
+  | .int, _, _ | .str, _, _ | .point _, _, _ => rfl
   | .fn _ _, _, hs | .param _, _, hs => by simp [Ty.sorted] at hs
   | .dsl k a, hh, hs => by
     match k, a with
@@ -414,7 +414,7 @@ mutual
 /-- The names term of a value of a type with an SMT value is built wherever the layout holds the type's datatypes. -/
 theorem namesT_isSome : (t : Ty) → Layout.HasWith L D t → t.embeddable = true → (x : Term) →
     (namesT L n t x).isSome = true
-  | .int, _, _, _ | .str, _, _, _ | .date, _, _, _ | .adt 0 _ _, _, _, _ => rfl
+  | .int, _, _, _ | .str, _, _, _ | .point _, _, _, _ | .adt 0 _ _, _, _, _ => rfl
   | .id, hh, _, _ => by simp only [namesT, Option.isSome_map]; exact hh
   | .dsl k a, _, he, x => by simp only [Ty.embeddable, beq_iff_eq] at he; subst he; rfl
   | .adt (i + 1) a vs, ⟨hvs, hf⟩, he, x => by
@@ -517,7 +517,7 @@ mutual
 term only adds default items in the free slots, which every sorted type has. -/
 theorem dataT_isSome : (t : Ty) → L.Has t → t.sorted = true → (x : t.den) → (embedV L t x).isSome = true →
     (dataT L t x).isSome = true
-  | .int, _, _, _, _ | .str, _, _, _, _ | .date, _, _, _, _ => rfl
+  | .int, _, _, _, _ | .str, _, _, _, _ | .point _, _, _, _, _ => rfl
   | .id, _, _, _, he => by simpa [dataT, embedV] using he
   | .adt 0 a vs, _, _, x, he => by
     simp only [Ty.sorted] at *
