@@ -49,7 +49,7 @@ The model gives each service a scope, and the Z3 solver gets a fixed number of s
 - Every collection type gets at least as many slots as the longest list literal in the spec that writes its items: a list type its own, `Bag(a)` that of `List(a)`, and `Table(k, v)` that of `List(#(k, v))`, as `bag.from_list` and `table.from_list` take them. So every value the spec writes fits, and the line names such a type's bound `longest literal`.
 - `steps` limits the inputs of a run that `generate` unrolls.
 - `resource_limit` is Z3's deterministic resource limit per question, so an answer is the same on every machine.
-- `explore_depth`, `explore_states`, `waits` and `values` are `explore`'s: how deep it searches, how many states it keeps, the clock steps it tries, and the Ints and Strings an input kind's fields take.
+- `explore_depth`, `explore_states`, `waits` and `values` are `explore`'s: how deep it searches, how many states it keeps, the clock steps it tries besides the state's deadlines, and the Ints and Strings an input kind's fields take.
 
 A service's `cascade`, the most internal steps one input may take, is part of what the spec means, so it stays in `service`: an input that needs more faults in every command.
 
@@ -211,7 +211,10 @@ A target that every kind's question rules out is settled by `prove` and gets no 
 ## explore
 
 `explore <root> <dir>` searches the states a service reaches from its initial state breadth first, as TLC searches a TLA+ spec, on the inputs the scope generates.
-From each state it tries every command, query, answer to a pending request and subscribed event over the values its types allow, and a clock line after each of `waits`.
+From each state it tries every command, query, answer to a pending request and subscribed event over the values its types allow, and clock lines.
+A clock line moves time by each of `waits`, and to each deadline the state holds and the millisecond after it: each instance's timer, and the end of `within` for each trigger a response waits on.
+A timer fires, and a response comes due, only as time reaches or passes its deadline, so these times tell apart every set of timers one clock line can fire and every response it can break, as the regions of a timed automaton do (Alur and Dill, 1994); a deadline already past moves the clock to the state's time.
+The other clock lines are not tried, and no theorem yet shows that each of them steps as one of these does.
 An Int or String field takes the kind's `values`, and a kind with none never takes an input with such a field.
 An id field takes an id the service made that an out line showed and the state still holds, an outside id the state holds, or one new outside id.
 An instant field takes the state's time or that time plus a wait, and a list, bag or table at most `others_at_most` items.

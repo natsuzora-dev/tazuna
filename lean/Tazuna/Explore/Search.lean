@@ -73,9 +73,25 @@ def domainOf (sc : ScopeV) (n : Node v) (kind name : String) : Domain :=
 /-- Whether a request kind is a command's: it has a rejection type. -/
 def requestKind {e : Ty} (r : RequestV e) : String := if r.rejection.isSome then "external command" else "external query"
 
+/-- The times explore moves the clock to from the node, ascending: the state's time plus each wait, and each deadline
+the state holds and the millisecond after it, where a deadline is a timer's or the end of a waiting trigger's
+`within`. A timer fires, and a response comes due, only as time reaches or passes such a deadline, so these times
+tell apart every set of timers a clock line can fire and every response it can break (the region construction of
+timed automata, Alur and Dill 1994). A time before the state's moves to the state's time, which fires every overdue
+timer. -/
+def clockTimes (sc : ScopeV) (n : Node v) : List Int :=
+  let s := n.state
+  let timers := s.machines.toSigma.flatMap fun ⟨_, insts⟩ => insts.filterMap fun i =>
+    (timerOf s.records i).map (·.1)
+  let dues := match n.watch with
+    | none => []
+    | some ws => (v.responses.zip ws).flatMap fun (resp, trs) => trs.map fun (_, t) => t + (resp.withinNat : Int)
+  let times := sc.waits.map (s.now + ·) ++ (timers ++ dues).flatMap fun d => [d, d + 1]
+  ((times.map (max s.now)).mergeSort (· ≤ ·)).eraseDups
+
 /-- Every input explore tries from the node, in a fixed order: each command with each caller and input, each query
 likewise, an answer of each value to each pending request in the order of their wire ids, each subscribed event,
-then a clock line after each wait. -/
+then a clock line to each of `clockTimes`. -/
 def inputsOf (sc : ScopeV) (n : Node v) : List (Input v) :=
   let s := n.state
   let commands := (List.finRange v.commands.length).flatMap fun i =>
@@ -89,7 +105,7 @@ def inputsOf (sc : ScopeV) (n : Node v) : List (Input v) :=
     (cands (domainOf sc n (requestKind p.request) p.request.name) t).map fun x => .answer p.id ⟨t, x⟩
   let events := (List.finRange v.subscribes.length).flatMap fun i =>
     (cands (domainOf sc n "source" (v.subscribes.get i).name) (v.subscribes.get i).event).map (.event i ·)
-  commands ++ queries ++ answers ++ events ++ sc.waits.map fun w => .clock (s.now + w)
+  commands ++ queries ++ answers ++ events ++ (clockTimes sc n).map .clock
 
 section
 variable (T : List TypeDecl)

@@ -349,7 +349,7 @@ pub fn model(
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// How far prove and generate look in `service`: records per table (`creates`); items per bag and per table no create bounds (`others_at_most`), which covers bags in records and values, tables in values, each machine's table of instances and the pending requests; and inputs per run that generate's solver search unrolls (`steps`, at least 1). The rest is `explore`'s, which stops after `explore_depth` inputs or once it keeps `explore_states` states, and tries the durations `waits` for the clock and the Ints and Strings of `values` for an input kind's Int and String fields. prove and generate name each bag and table type a bound gave slots, a machine's table by the machine.
+/// How far prove and generate look in `service`: records per table (`creates`); items per bag and per table no create bounds (`others_at_most`), which covers bags in records and values, tables in values, each machine's table of instances and the pending requests; and inputs per run that generate's solver search unrolls (`steps`, at least 1). The rest is `explore`'s, which stops after `explore_depth` inputs or once it keeps `explore_states` states, and moves the clock by each of the durations `waits` and to each deadline a state holds and the millisecond after it, and tries the Ints and Strings of `values` for an input kind's Int and String fields. prove and generate name each bag and table type a bound gave slots, a machine's table by the machine.
 pub fn scope(
   service _service: Service,
   creates _creates: List(Create(records)),
