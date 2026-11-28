@@ -60,7 +60,7 @@ def faultTargets (v : ServiceV) : List Target :=
     (v.sentHandles.filterMap fun h => if h.kind == "command" || h.kind == "query" then h.name.map .effect else none)
 
 /-- The earliest of the hits: fewest inputs, then first met. -/
-def earliest (hs : List Hit) : Option Hit :=
+def earliest {v : ServiceV} (hs : List (Hit v)) : Option (Hit v) :=
   hs.foldl (fun best h => match best with
     | some b => if h.depth < b.depth || (h.depth == b.depth && h.order < b.order) then some h else some b
     | none => some h) none
@@ -162,7 +162,10 @@ def explore (root dir path : String) (opts : Options) : Cmd Unit := do
             assumes [.validInputs, .noFault, .timelyClock]])
     unless unfinished.isEmpty do
       printLine .unfinished [("targets", Json.arr (unfinished.map Json.str))]
-      -- The search left running is pure and cannot be stopped; the process ends here, with the run's exit code.
+    -- A search cut off is pure and cannot be stopped, and the deadline's timer sleeps on: the process ends here, with
+    -- the run's exit code, rather than wait for either.
+    if deadline.isSome then
+      (← IO.getStdout).flush
       IO.Process.exit (← (← read).get).code.toUInt8
 
 end Tazuna.Cli

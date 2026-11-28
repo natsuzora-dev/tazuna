@@ -120,6 +120,9 @@ elab "#check_tazuna_reach" : command => do
     ``Tazuna.Smt.Term.beq_eq_beqFast,
     -- Compiled code extends a script's shared definitions in place; it is the extension the sharing theorems are about.
     ``Tazuna.Smt.Defs.add_eq_addFast,
+    -- Compiled code compares terms of the canonical order without serializing them; it is the order the theorems are
+    -- about.
+    ``Tazuna.Ir.Erl.cmp_eq_cmpFast,
     -- The service's layout, derived from its program: every create fits its table's slots. (The commands read every
     -- script builder through `Sound.get` with its no-gap theorem, so those are the commands' own: `unrollBase_ofService`,
     -- `questions_ofService`, `timerQuestions_ofService`, `pairQuestions_ofService`, `respStep_ofService`.)

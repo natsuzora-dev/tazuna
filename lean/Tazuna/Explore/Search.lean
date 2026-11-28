@@ -164,13 +164,13 @@ partial def Erl.hash : Erl → UInt64
 instance : Hashable Erl := ⟨Erl.hash⟩
 
 /-- The first transition explore met that shows something: the run of its node's inputs and then its own. -/
-structure Hit where
+structure Hit (v : ServiceV) where
   /-- The number of inputs of the run. -/
   depth : Nat
   /-- The order explore met it in, which breaks ties between equal depths. -/
   order : Nat
   node : Nat
-  input : Nat
+  input : Input v
 
 /-- What explore covered: every run of at most `depth` inputs on the scope's inputs, or of any length where
 `exhausted` (no state was left to reach). `levels` counts the states first reached at each depth. -/
@@ -186,10 +186,9 @@ structure Coverage where
 out line, per fault (by its summary) and per broken response (by index), and what it covered. -/
 structure Found (v : ServiceV) where
   nodes : Array (Node v × Nat × Option (Input v))
-  inputs : Array (Input v)
-  classes : List (OutClass × Hit)
-  faults : List (String × Fault × Hit)
-  responses : List (Nat × Hit)
+  classes : List (OutClass × Hit v)
+  faults : List (String × Fault × Hit v)
+  responses : List (Nat × Hit v)
   coverage : Coverage
 
 /-- The inputs of the run from the initial state to the node at `i`, in order. -/
@@ -199,22 +198,18 @@ partial def Found.path (f : Found v) (i : Nat) : List (Input v) :=
   | _ => []
 
 /-- The run's inputs of a hit: its node's path and its input. -/
-def Found.hitPath (f : Found v) (h : Hit) : List (Input v) :=
-  match f.inputs[h.input]? with
-  | some x => f.path h.node ++ [x]
-  | none => f.path h.node
+def Found.hitPath (f : Found v) (h : Hit v) : List (Input v) := f.path h.node ++ [h.input]
 
 /-- Searches from the initial node, at most `depth` inputs deep, keeping at most `cap` nodes. -/
 def search (T : List TypeDecl) (v : ServiceV) (sc : ScopeV) (depth cap : Nat) : Found v := Id.run do
   let n0 := Node.init v
   let mut nodes : Array (Node v × Nat × Option (Input v)) := #[(n0, 0, none)]
-  let mut inputs : Array (Input v) := #[]
   let mut seen : Std.HashSet Erl := ({} : Std.HashSet Erl).insert n0.key
-  let mut byClass : Std.HashMap String (OutClass × Hit) := {}
-  let mut classOrder : Array String := #[]
-  let mut byFault : Std.HashMap String (Fault × Hit) := {}
+  let mut byClass : Std.HashMap OutClass (Hit v) := {}
+  let mut classOrder : Array OutClass := #[]
+  let mut byFault : Std.HashMap String (Fault × Hit v) := {}
   let mut faultOrder : Array String := #[]
-  let mut byResp : Std.HashMap Nat Hit := {}
+  let mut byResp : Std.HashMap Nat (Hit v) := {}
   let mut order := 0
   let mut lo := 0
   let mut hi := 1
@@ -233,15 +228,12 @@ def search (T : List TypeDecl) (v : ServiceV) (sc : ScopeV) (depth cap : Nat) : 
       for x in inputsOf sc n do
         let mv := move T n x
         transitions := transitions + 1
-        let xi := inputs.size
-        inputs := inputs.push x
-        let hit : Hit := ⟨k + 1, order, i, xi⟩
+        let hit : Hit v := ⟨k + 1, order, i, x⟩
         let mut used := false
         for c in classes T v x mv.result do
-          let key := reprStr c
-          if !byClass.contains key then
-            byClass := byClass.insert key (c, hit)
-            classOrder := classOrder.push key
+          if !byClass.contains c then
+            byClass := byClass.insert c hit
+            classOrder := classOrder.push c
             used := true
         if let .fault f := mv.result.outcome then
           let key := (Outcome.fault f).summary
@@ -274,8 +266,7 @@ def search (T : List TypeDecl) (v : ServiceV) (sc : ScopeV) (depth cap : Nat) : 
     { depth := covered, exhausted := exhausted, capped := capped, levels := levels.toList, transitions := transitions }
   return {
     nodes := nodes
-    inputs := inputs
-    classes := classOrder.toList.filterMap (byClass.get? ·)
+    classes := classOrder.toList.filterMap fun c => (byClass.get? c).map (c, ·)
     faults := faultOrder.toList.filterMap fun key => (byFault.get? key).map fun (f, h) => (key, f, h)
     responses := byResp.toList.mergeSort fun a b => a.1 ≤ b.1
     coverage := coverage }

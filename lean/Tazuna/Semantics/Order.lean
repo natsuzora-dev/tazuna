@@ -118,20 +118,6 @@ end
 /-- Erlang term order. -/
 def cmp (a b : Erl) : Ordering := List.compareLex Tok.cmp (ser a) (ser b)
 
-instance : Ord Erl := ⟨cmp⟩
-
-instance : Std.TransOrd Erl where
-  eq_swap := Std.OrientedCmp.eq_swap (cmp := List.compareLex Tok.cmp)
-  isLE_trans := Std.TransCmp.isLE_trans (cmp := List.compareLex Tok.cmp)
-
-instance : Std.LawfulEqOrd Erl where
-  eq_of_compare {a b} h := by
-    have h' : ser a = ser b := Std.LawfulEqCmp.eq_of_compare (cmp := List.compareLex Tok.cmp) h
-    exact (ser_inj a b [] [] (by simpa using h')).1
-
-instance : DecidableEq Erl := fun a b =>
-  decidable_of_iff (compare a b = .eq) Std.LawfulEqCmp.compare_eq_iff_eq
-
 /-! Erlang term order read off the terms: comparing two serializations with tails compares the terms first, since no
 term's serialization extends another's (`ser_inj`). The order encoding reads it this way. -/
 
@@ -170,6 +156,150 @@ theorem sers_then : (xs ys : List Erl) → xs.length = ys.length → (r r' : Lis
     rw [sers_then xs ys (by simpa using h)]
     cases cmp x y <;> rfl
   | [], _ :: _, h, _, _ | _ :: _, [], h, _, _ => by simp at h
+
+/-- The kind tag a term's serialization starts with: its rank in Erlang term order. -/
+def rank : Erl → Nat
+  | .int _ => 0
+  | .atom _ => 1
+  | .tuple _ => 2
+  | .map .. => 3
+  | .list _ => 4
+  | .bin _ => 5
+
+mutual
+/-- `cmp` read off the terms, without building their serializations. -/
+def cmpFast : Erl → Erl → Ordering
+  | .int a, .int b => compare a b
+  | .atom a, .atom b => compare a b
+  | .bin a, .bin b => compare a b
+  | .tuple xs, .tuple ys => if xs.length = ys.length then cmpsFast xs ys else compare xs.length ys.length
+  | .map ks vs, .map ks' vs' =>
+    if ks.length = ks'.length then
+      match cmpsFast ks ks' with
+      | .eq => if vs.length = vs'.length then cmpsFast vs vs' else compare vs.length vs'.length
+      | o => o
+    else compare ks.length ks'.length
+  | .list xs, .list ys => cmplFast xs ys
+  | a, b => compare a.rank b.rank
+def cmpsFast : List Erl → List Erl → Ordering
+  | x :: xs, y :: ys => match cmpFast x y with
+    | .eq => cmpsFast xs ys
+    | o => o
+  | _, _ => .eq
+def cmplFast : List Erl → List Erl → Ordering
+  | [], [] => .eq
+  | [], _ :: _ => .lt
+  | _ :: _, [] => .gt
+  | x :: xs, y :: ys => match cmpFast x y with
+    | .eq => cmplFast xs ys
+    | o => o
+end
+
+theorem lex_same (t : Tok) (r r' : List Tok) :
+    List.compareLex Tok.cmp (t :: r) (t :: r') = List.compareLex Tok.cmp r r' := by
+  simp only [List.compareLex_cons_cons, Std.ReflCmp.compare_self (cmp := Tok.cmp), Ordering.then]
+
+theorem then_eq_match (o o' : Ordering) : o.then o' = match o with | .eq => o' | o => o := by
+  cases o <;> rfl
+
+theorem compare_int_nat (a b : Nat) : compare (a : Int) b = compare a b := by
+  simp only [compare, compareOfLessAndEq]
+  split <;> split <;> (try split) <;> (try split) <;> first | rfl | omega
+
+theorem lex_num_ne {a b : Nat} (h : a ≠ b) (r r' : List Tok) :
+    List.compareLex Tok.cmp (.num a :: r) (.num b :: r') = compare a b := by
+  simp only [List.compareLex_cons_cons, Tok.cmp, compare_int_nat]
+  have : compare a b ≠ .eq := fun e => h (Std.LawfulEqCmp.eq_of_compare e)
+  cases hc : compare a b <;> simp_all [Ordering.then]
+
+theorem lex_leaf {α : Type} [Ord α] (k : Int) (f : α → Tok) (hf : ∀ a b, Tok.cmp (f a) (f b) = compare a b) (a b : α) :
+    List.compareLex Tok.cmp [.num k, f a] [.num k, f b] = compare a b := by
+  rw [lex_same]
+  simp only [List.compareLex_cons_cons, hf, List.compareLex_nil_nil, Ordering.then]
+  cases compare a b <;> rfl
+
+mutual
+theorem cmp_eq_fast : (a b : Erl) → cmp a b = cmpFast a b
+  | .int a, .int b => lex_leaf 0 Tok.num (fun _ _ => rfl) a b
+  | .atom a, .atom b => lex_leaf 1 Tok.text (fun _ _ => rfl) a b
+  | .bin a, .bin b => lex_leaf 5 Tok.text (fun _ _ => rfl) a b
+  | .tuple xs, .tuple ys => by
+    simp only [cmp, ser, cmpFast]
+    rw [lex_same]
+    split
+    · rename_i h
+      have := sers_then xs ys h [] []
+      simp only [List.append_nil, List.compareLex_nil_nil] at this
+      rw [h, lex_same, this, cmps_eq_fast xs ys]
+      cases cmpsFast xs ys <;> rfl
+    · rename_i h
+      exact lex_num_ne h _ _
+  | .map ks vs, .map ks' vs' => by
+    simp only [cmp, ser, cmpFast]
+    rw [lex_same]
+    split
+    · rename_i h
+      rw [h, lex_same, sers_then ks ks' h, cmps_eq_fast ks ks', then_eq_match]
+      cases cmpsFast ks ks' with
+      | eq =>
+        simp only
+        split
+        · rename_i h'
+          have := sers_then vs vs' h' [] []
+          simp only [List.append_nil, List.compareLex_nil_nil] at this
+          rw [h', lex_same, this, cmps_eq_fast vs vs']
+          cases cmpsFast vs vs' <;> rfl
+        · rename_i h'
+          exact lex_num_ne h' _ _
+      | lt => rfl
+      | gt => rfl
+    · rename_i h
+      exact lex_num_ne h _ _
+  | .list xs, .list ys => by
+    simp only [cmp, ser, cmpFast]
+    rw [lex_same]
+    exact cmpl_eq_fast xs ys
+  | .int _, .atom _ | .int _, .tuple _ | .int _, .map .. | .int _, .list _ | .int _, .bin _
+  | .atom _, .int _ | .atom _, .tuple _ | .atom _, .map .. | .atom _, .list _ | .atom _, .bin _
+  | .tuple _, .int _ | .tuple _, .atom _ | .tuple _, .map .. | .tuple _, .list _ | .tuple _, .bin _
+  | .map .., .int _ | .map .., .atom _ | .map .., .tuple _ | .map .., .list _ | .map .., .bin _
+  | .list _, .int _ | .list _, .atom _ | .list _, .tuple _ | .list _, .map .. | .list _, .bin _
+  | .bin _, .int _ | .bin _, .atom _ | .bin _, .tuple _ | .bin _, .map .. | .bin _, .list _ => by
+    simp only [cmp, ser, cmpFast, rank]
+    exact lex_num_ne (by decide) _ _
+theorem cmps_eq_fast : (xs ys : List Erl) → cmps xs ys = cmpsFast xs ys
+  | x :: xs, y :: ys => by
+    simp only [cmps, cmpsFast, cmp_eq_fast x y, cmps_eq_fast xs ys, then_eq_match]
+  | [], [] | [], _ :: _ | _ :: _, [] => rfl
+theorem cmpl_eq_fast : (xs ys : List Erl) → List.compareLex Tok.cmp (serl xs) (serl ys) = cmplFast xs ys
+  | [], [] => by rw [serl, lex_same]; rfl
+  | [], _ :: _ => lex_num_ne (by decide) _ _
+  | _ :: _, [] => lex_num_ne (by decide) _ _
+  | x :: xs, y :: ys => by
+    simp only [serl]
+    rw [lex_same, ser_then, cmp_eq_fast x y, cmpl_eq_fast xs ys, then_eq_match]
+    rfl
+end
+
+/-- Compiled code compares terms with `cmpFast` (`csimp`, as the printer's `print_eq_printFast`), so every sort of a bag,
+a table or a machine's instances reads the terms once instead of serializing them. -/
+@[csimp] theorem cmp_eq_cmpFast : @cmp = @cmpFast := by
+  funext a b
+  exact cmp_eq_fast a b
+
+instance : Ord Erl := ⟨cmp⟩
+
+instance : Std.TransOrd Erl where
+  eq_swap := Std.OrientedCmp.eq_swap (cmp := List.compareLex Tok.cmp)
+  isLE_trans := Std.TransCmp.isLE_trans (cmp := List.compareLex Tok.cmp)
+
+instance : Std.LawfulEqOrd Erl where
+  eq_of_compare {a b} h := by
+    have h' : ser a = ser b := Std.LawfulEqCmp.eq_of_compare (cmp := List.compareLex Tok.cmp) h
+    exact (ser_inj a b [] [] (by simpa using h')).1
+
+instance : DecidableEq Erl := fun a b =>
+  decidable_of_iff (compare a b = .eq) Std.LawfulEqCmp.compare_eq_iff_eq
 
 theorem cmp_int (a b : Int) : cmp (.int a) (.int b) = compare a b := by
   simp only [cmp, ser, List.compareLex_cons_cons, Tok.cmp, List.compareLex_nil_nil]

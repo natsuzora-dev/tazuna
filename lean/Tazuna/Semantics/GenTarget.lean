@@ -136,7 +136,7 @@ inductive OutClass where
   | event (variant : Option String)
   /-- A request the service sent to the external's command or query. -/
   | request (external name : String)
-deriving DecidableEq, Repr
+deriving DecidableEq, Repr, Hashable
 
 /-- What generate aims at: one class of out line, except that `invalid` names a literal rule or, with none, any rule
 whose name is no literal. -/
