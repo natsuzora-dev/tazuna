@@ -18,6 +18,9 @@ check search.undecided 0
 # --jobs 4.
 check script.max_bytes 16777216
 check prove.script_bytes 536870912
+# search's own scripts together, in bytes: the search run's less prove's. The rule above gives reading a twelfth of a
+# stage's time (10 s of prove's 120 s), so search's 90 s allows 7.5 s, which is 384 MiB at --jobs 4.
+check search.script_bytes 402653184
 # explore runs one service after another on one core. 3-services' explore ran 70,000 to 72,000 transitions a second
 # (run-log 279), so its 90 s is about 6.3 million transitions. Its states stay in memory: 3-services' take 1.6 KB each,
 # and a shop state holds several tables of records, so take 4 times that; 150,000 states then keep about 1 GB.

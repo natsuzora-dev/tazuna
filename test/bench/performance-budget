@@ -60,6 +60,9 @@ value() {
     search.undecided) grep -c '"kind":"Undecided\.' "$work/search.jsonl" || true ;;
     script.max_bytes) sort -n "$work/prove.cold.scripts" "$work/search.scripts" | tail -1 | tr -d ' ' ;;
     prove.script_bytes) awk '{ s += $1 } END { print s + 0 }' "$work/prove.cold.scripts" ;;
+    search.script_bytes)
+      echo $(($(awk '{ s += $1 } END { print s + 0 }' "$work/search.scripts") -
+        $(awk '{ s += $1 } END { print s + 0 }' "$work/prove.cold.scripts"))) ;;
     *) echo "unknown performance budget line $1" >&2; exit 3 ;;
   esac
 }
