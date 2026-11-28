@@ -14,7 +14,7 @@ tazuna's own tests never read it.
 
 ## Before you start
 
-You need Gleam, Erlang/OTP or Node, and Node for the harness in `web/`.
+You need Gleam, Erlang/OTP, and Node for the harness in `web/`.
 On its first run the launcher fetches the engine and z3 for its version.
 To use an engine you built from this repository instead, set `TAZUNA_ENGINE` to its path, such as `lean/.lake/build/bin/tazuna-engine`, and put z3 on `PATH`.
 

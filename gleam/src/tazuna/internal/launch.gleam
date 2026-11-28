@@ -18,23 +18,21 @@ import tazuna/internal/json
 import tazuna/internal/kind
 
 pub fn main() -> Nil {
-  use code <- run(argv())
-  exit(code)
+  exit(run(argv()))
 }
 
-/// The engine may be fetched on first run, which Node does asynchronously, so
-/// the exit code arrives through `done`.
-fn run(args: List(String), done: fn(Int) -> Nil) -> Nil {
+/// Runs the command and gives its exit code.
+fn run(args: List(String)) -> Int {
   case args {
     // explain reads no spec, so there is nothing to convert.
-    ["explain", ..] -> run_engine(args, done)
-    [_command, root, ..] -> check(args, root, done)
+    ["explain", ..] -> run_engine(args)
+    [_command, root, ..] -> check(args, root)
     // No root: the engine prints its version or its usage.
-    _ -> run_engine(args, done)
+    _ -> run_engine(args)
   }
 }
 
-fn check(args: List(String), root: String, done: fn(Int) -> Nil) -> Nil {
+fn check(args: List(String), root: String) -> Int {
   let path = "src/" <> root <> ".gleam"
   case simplifile.is_file(path) {
     Ok(True) ->
@@ -49,21 +47,21 @@ fn check(args: List(String), root: String, done: fn(Int) -> Nil) -> Nil {
       {
         Error(findings) -> {
           list.each(findings, fn(f) { io.println(convert.finding_line(f)) })
-          done(kind.exit_code(list.map(findings, fn(f) { f.kind })))
+          kind.exit_code(list.map(findings, fn(f) { f.kind }))
         }
         Ok(program) -> {
           let ir = "build/tazuna/" <> root <> ".ir.json"
           case write(ir, convert.ir_text(program)) {
-            Ok(Nil) -> run_engine(list.append(args, ["--ir", ir]), done)
+            Ok(Nil) -> run_engine(list.append(args, ["--ir", ir]))
             Error(e) ->
-              done(fail(
+              fail(
                 kind.System,
                 "could not write " <> ir <> ": " <> simplifile.describe_error(e),
-              ))
+              )
           }
         }
       }
-    _ -> done(fail(kind.Arguments, "There is no root module " <> path <> "."))
+    _ -> fail(kind.Arguments, "There is no root module " <> path <> ".")
   }
 }
 
@@ -104,9 +102,8 @@ fn write(path: String, text: String) -> Result(Nil, simplifile.FileError) {
   }
 }
 
-fn run_engine(args: List(String), done: fn(Int) -> Nil) -> Nil {
-  use found <- engine.locate
-  done(case found {
+fn run_engine(args: List(String)) -> Int {
+  case engine.locate() {
     Error(message) -> fail(kind.System, message)
     Ok(path) ->
       case spawn(path, args) {
@@ -114,7 +111,7 @@ fn run_engine(args: List(String), done: fn(Int) -> Nil) -> Nil {
         Error(message) ->
           fail(kind.System, "could not run " <> path <> ": " <> message)
       }
-  })
+  }
 }
 
 /// Prints the launcher's own line of the kind; the exit code it gives.
@@ -132,15 +129,12 @@ fn fail(usage: kind.Usage, message: String) -> Int {
 }
 
 @external(erlang, "tazuna_launch_ffi", "argv")
-@external(javascript, "./launch_ffi.mjs", "argv")
 fn argv() -> List(String)
 
 /// Runs the executable with its standard output passed through line by line
 /// and its standard error inherited, and returns its exit code.
 @external(erlang, "tazuna_launch_ffi", "spawn")
-@external(javascript, "./launch_ffi.mjs", "spawn")
 fn spawn(path: String, args: List(String)) -> Result(Int, String)
 
 @external(erlang, "tazuna_launch_ffi", "exit")
-@external(javascript, "./launch_ffi.mjs", "exit")
 fn exit(code: Int) -> Nil

@@ -3,6 +3,7 @@ version = "0.7.0"
 description = "Write service specs in Gleam; check, test, and prove them with Lean and Z3."
 licences = ["MIT"]
 repository = { type = "github", user = "natsuzora-dev", repo = "tazuna" }
+target = "erlang"
 
 # Fetching the engine on first run uses httpc over TLS, and crypto for SHA-256.
 [erlang]

@@ -3,11 +3,8 @@ set -eu
 cd "$(dirname "$0")/.."
 export PATH="$HOME/.elan/bin:$PATH"
 
-# Users run the launcher on either target, so both are built and tested. gleam test leaves the converter corpus's IR in
-# gleam/build/corpus.ir.json.
-(cd gleam && gleam format --check src test &&
-  gleam build --target javascript --warnings-as-errors && gleam test --target javascript &&
-  gleam build --target erlang --warnings-as-errors && gleam test --target erlang)
+# gleam test leaves the converter corpus's IR in gleam/build/corpus.ir.json.
+(cd gleam && gleam format --check src test && gleam build --warnings-as-errors && gleam test)
 # The linters run only in modules that import them. A module with no tazuna import would miss them, so every module
 # but the linters' own imports one, and the modules that import nothing else of tazuna's import Tazuna.Linter.
 unlinted=$(cd lean && grep -L '^import Tazuna\.' $(find Tazuna -name '*.lean' ! -path 'Tazuna/Linter*') *.lean || true)

@@ -96,8 +96,7 @@ fn same(
   }
 }
 
-/// Drops every `Span(..)`. `string.inspect` writes `Span(start: 1, end: 2)` on
-/// JavaScript and `Span(1, 2)` on Erlang; both lose their offsets.
+/// Drops the offsets from every `Span(1, 2)` that `string.inspect` writes.
 fn without_spans(s: String) -> String {
   case string.split(s, "Span(") {
     [first, ..rest] ->

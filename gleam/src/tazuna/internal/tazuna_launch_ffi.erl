@@ -1,5 +1,5 @@
 -module(tazuna_launch_ffi).
--export([argv/0, getenv/1, spawn/2, exit/1, platform/0, download/2, sha256/1, gunzip/1, pid/0]).
+-export([argv/0, getenv/1, spawn/2, exit/1, platform/0, download/1, sha256/1, gunzip/1, pid/0]).
 
 argv() ->
     [unicode:characters_to_binary(A) || A <- init:get_plain_arguments()].
@@ -57,15 +57,12 @@ arch("aarch64" ++ _) -> <<"arm64">>;
 arch("arm64" ++ _) -> <<"arm64">>;
 arch(Other) -> unicode:characters_to_binary(hd(string:split(Other, "-"))).
 
-download(Url, Done) ->
-    Done(fetch(Url)).
-
-fetch(<<"file://", Path/binary>>) ->
+download(<<"file://", Path/binary>>) ->
     case file:read_file(Path) of
         {ok, Bits} -> {ok, Bits};
         {error, Reason} -> {error, atom_to_binary(Reason)}
     end;
-fetch(Url) ->
+download(Url) ->
     try
         {ok, _} = application:ensure_all_started(ssl),
         {ok, _} = application:ensure_all_started(inets),

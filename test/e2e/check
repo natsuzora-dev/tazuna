@@ -1,6 +1,6 @@
 #!/bin/sh
 # Each kind of output line has one end-to-end case, a directory named after the kind. Fails when a kind has no case or
-# a case names no kind, and runs each case as a user would, once per target: the launcher, run in a copy of the case's
+# a case names no kind, and runs each case as a user would: the launcher, run in a copy of the case's
 # src/ (and snapshots/ and traces/, when the case has them) with the arguments in its args file, must print the case's
 # stdout and exit with the code in its exit file. A case with written/ must leave a directory written/ equal to it,
 # as generate writes its traces there. A kind
@@ -15,14 +15,8 @@ kinds=$work/kinds
 "$1" >"$kinds"
 engine=$2
 dev=$3
-printf 'import { main } from "%s";\nmain();\n' "$dev/javascript/tazuna/tazuna.mjs" >"$work/run.mjs"
-launch() {
-  case $1 in
-    javascript) shift; node "$work/run.mjs" "$@" ;;
-    # shellcheck disable=SC2046 # one -pa directory per package
-    erlang) shift; erl -noshell -pa $(printf '%s ' "$dev"/erlang/*/ebin) -eval 'tazuna:main()' -extra "$@" ;;
-  esac
-}
+# shellcheck disable=SC2046 # one -pa directory per package
+launch() { erl -noshell -pa $(printf '%s ' "$dev"/erlang/*/ebin) -eval 'tazuna:main()' -extra "$@"; }
 status=0
 "$1" --lines */stdout || status=1
 while read -r kind; do
@@ -41,21 +35,18 @@ for dir in */; do
     [ "$code" = "$(cat "$case/exit")" ] || { echo "e2e: $case exited $code, expected $(cat "$case/exit")"; status=1; }
     continue
   fi
-  for target in javascript erlang; do
-    mkdir "$work/$case-$target"
-    for part in src snapshots traces; do
-      if [ -d "$case/$part" ]; then cp -R "$case/$part" "$work/$case-$target/"; fi
-    done
-    code=0
-    # shellcheck disable=SC2086 # args holds words to split
-    out=$(cd "$work/$case-$target" && TAZUNA_ENGINE="$engine" launch "$target" $args) || code=$?
-    [ "$out" = "$(cat "$case/stdout")" ] || { printf 'e2e: %s on %s printed\n%s\n' "$case" "$target" "$out"; status=1; }
-    [ "$code" = "$(cat "$case/exit")" ] ||
-      { echo "e2e: $case on $target exited $code, expected $(cat "$case/exit")"; status=1; }
-    if [ -d "$case/written" ]; then
-      diff -r "$case/written" "$work/$case-$target/written" >/dev/null ||
-        { echo "e2e: $case on $target wrote other files than $case/written"; status=1; }
-    fi
+  mkdir "$work/$case"
+  for part in src snapshots traces; do
+    if [ -d "$case/$part" ]; then cp -R "$case/$part" "$work/$case/"; fi
   done
+  code=0
+  # shellcheck disable=SC2086 # args holds words to split
+  out=$(cd "$work/$case" && TAZUNA_ENGINE="$engine" launch $args) || code=$?
+  [ "$out" = "$(cat "$case/stdout")" ] || { printf 'e2e: %s printed\n%s\n' "$case" "$out"; status=1; }
+  [ "$code" = "$(cat "$case/exit")" ] || { echo "e2e: $case exited $code, expected $(cat "$case/exit")"; status=1; }
+  if [ -d "$case/written" ]; then
+    diff -r "$case/written" "$work/$case/written" >/dev/null ||
+      { echo "e2e: $case wrote other files than $case/written"; status=1; }
+  fi
 done
 exit $status

@@ -12,7 +12,7 @@ It runs the IR for `test`, `verify`, and `generate`, and encodes it as SMT-LIB f
 Gleam never runs a spec's meaning, so the bodies of tazuna's built-ins only panic.
 Trust flows one way, from Gleam to the IR to Lean to the solver, and no second interpreter can disagree with the definitions the theorems are about.
 
-Where Gleam's two targets differ, Lean follows the Erlang target.
+tazuna runs on Gleam's Erlang target, and where targets differ, Lean follows it.
 An `Int` has no bound, division truncates, and `x / 0` is 0 (`Gleam.div_zero` and the other `Gleam.*` roots).
 
 ## tazuna owns only what it can run, encode exactly, and prove

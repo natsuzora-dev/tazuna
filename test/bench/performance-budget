@@ -15,7 +15,7 @@ z3=$(command -v z3)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 cp -R "$spec/src" "$work/"
-printf 'import { main } from "%s";\nmain();\n' "$repo/gleam/build/dev/javascript/tazuna/tazuna.mjs" >"$work/run.mjs"
+ebin=$(printf '%s ' "$repo"/gleam/build/dev/erlang/*/ebin)
 mkdir "$work/bin"
 # One line per script: its bytes. The engine runs z3 with -smt2 and the script's path.
 printf '#!/bin/sh\nwc -c <"$2" >>"$SCRIPT_LOG"\nexec "%s" "$@"\n' "$z3" >"$work/bin/z3"
@@ -28,9 +28,10 @@ run() {
   shift
   : >"$work/$name.scripts"
   code=0
+  # shellcheck disable=SC2086 # one -pa directory per package
   (cd "$work" && SCRIPT_LOG="$work/$name.scripts" PATH="$work/bin:$PATH" \
-    TAZUNA_ENGINE="$repo/lean/.lake/build/bin/tazuna-engine" /usr/bin/time -p node run.mjs "$@" \
-    >"$name.jsonl" 2>"$name.time") || code=$?
+    TAZUNA_ENGINE="$repo/lean/.lake/build/bin/tazuna-engine" \
+    /usr/bin/time -p erl -noshell -pa $ebin -eval 'tazuna:main()' -extra "$@" >"$name.jsonl" 2>"$name.time") || code=$?
   sed -n 's/^real //p' "$work/$name.time" >"$work/$name.seconds"
   printf '%s: exit %s\n' "$name" "$code"
 }

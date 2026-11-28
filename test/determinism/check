@@ -14,7 +14,10 @@ engine=$1
 dev=$2
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
-printf 'import { main } from "%s";\nmain();\n' "$dev/javascript/tazuna/tazuna.mjs" >"$work/run.mjs"
+# shellcheck disable=SC2046 # one -pa directory per package
+launch() {
+  TAZUNA_ENGINE="$engine" erl -noshell -pa $(printf '%s ' "$dev"/erlang/*/ebin) -eval 'tazuna:main()' -extra "$@"
+}
 prove() {
   name=$1
   case=$2
@@ -22,7 +25,7 @@ prove() {
   mkdir "$work/$name"
   cp -R "$here/../e2e/$case/src" "$work/$name/"
   code=0
-  (cd "$work/$name" && TAZUNA_ENGINE="$engine" node "$work/run.mjs" prove m "$@" >out.jsonl) || code=$?
+  (cd "$work/$name" && launch prove m "$@" >out.jsonl) || code=$?
   echo "$code" >"$work/$name/exit"
 }
 prove one Prove.unproved --jobs 1
@@ -56,7 +59,7 @@ generate() {
   mkdir "$work/$name"
   cp -R "$here/../e2e/Generate.reached/src" "$work/$name/"
   code=0
-  (cd "$work/$name" && TAZUNA_ENGINE="$engine" node "$work/run.mjs" generate m written "$@" >out.jsonl) || code=$?
+  (cd "$work/$name" && launch generate m written "$@" >out.jsonl) || code=$?
   echo "$code" >"$work/$name/exit"
 }
 generate gone --jobs 1
@@ -77,5 +80,5 @@ for f in "$work/gonly/written"/*/*; do
     { echo "determinism: generate --only wrote $f unlike the full run"; exit 1; }
 done
 # A written trace is one verify passes.
-(cd "$work/gone" && TAZUNA_ENGINE="$engine" node "$work/run.mjs" verify m written/counter >verify.jsonl) ||
+(cd "$work/gone" && launch verify m written/counter >verify.jsonl) ||
   { echo "determinism: verify did not pass the traces generate wrote:"; cat "$work/gone/verify.jsonl"; exit 1; }
