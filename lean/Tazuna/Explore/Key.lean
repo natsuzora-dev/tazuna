@@ -139,15 +139,13 @@ def senderIds : Sender → List IdV
   | .machine _ ⟨t, k⟩ => idsIn t k
   | .reaction _ => []
 
-def funIds {t : Ty} (f : Fun t) : List IdV := idsIn (.tuple f.Γ) f.env
-
-def pendingIds {e : Ty} (p : Pending e) : List IdV :=
-  senderIds p.sender ++ idsIn p.request.input p.request.value ++ (p.request.ensures.toList.flatMap funIds) ++
-    funIds p.request.onAnswer
+/-- The ids a pending request holds as data: in its sender and its value. The values its kept functions captured are
+read only by the step that answers it. -/
+def pendingIds {e : Ty} (p : Pending e) : List IdV := senderIds p.sender ++ idsIn p.request.input p.request.value
 
 variable {v : ServiceV}
 
-/-- The ids the state holds: in its records, its machines' instances and its pending requests. -/
+/-- The ids the state holds as data: in its records, its machines' instances and its pending requests. -/
 def stateIds (s : State v) : List IdV :=
   idsIn v.records s.records ++
     (s.machines.toSigma.flatMap fun ⟨m, insts⟩ => insts.flatMap fun i => idsIn m.key i.key ++ idsIn m.state i.state) ++

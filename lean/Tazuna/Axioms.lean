@@ -5,7 +5,7 @@ import Tazuna.Cli.Test
 import Tazuna.Cli.Prove
 import Tazuna.Cli.Generate
 import Tazuna.Cli.Explore
-import Tazuna.Explore.Link
+import Tazuna.Explore.Move
 import Tazuna.Cli.Explain
 import Tazuna.Semantics.After
 import Tazuna.Smt.Prove
@@ -199,6 +199,9 @@ elab "#check_tazuna_reach" : command => do
     -- the counters' order and moves every instant alike, which `step_ren` takes. (Until explore's coverage theorem uses
     -- it.)
     ``Tazuna.Explore.key_link,
+    -- From such nodes, each input explore tries from one has one it tries from the other whose transition shows the
+    -- same classes, fault and broken responses and reaches such a node. (Until explore's coverage theorem uses it.)
+    ``Tazuna.Explore.link_move,
     -- generate's "unsettled within k steps" (Generate.unsettled): where its break cubes at a depth cover it with no
     -- model, or the step question whether a step breaks the target is unsat for every kind of a cube's last pick, no
     -- run of that many valid inputs within the slots whose steps before the last fault nowhere faults at its last step

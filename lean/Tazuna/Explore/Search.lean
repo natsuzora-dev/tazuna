@@ -45,9 +45,19 @@ String. -/
 def valuesOf (sc : ScopeV) (kind name : String) : Option ValuesV :=
   sc.values.find? fun vs => vs.input.kind == kind && vs.input.name == name
 
+/-- An outside id's name. -/
+def IdV.nameOf : IdV → Option String
+  | .named s => some s.1
+  | .fresh .. => none
+
+/-- Whether an id is from outside. -/
+def IdV.isNamed : IdV → Bool
+  | .named _ => true
+  | .fresh .. => false
+
 /-- The first outside id whose name the ids do not use: the code names generate gives outside ids. -/
 def newId (held : List IdV) : IdV :=
-  let used := held.filterMap fun | .named s => some s.1 | .fresh .. => none
+  let used := held.filterMap IdV.nameOf
   let rec go : Nat → Nat → IdV
     | 0, _ => .named ⟨"", rfl⟩
     | fuel + 1, k =>
@@ -59,7 +69,7 @@ def newId (held : List IdV) : IdV :=
 
 /-- The ids an input may carry from a node: the shown ones, the outside ones its state holds, and a new outside one. -/
 def Node.ids (n : Node v) : List IdV :=
-  let held := n.shown ++ sortIds ((stateIds n.state).filter fun | .named _ => true | .fresh .. => false)
+  let held := n.shown ++ sortIds ((stateIds n.state).filter IdV.isNamed)
   held ++ [newId held]
 
 -- A kind with no value set tries no Int and no String: the empty list is the meaning, as `tazuna.values` says.
@@ -127,24 +137,29 @@ structure Move (v : ServiceV) where
   broken : List Nat
   next : Option (Node v)
 
+/-- The responses a step from the node on the input with the result `r` breaks (by index), and what they wait for
+after it: none once a clock line passes a waiting timer. -/
+def watchNext (n : Node v) (x : Input v) (r : Result v) : List Nat × Option (List (List (v.event.den0 × Int))) :=
+  match n.watch with
+  | none => ([], none)
+  | some ws =>
+    if timelyAt n.state x then
+      let steps := (v.responses.zip ws).map fun (resp, trs) => watchStep resp r.moment trs
+      ((steps.zipIdx.filter (·.1.1)).map (·.2), some (steps.map (·.2)))
+    else ([], none)
+
+/-- The ids shown after a step from the node with the result `r`: those shown before and those its out lines show
+that the service made, while the state still holds them. -/
+def shownNext (n : Node v) (r : Result v) : List IdV :=
+  sortIds ((n.shown ++ (r.shownIds T).filter (!IdV.isNamed ·)).filter (stateIds r.state).contains)
+
 /-- The transition from the node on the input. -/
 def move (n : Node v) (x : Input v) : Move v :=
   let r := step T v n.state x
-  let watched : List Nat × Option (List (List (v.event.den0 × Int))) :=
-    match n.watch with
-    | none => ([], none)
-    | some ws =>
-      if timelyAt n.state x then
-        let steps := (v.responses.zip ws).map fun (resp, trs) => watchStep resp r.moment trs
-        ((steps.zipIdx.filter (·.1.1)).map (·.2), some (steps.map (·.2)))
-      else ([], none)
-  let held := stateIds r.state
-  let shown := sortIds ((n.shown ++ (r.shownIds T).filter fun | .fresh .. => true | .named _ => false).filter
-    held.contains)
-  let next := match r.outcome with
+  let w := watchNext n x r
+  ⟨r, w.1, match r.outcome with
     | .fault _ => none
-    | _ => some ⟨r.state, shown, watched.2⟩
-  ⟨r, watched.1, next⟩
+    | _ => some ⟨r.state, shownNext T n r, w.2⟩⟩
 
 end
 
