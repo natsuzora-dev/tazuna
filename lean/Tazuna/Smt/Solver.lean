@@ -296,6 +296,15 @@ def SentPrefix.sent (p : SentPrefix) (goal : Term) : Option (ScriptPrefix × Ter
   | some (q, g) => some (q, g, true)
   | none => p.exact.get.map (·, goal, p.coded.isNone)
 
+/-- The abstract variant of what `sent` gives (`q` with `g`, `coded` whether the variant's prefix codes `q`), keyed;
+none where the prefix has none or the goal's literals are not the prefix's. -/
+def SentPrefix.absAsk (p : SentPrefix) (q : ScriptPrefix) (g : Term) (coded : Bool) : Option (AbsPrefix × Keyed) := do
+  guard coded
+  let a ← p.abs.get
+  let (g', srt) ← (g.scodeC q.script.datatypes q.script.vars (litVar a.lits q.script.vars.length) a.cache).1
+  guard (srt == .bool)
+  pure (a, ← a.pre.askAll (g' :: a.order))
+
 /-- Asks the solver about the prefix's script with `goal` as its last assertion: the abstract variant first where the
 prefix has one and the goal's literals are the prefix's (`Solver.overApprox`), else what it reads exactly; each answer
 read from the cache directory `dir` where kept. Without `fallback`, an abstract variant that decides nothing answers
@@ -307,16 +316,19 @@ def Solver.askGoal (s : Solver) (dir : System.FilePath) (ids : Option Nat) (p : 
   let exact : IO (Option (Answer × String)) := do
     let some eq := q.ask g | return none
     return some ((← s.runKeyed dir eq).uncode ids, eq.key)
-  let abs : Option (AbsPrefix × Keyed) := do
-    guard coded
-    let a ← p.abs.get
-    let (g', srt) ← (g.scodeC q.script.datatypes q.script.vars (litVar a.lits q.script.vars.length) a.cache).1
-    guard (srt == .bool)
-    pure (a, ← a.pre.askAll (g' :: a.order))
-  let some (a, k) := abs | return (← exact).map (·.1)
+  let some (a, k) := p.absAsk q g coded | return (← exact).map (·.1)
   let r ← s.overApprox dir ids q.script.datatypes q.script.vars a.lits k (fun fixes => q.askAll (g :: fixes))
     (if fallback then exact else pure (some (.unknown "the abstract variant decided nothing", "")))
   return r.map (·.1)
+
+/-- Whether the solver reads the prefix's script with `goal` as its last assertion as unsat: its abstract variant
+where the prefix has one and the goal's literals are the prefix's (an unsat answer of which is the script's,
+`Solver.overApprox`), else what it reads exactly. A sat answer is not confirmed, as it is not read. None where a
+script has no text. -/
+def Solver.askUnsat (s : Solver) (dir : System.FilePath) (p : SentPrefix) (goal : Term) : IO (Option Bool) := do
+  let some (q, g, coded) := p.sent goal | return none
+  let some k := (p.absAsk q g coded).map (·.2) <|> q.ask g | return none
+  return some ((← s.runKeyed dir k) matches .unsat)
 
 /-- A question to the solver that owns its call: the script, the id datatype if it has one, and how its answer reads
 as a result. Nothing pairs answers with questions by position. -/
