@@ -53,3 +53,23 @@ jobs:
           gleam run -m tazuna -- search shop_spec "$RUNNER_TEMP/shop-inputs" --jobs 4 >/dev/null
           diff -r inputs "$RUNNER_TEMP/shop-inputs" ||
             { echo "samples/shop/spec/inputs is stale. Run: rm -r inputs && gleam run -m tazuna -- search shop_spec inputs"; exit 1; }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "26"
+          cache: npm
+          cache-dependency-path: samples/shop/web/package-lock.json
+      # The shop's implementation is user documentation too: its replay and end-to-end traces must still pass verify
+      # against the spec, so a change to the trace format or to verify cannot leave the README's example behind.
+      - name: Check the shop sample's implementation against its spec
+        working-directory: samples/shop/web
+        env:
+          TAZUNA_ENGINE: ${{ github.workspace }}/lean/.lake/build/bin/tazuna-engine
+        run: |
+          npm ci --ignore-scripts
+          npm run lint
+          npm run typecheck
+          npm test
+          npx playwright install --with-deps chromium
+          npm run e2e
+          npm run verify
+          npm run verify:e2e

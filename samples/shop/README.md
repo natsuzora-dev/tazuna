@@ -3,7 +3,7 @@
 This sample is a small online shop, sized like a system a team would really specify: three services that talk through events, two outside systems, a deadline, and money.
 It takes the spec through every tazuna command and shows what each stage found while the spec was written.
 `spec/` holds the spec, a Gleam project.
-An implementation of the shop, which `verify` will compare with the spec, comes in a later change.
+`web/` holds an implementation of the shop as a team would build it today, and `verify` compares its logs with the spec.
 
 The sample is user documentation.
 tazuna's own tests never read it.
@@ -36,7 +36,7 @@ Each service is one module in `spec/src/shop_spec/`, and `shared.gleam` holds th
 
 ## Before you start
 
-You need Gleam and Erlang/OTP.
+You need Gleam and Erlang/OTP, and Node 24 or later for the implementation in `web/`.
 On its first run the launcher fetches the engine and z3 for its version.
 To use an engine you built from this repository instead, set `TAZUNA_ENGINE` to its path, such as `lean/.lake/build/bin/tazuna-engine`, and put z3 on `PATH`.
 
@@ -166,8 +166,36 @@ Here nothing is left for it, so it prints no `Search` line.
 
 ## Verify an implementation
 
-The implementation of the shop comes in a later change.
-`verify` will compare its logs with the spec, as the todo sample shows.
+`web/` is a React app and a Node server that runs the three services, each with its own database, and passes events between them through outboxes.
+[Its README](web/README.md) describes the app and `web/tazuna/`, the only code in it that knows the spec.
+Run these from `web/`:
+
+```sh
+npm run verify
+npm run e2e
+npm run verify:e2e
+```
+
+`npm run verify` feeds the `in` lines of each trace in `spec/inputs/` and `spec/snapshots/` to the service the trace names, records what the service does, and runs `verify` on the 53 recorded traces.
+`npm run e2e` runs six Playwright tests through the browser, and records one trace per service for each test; `npm run verify:e2e` runs `verify` on those 17 traces.
+Every trace passes:
+
+```json
+{"kind":"Verify.passed","trace":"../web/traces/inputs/payments/event RefundDone.jsonl"}
+```
+
+The two sets of traces check different runs.
+`search` writes one run for each class of output, the shortest it finds, so `inputs/payments/event RefundDone.jsonl` refunds a charge that the gateway took before the order was cancelled.
+To see what that leaves out, delete the refund from the `charge.succeeded` case in `web/src/server/payments/payments.ts`, so a charge taken after the cancellation is kept.
+All 53 replayed traces still pass.
+The trace of the end-to-end test `a payment the gateway takes after the customer cancels is refunded` fails, because the spec refunds that charge in the same step:
+
+```json
+{"actual":["{\"out\":\"event\",\"time\":0,\"value\":{\"order\":\"2873b2f9-53f2-4840-abf3-d4c35d03162c\",\"tag\":\"ChargeCaptured\",\"transaction\":\"txn_1\"}}"],"expected":["{\"out\":\"event\",\"time\":0,\"value\":{\"order\":\"2873b2f9-53f2-4840-abf3-d4c35d03162c\",\"tag\":\"ChargeCaptured\",\"transaction\":\"txn_1\"}}","{\"out\":\"event\",\"time\":0,\"value\":{\"order\":\"2873b2f9-53f2-4840-abf3-d4c35d03162c\",\"tag\":\"RefundStarted\",\"transaction\":\"txn_1\"}}","{\"external\":\"payment gateway\",\"id\":\"?1\",\"input\":{\"amount\":1200,\"tag\":\"Refund\",\"transaction\":\"txn_1\"},\"name\":\"refund\",\"out\":\"request\",\"time\":0}"],"kind":"Verify.differs","line":8,"trace":"../web/e2e-traces/payments/a payment the gateway takes after the customer cancels is refunded.jsonl"}
+```
+
+The same holds at a limit: inventory's `Held` trace holds an order with no lines, so an implementation that refuses to hold the last units on the shelf passes every replayed trace, and fails the trace of `a paid order for the last units is confirmed`.
+So write end-to-end tests for the runs your users depend on, and verify their traces too.
 
 ## Read a line you do not know
 
