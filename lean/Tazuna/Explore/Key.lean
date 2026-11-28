@@ -2,9 +2,10 @@ import Tazuna.Explore.Inputs
 
 /-! The key `explore` dedupes states by, exact as TLC's state set with a view and symmetry (Lamport, "Real Time is
 Really Simple", sec 4.1): two states share a key when they are the same once the step counters their ids came from are
-numbered by rank, the wire ids of their pending requests by rank, and every instant is read relative to the state's
-time. No spec can write an instant or a counter, and the canonical order compares fresh ids only by their counters'
-order, which a rank keeps, so a step cannot tell two such states apart. -/
+renamed, the wire ids of their pending requests likewise, and every instant is read relative to the state's time. A
+number below the next one a step takes is renamed to its rank among those the state holds, and one from there on keeps
+its distance from it, so a step cannot tell two such states apart: no spec can write an instant or a counter, and the
+canonical order compares fresh ids only by their counters' order, which the renaming keeps. -/
 
 namespace Tazuna.Explore
 
@@ -88,8 +89,32 @@ the site gives the source. -/
 def funKey (σ : Nat → Nat) (δ : Int) {t : Ty} (f : Fun t) : Erl :=
   .tuple [siteKey f.site, keyBy σ δ (.tuple f.Γ) f.env]
 
+mutual
+/-- A type as a term, one per type: a pending request's types are part of it. -/
+def tyKey : Ty → Erl
+  | .int => .int 0
+  | .str => .int 1
+  | .list t => .tuple [.int 2, tyKey t]
+  | .tuple ts => .tuple [.int 3, .list (tysKey ts)]
+  | .fn ps r => .tuple [.int 4, .list (tysKey ps), tyKey r]
+  | .adt i a vs => .tuple [.int 5, .int i, .list (tysKey a), .list (tyssKey vs)]
+  | .param k => .tuple [.int 6, .int k]
+  | .bag t => .tuple [.int 7, tyKey t]
+  | .table k v => .tuple [.int 8, tyKey k, tyKey v]
+  | .point .day => .int 9
+  | .point .ms => .int 10
+  | .id => .int 11
+  | .dsl k a => .tuple [.int 12, .int k.ctorIdx, .list (tysKey a)]
+def tysKey : List Ty → List Erl
+  | [] => []
+  | t :: ts => tyKey t :: tysKey ts
+def tyssKey : List (List Ty) → List Erl
+  | [] => []
+  | ts :: vs => .list (tysKey ts) :: tyssKey vs
+end
+
 def senderKey (σ : Nat → Nat) (δ : Int) : Sender → Erl
-  | .machine n ⟨t, k⟩ => .tuple [.bin n, keyBy σ δ t k]
+  | .machine n ⟨t, k⟩ => .tuple [.bin n, tyKey t, keyBy σ δ t k]
   | .reaction n => .bin n
 
 -- A command's answers keep no rules: no `ensures` is a meaning, not a fallback.
@@ -97,6 +122,7 @@ set_option linter.tazuna.silentDefault false in
 /-- A pending request as a term, its wire id renamed by `ω`. -/
 def pendingKey (σ : Nat → Nat) (ω : Nat → Nat) (δ : Int) {e : Ty} (p : Pending e) : Erl :=
   .tuple [.int (ω p.id), senderKey σ δ p.sender, .bin p.external, .bin p.request.name,
+    .tuple [tyKey p.request.input, tyKey p.request.output, .list (p.request.rejection.toList.map tyKey)],
     keyBy σ δ p.request.input p.request.value, (p.request.ensures.map (funKey σ δ)).getD (.atom ""),
     funKey σ δ p.request.onAnswer]
 
@@ -134,16 +160,22 @@ def stateCtrs (s : State v) : List Nat :=
     (s.machines.toSigma.flatMap fun ⟨m, insts⟩ => insts.flatMap fun i => ctrsIn m.key i.key ++ ctrsIn m.state i.state) ++
     s.pending.flatMap pendingCtrs
 
-/-- The position of `x` among the sorted, distinct `xs`: a rank. -/
-def rankIn (xs : Array Nat) (x : Nat) : Nat := Id.run do
-  let mut lo := 0
-  let mut hi := xs.size
-  while lo < hi do
-    let mid := (lo + hi) / 2
-    if xs[mid]! < x then lo := mid + 1 else hi := mid
-  return lo
+/-- Where `x` goes among the sorted `xs` between `lo` and `hi`: binary search. -/
+def rankGo (xs : Array Nat) (x : Nat) (lo hi : Nat) (h : hi ≤ xs.size) : Nat :=
+  if hlt : lo < hi then
+    if xs[(lo + hi) / 2]'(by omega) < x then rankGo xs x ((lo + hi) / 2 + 1) hi h
+    else rankGo xs x lo ((lo + hi) / 2) (by omega)
+  else lo
+termination_by hi - lo
 
-/-- The sorted distinct numbers of `xs`. -/
-def ranks (xs : List Nat) : Array Nat := (xs.mergeSort (· ≤ ·)).eraseDups.toArray
+/-- The numbers of the sorted `xs` below `x`: its rank. -/
+def rankIn (xs : Array Nat) (x : Nat) : Nat := rankGo xs x 0 xs.size (Nat.le_refl _)
+
+/-- The numbers of `xs` below `base`, sorted. -/
+def belowOf (xs : List Nat) (base : Nat) : Array Nat := ((xs.filter (· < base)).mergeSort (· ≤ ·)).toArray
+
+/-- A number below `base` as its rank among the sorted `cs`, and one at or past `base` as the count of `cs` plus its
+distance from `base`, so the numbers a step takes from `base` on keep their place whatever `base` is. -/
+def renameBelow (cs : Array Nat) (base c : Nat) : Nat := if c < base then rankIn cs c else cs.size + (c - base)
 
 end Tazuna.Explore

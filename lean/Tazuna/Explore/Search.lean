@@ -100,7 +100,7 @@ def inputsOf (sc : ScopeV) (n : Node v) : List (Input v) :=
   let queries := (List.finRange v.queries.length).flatMap fun i =>
     let d := domainOf sc n "query" (v.queries.get i).name
     (cands d v.caller).flatMap fun c => (cands d (v.queries.get i).input).map (.query i c ·)
-  let answers := (s.pending.mergeSort fun p q => p.id ≤ q.id).flatMap fun p =>
+  let answers := s.pending.flatMap fun p =>
     let t := answerTy p.request.output p.request.rejection
     (cands (domainOf sc n (requestKind p.request) p.request.name) t).map fun x => .answer p.id ⟨t, x⟩
   let events := (List.finRange v.subscribes.length).flatMap fun i =>
@@ -148,25 +148,25 @@ def move (n : Node v) (x : Input v) : Move v :=
 
 end
 
-/-- The node as a term, the same for two nodes exactly when they are the same once counters and wire ids are numbered
-by rank and instants read relative to the state's time. -/
+/-- The node as a term, the same for two nodes exactly when they are the same once counters and wire ids are renamed
+(`renameBelow`) and instants read relative to the state's time. -/
 def Node.key (n : Node v) : Erl :=
   let s := n.state
   let watchCtrs := (n.watch.map fun ws => ws.flatMap fun trs => trs.flatMap fun (ev, _) => ctrsIn v.event ev).toList.flatten
-  let cs := ranks (stateCtrs s ++ watchCtrs)
-  let σ := rankIn cs
-  let ws := ranks (s.pending.map (·.id))
-  let ω := rankIn ws
+  let cs := belowOf (stateCtrs s ++ watchCtrs) s.fresh
+  let σ := renameBelow cs s.fresh
+  let ws := belowOf (s.pending.map (·.id)) s.nextId
+  let ω := renameBelow ws s.nextId
   let δ := -s.now
-  .tuple [keyBy σ δ v.records s.records,
+  .tuple [.int cs.size, .int ws.size, keyBy σ δ v.records s.records,
     .list (s.machines.toSigma.map fun ⟨m, insts⟩ =>
       .list (insts.map fun i => .tuple [keyBy σ δ m.key i.key, keyBy σ δ m.state i.state])),
-    .list (Erl.sort (s.pending.map (pendingKey σ ω δ))),
+    .list (s.pending.map (pendingKey σ ω δ)),
     .list (n.shown.map (keyBy σ δ .id)),
     match n.watch with
     | none => .atom "untimely"
     | some ws => .list (ws.map fun trs =>
-        .list (Erl.sort (trs.map fun (ev, t) => .tuple [keyBy σ δ v.event ev, .int (t + δ)])))]
+        .list (trs.map fun (ev, t) => .tuple [keyBy σ δ v.event ev, .int (t + δ)]))]
 
 /-- A structural hash of a term. -/
 partial def Erl.hash : Erl → UInt64
