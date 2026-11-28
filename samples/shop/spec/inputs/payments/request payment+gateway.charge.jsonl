@@ -1,0 +1,5 @@
+{"service":"payments","trace":1}
+{"in":"event","name":"order","source":"orders","time":0,"value":{"amount":1,"order":"0","tag":"PaymentDue"}}
+{"out":"event","time":0,"value":{"news":{"amount":1,"order":"0","tag":"PaymentDue"},"tag":"OrderNews"}}
+{"out":"event","time":0,"value":{"amount":1,"order":"0","tag":"ChargeStarted"}}
+{"external":"payment gateway","id":"r1","input":{"amount":1,"order":"0","tag":"Charge"},"name":"charge","out":"request","time":0}

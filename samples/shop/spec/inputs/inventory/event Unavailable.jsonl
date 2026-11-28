@@ -1,0 +1,4 @@
+{"service":"inventory","trace":1}
+{"in":"event","name":"order","source":"orders","time":0,"value":{"lines":[{"quantity":1,"sku":"","tag":"Line"},{"quantity":1,"sku":"","tag":"Line"}],"order":"0","tag":"OrderPlaced"}}
+{"out":"event","time":0,"value":{"news":{"lines":[{"quantity":1,"sku":"","tag":"Line"},{"quantity":1,"sku":"","tag":"Line"}],"order":"0","tag":"OrderPlaced"},"tag":"OrderNews"}}
+{"out":"event","time":0,"value":{"order":"0","tag":"Unavailable"}}

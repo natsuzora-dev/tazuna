@@ -1,0 +1,3 @@
+{"service":"orders","trace":1}
+{"caller":{"tag":"Staff"},"id":"1","in":"request","input":{"price":0,"sku":"","tag":"NewPrice"},"name":"set price","time":0}
+{"out":"answer","outcome":"invalid","rules":["sku is given","price is positive"],"time":0,"to":"1"}

@@ -1,0 +1,4 @@
+{"service":"orders","trace":1}
+{"caller":{"tag":"Staff"},"id":"1","in":"request","input":{"price":1,"sku":"MUG","tag":"NewPrice"},"name":"set price","time":0}
+{"out":"answer","outcome":"accepted","time":0,"to":"1"}
+{"out":"event","time":0,"value":{"price":1,"sku":"MUG","tag":"PriceSet"}}

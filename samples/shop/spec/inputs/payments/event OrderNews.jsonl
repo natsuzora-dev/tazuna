@@ -1,0 +1,3 @@
+{"service":"payments","trace":1}
+{"in":"event","name":"order","source":"orders","time":0,"value":{"lines":[],"order":"0","tag":"OrderPlaced"}}
+{"out":"event","time":0,"value":{"news":{"lines":[],"order":"0","tag":"OrderPlaced"},"tag":"OrderNews"}}

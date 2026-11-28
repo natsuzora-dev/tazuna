@@ -1,0 +1,14 @@
+{"service":"orders","trace":1}
+{"caller":{"tag":"Staff"},"id":"1","in":"request","input":{"price":1,"sku":"MUG","tag":"NewPrice"},"name":"set price","time":0}
+{"out":"answer","outcome":"accepted","time":0,"to":"1"}
+{"out":"event","time":0,"value":{"price":1,"sku":"MUG","tag":"PriceSet"}}
+{"caller":{"tag":"Customer"},"id":"2","in":"request","input":{"email":"MUG","lines":[{"quantity":1,"sku":"MUG","tag":"Line"},{"quantity":1,"sku":"MUG","tag":"Line"}],"tag":"NewOrder"},"name":"place order","time":0}
+{"out":"answer","outcome":"accepted","time":0,"to":"2"}
+{"out":"event","time":0,"value":{"email":"MUG","lines":[{"quantity":1,"sku":"MUG","tag":"Line"},{"quantity":1,"sku":"MUG","tag":"Line"}],"order":"id1","tag":"Placed","total":2}}
+{"in":"event","name":"stock","source":"inventory","time":0,"value":{"order":"id1","tag":"StockHeld"}}
+{"out":"event","time":0,"value":{"news":{"order":"id1","tag":"StockHeld"},"tag":"StockNews"}}
+{"out":"event","time":0,"value":{"amount":2,"order":"id1","tag":"PaymentDue"}}
+{"in":"event","name":"payment","source":"payments","time":0,"value":{"order":"id1","tag":"PaymentCaptured"}}
+{"out":"event","time":0,"value":{"news":{"order":"id1","tag":"PaymentCaptured"},"tag":"PaymentNews"}}
+{"out":"event","time":0,"value":{"order":"id1","tag":"OrderConfirmed"}}
+{"external":"mailer","id":"r1","input":{"subject":"Your order is confirmed","tag":"Mail","to":"MUG"},"name":"send","out":"request","time":0}

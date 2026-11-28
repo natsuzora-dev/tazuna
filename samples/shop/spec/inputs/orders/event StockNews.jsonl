@@ -1,0 +1,3 @@
+{"service":"orders","trace":1}
+{"in":"event","name":"stock","source":"inventory","time":0,"value":{"order":"0","tag":"StockHeld"}}
+{"out":"event","time":0,"value":{"news":{"order":"0","tag":"StockHeld"},"tag":"StockNews"}}
