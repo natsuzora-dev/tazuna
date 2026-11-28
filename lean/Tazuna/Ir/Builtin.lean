@@ -306,7 +306,7 @@ def sig : Prim → PrimSig :=
       ret := .dsl .model [] }
   | .scope =>
     { name := "scope",
-      doc := "How far prove and generate look in `service`: records per table (`creates`); items per bag and per table no create bounds (`others_at_most`), which covers bags in records and values, tables in values, each machine's table of instances and the pending requests; and inputs per run that generate's solver search unrolls (`steps`, at least 1). The rest is the explicit-state search's, which stops after `explore_depth` inputs or `explore_states` states and tries the durations `waits` for the clock and the Ints of `values` for an input kind's Int fields: check validates these, and no command reads them yet. prove and generate name each bag and table type a bound gave slots, a machine's table by the machine.",
+      doc := "How far prove and generate look in `service`: records per table (`creates`); items per bag and per table no create bounds (`others_at_most`), which covers bags in records and values, tables in values, each machine's table of instances and the pending requests; and inputs per run that generate's solver search unrolls (`steps`, at least 1). The rest is `explore`'s, which stops after `explore_depth` inputs or once it keeps `explore_states` states, and tries the durations `waits` for the clock and the Ints and Strings of `values` for an input kind's Int and String fields. prove and generate name each bag and table type a bound gave slots, a machine's table by the machine.",
       tvars := ["records"], dataArgs := true,
       params := [l "service" (.dsl .service []), l "creates" (.list (.dsl .create [a])), l "others_at_most" .int,
         l "steps" .int, l "explore_depth" .int, l "explore_states" .int, l "waits" (.list .int),
@@ -314,9 +314,9 @@ def sig : Prim → PrimSig :=
       ret := .dsl .scope [] }
   | .values =>
     { name := "values",
-      doc := "The Ints the explicit-state search tries for every Int field of an input of the kind `of`: a command or query the service declares, a source it subscribes to, or an external command or query whose answers it receives. No command reads them yet.",
+      doc := "The Ints and Strings `explore` tries for every Int and String field of an input of the kind `of`: a command or query the service declares, a source it subscribes to, or an external command or query whose answers it receives. A kind with no value set tries none, so its inputs with such a field are never tried.",
       tvars := ["records", "event", "caller"], dataArgs := true,
-      params := [l "of" (.dsl .declared [a, b, param 2]), l "ints" (.list .int)],
+      params := [l "of" (.dsl .declared [a, b, param 2]), l "ints" (.list .int), l "strings" (.list .str)],
       ret := .dsl .values [] }
   | .create =>
     { name := "create",

@@ -1,0 +1,2 @@
+{"kind":"Explore.covered","scope":{"capped":false,"depth":3,"exhausted":false,"exploreDepth":3,"exploreStates":100,"model":"model","othersAtMost":1,"values":[{"input":"command add","ints":[1],"strings":[]}],"waits":[5]},"service":"counter","states":[1,1,2,2],"transitions":8}
+{"file":"counter/violated/response+acknowledged.jsonl","kind":"Explore.violated","outcome":"late","service":"counter","steps":2,"target":"response acknowledged"}

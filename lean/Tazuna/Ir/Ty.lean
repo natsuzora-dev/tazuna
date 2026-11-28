@@ -45,7 +45,7 @@ def decl : Dsl → String × List String × String
   | .model => ("Model", [],
       "A spec with the scope prove and generate check it in. The scope changes which answers they can give, never what the spec means.")
   | .scope => ("Scope", [], "How far prove and generate look in one service: slots, run length, explore caps, values.")
-  | .values => ("Values", [], "The Ints the explicit-state search tries for one input kind.")
+  | .values => ("Values", [], "The Ints and Strings `explore` tries for one input kind.")
   | .create => ("Create", ["records"], "At most how many records one table of the records holds at any time.")
   | .response => ("Response", ["records", "event"], "After one event, another within a time, by a deadline the records keep.")
   | .scenario => ("Scenario", ["records", "event", "caller"],

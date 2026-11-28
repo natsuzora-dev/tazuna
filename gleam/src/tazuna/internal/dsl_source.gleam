@@ -75,7 +75,7 @@ pub type Model
 /// How far prove and generate look in one service: slots, run length, explore caps, values.
 pub type Scope
 
-/// The Ints the explicit-state search tries for one input kind.
+/// The Ints and Strings `explore` tries for one input kind.
 pub type Values
 
 /// At most how many records one table of the records holds at any time.
@@ -349,7 +349,7 @@ pub fn model(
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// How far prove and generate look in `service`: records per table (`creates`); items per bag and per table no create bounds (`others_at_most`), which covers bags in records and values, tables in values, each machine's table of instances and the pending requests; and inputs per run that generate's solver search unrolls (`steps`, at least 1). The rest is the explicit-state search's, which stops after `explore_depth` inputs or `explore_states` states and tries the durations `waits` for the clock and the Ints of `values` for an input kind's Int fields: check validates these, and no command reads them yet. prove and generate name each bag and table type a bound gave slots, a machine's table by the machine.
+/// How far prove and generate look in `service`: records per table (`creates`); items per bag and per table no create bounds (`others_at_most`), which covers bags in records and values, tables in values, each machine's table of instances and the pending requests; and inputs per run that generate's solver search unrolls (`steps`, at least 1). The rest is `explore`'s, which stops after `explore_depth` inputs or once it keeps `explore_states` states, and tries the durations `waits` for the clock and the Ints and Strings of `values` for an input kind's Int and String fields. prove and generate name each bag and table type a bound gave slots, a machine's table by the machine.
 pub fn scope(
   service _service: Service,
   creates _creates: List(Create(records)),
@@ -363,10 +363,11 @@ pub fn scope(
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// The Ints the explicit-state search tries for every Int field of an input of the kind `of`: a command or query the service declares, a source it subscribes to, or an external command or query whose answers it receives. No command reads them yet.
+/// The Ints and Strings `explore` tries for every Int and String field of an input of the kind `of`: a command or query the service declares, a source it subscribes to, or an external command or query whose answers it receives. A kind with no value set tries none, so its inputs with such a field are never tried.
 pub fn values(
   of _of: Declared(records, event, caller),
   ints _ints: List(Int),
+  strings _strings: List(String),
 ) -> Values {
   panic as \"tazuna's built-ins run only in the engine\"
 }

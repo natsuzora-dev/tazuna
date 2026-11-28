@@ -246,7 +246,7 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
   | .scope, args, _ => fun ((v : ServiceV), creates, items, steps, exploreDepth, exploreStates, waits, vs, ()) =>
     { service := v.name, records := (Ty.param 0).inst args, creates, items, steps, exploreDepth, exploreStates,
       waits, values := vs }
-  | .values, _, _ => fun (input, ints, ()) => { input, ints }
+  | .values, _, _ => fun (input, ints, strings, ()) => { input, ints, strings }
   | .create, args, _ => fun (table, atMost, ()) =>
     { key := (Ty.param 1).inst args, value := (Ty.param 2).inst args, table, atMost }
   | .response, _, _ => fun (name, after, then_, within, deadline, ()) => { name := name.1, after, then_, within, deadline }

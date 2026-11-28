@@ -4,6 +4,7 @@ import Lean.Meta.Tactic.Simp.SimpTheorems
 import Tazuna.Cli.Test
 import Tazuna.Cli.Prove
 import Tazuna.Cli.Generate
+import Tazuna.Cli.Explore
 import Tazuna.Cli.Explain
 import Tazuna.Semantics.After
 import Tazuna.Smt.Prove
@@ -79,7 +80,7 @@ elab "#check_tazuna_reach" : command => do
     -- What the engine runs: each command, and the lists the e2e harness and gen-dsl print, which hold every output
     -- kind, built-in and DSL type.
     ``Tazuna.Cli.check, ``Tazuna.Cli.test, ``Tazuna.Cli.verify, ``Tazuna.Cli.prove, ``Tazuna.Cli.optionsOf,
-    ``Tazuna.Cli.generate, ``Tazuna.Cli.explain,
+    ``Tazuna.Cli.generate, ``Tazuna.Cli.explore, ``Tazuna.Cli.explain,
     ``Tazuna.Kind.mem_all, ``Tazuna.Ir.Prim.mem_all, ``Tazuna.Ir.Dsl.mem_all,
     -- Gleam's meaning where languages differ, and literals: reading back a printed literal gives it back.
     ``Tazuna.Gleam.div_zero, ``Tazuna.Gleam.mod_zero, ``Tazuna.Gleam.div_add_mod, ``Tazuna.Gleam.mod_neg_left,
@@ -187,6 +188,9 @@ elab "#check_tazuna_reach" : command => do
     -- nowhere before its last step and faults there by a fault the target covers, and verify replays the written
     -- trace to such a fault at its last line.
     ``Tazuna.Cli.generate_breaks,
+    -- A run explore reports as breaking a response does (Explore.violated): its trace reads as the spec, its clock
+    -- lines pass no waiting timer, and its steps violate the response as `ResponseV.Violated` defines it.
+    ``Tazuna.Explore.response_trace,
     -- generate's "unsettled within k steps" (Generate.unsettled): where its break cubes at a depth cover it with no
     -- model, or the step question whether a step breaks the target is unsat for every kind of a cube's last pick, no
     -- run of that many valid inputs within the slots whose steps before the last fault nowhere faults at its last step

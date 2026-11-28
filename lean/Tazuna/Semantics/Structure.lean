@@ -206,10 +206,11 @@ structure ScenarioV (r e c : Ty) where
   name : String
   steps : List (StepV r e c)
 
-/-- The Ints an explicit-state search tries for one input kind's Int fields. -/
+/-- The Ints and Strings `explore` tries for one input kind's Int and String fields. -/
 structure ValuesV where
   input : DeclaredV
   ints : List Int
+  strings : List Str
 
 /-- How far prove and generate look in one service, as its model writes it, in Gleam's Int: `service` is the
 service's name, and `creates` reads records of the type `records`, which check requires to be the service's. -/

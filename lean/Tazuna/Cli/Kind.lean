@@ -78,6 +78,29 @@ inductive Tazuna.GenerateKind : Type
   | unsettled
 deriving DecidableEq
 
+/-- What `explore` found for one target, or covered of one service. -/
+inductive Tazuna.ExploreKind : Type
+  /-- A run from the initial state on the scope's inputs whose last step shows the target's class of out line: its
+  trace is written, the first such run explore met, so one of the fewest inputs. -/
+  | reached
+  /-- No run explore covered shows the target's class at any step: every run of at most `depth` inputs, or of any
+  length where `exhausted`, on the inputs the scope generates (the line's `scope`), on which its `assumes` hold. Not
+  "unreachable": other inputs or a longer run may reach it. -/
+  | unreached
+  /-- A run from the initial state on the scope's inputs whose steps before the last fault nowhere and whose last
+  step faults by a fault the target covers, or, for a response, a run whose clock lines pass no waiting timer and
+  whose steps violate it: its trace is written, and verify replays it, to that fault at its last line for a fault. -/
+  | violated
+  /-- No run explore covered breaks the target: as `unreached`, of the runs whose steps before the last fault
+  nowhere, and for a response of those whose clock lines pass no waiting timer. Not "proved": other inputs or a longer
+  run may break it. -/
+  | notViolated
+  /-- What explore covered of the service: the states it first reached at each depth (`states`, from the initial
+  state's 1), the transitions it checked, and whether it saw every state the scope's inputs reach (`exhausted`) or
+  the state cap stopped it before its depth (`capped`). Every other line of the service names the same coverage. -/
+  | covered
+deriving DecidableEq
+
 /-- Why a question or a trace has no verdict. -/
 inductive Tazuna.UndecidedKind : Type
   /-- The solver answered unknown, or ran out of its resource limit, which stops it at the same point on every
@@ -139,6 +162,7 @@ inductive Tazuna.Kind : Type
   | traceInvalid
   | prove (k : Tazuna.ProveKind)
   | generate (k : Tazuna.GenerateKind)
+  | explore (k : Tazuna.ExploreKind)
   | undecided (k : Tazuna.UndecidedKind)
   /-- What a kind of line means, as `explain` prints it. -/
   | explain
@@ -247,6 +271,17 @@ def GenerateKind.name : GenerateKind → String
   | .violated => "violated"
   | .unsettled => "unsettled"
 
+def ExploreKind.all : List ExploreKind := [.reached, .unreached, .violated, .notViolated, .covered]
+
+theorem ExploreKind.mem_all (k : ExploreKind) : k ∈ ExploreKind.all := by cases k <;> simp [ExploreKind.all]
+
+def ExploreKind.name : ExploreKind → String
+  | .reached => "reached"
+  | .unreached => "unreached"
+  | .violated => "violated"
+  | .notViolated => "notViolated"
+  | .covered => "covered"
+
 def UndecidedKind.all : List UndecidedKind := [.unknown, .timeout, .limit, .upToRenaming]
 
 theorem UndecidedKind.mem_all (k : UndecidedKind) : k ∈ UndecidedKind.all := by cases k <;> simp [UndecidedKind.all]
@@ -273,6 +308,7 @@ def name : Kind → String
   | traceInvalid => "Trace.invalid"
   | prove k => "Prove." ++ k.name
   | generate k => "Generate." ++ k.name
+  | explore k => "Explore." ++ k.name
   | undecided k => "Undecided." ++ k.name
   | explain => "Explain.kind"
   | version => "Engine.version"
@@ -281,7 +317,7 @@ def name : Kind → String
 def all : List Kind :=
   InternalKind.all.map internal ++ UsageKind.all.map usage ++ Restricted.all.map restricted ++ Ir.Illegal.all.map illegal ++ [checkPassed] ++ FaultKind.all.map fault ++ TestKind.all.map test ++
     [verifyPassed, verifyDiffers, traceInvalid] ++ ProveKind.all.map prove ++
-    GenerateKind.all.map generate ++ UndecidedKind.all.map undecided ++ [explain, version, unfinished]
+    GenerateKind.all.map generate ++ ExploreKind.all.map explore ++ UndecidedKind.all.map undecided ++ [explain, version, unfinished]
 
 theorem mem_all (k : Kind) : k ∈ all := by
   cases k with
@@ -293,6 +329,7 @@ theorem mem_all (k : Kind) : k ∈ all := by
   | test k => simp [all, TestKind.mem_all]
   | prove k => simp [all, ProveKind.mem_all]
   | generate k => simp [all, GenerateKind.mem_all]
+  | explore k => simp [all, ExploreKind.mem_all]
   | undecided k => simp [all, UndecidedKind.mem_all]
   | _ => simp [all]
 
@@ -302,7 +339,7 @@ past the wall clock none that reaches it on every machine. -/
 def e2e : Kind → Bool
   | restricted _ | internal .convert | internal .engine | undecided .timeout => false
   | internal .invalidIr | usage _ | illegal _ | checkPassed | fault _ | test _ | verifyPassed | verifyDiffers | traceInvalid | prove _
-  | generate _ | undecided .unknown | undecided .limit | undecided .upToRenaming
+  | generate _ | explore _ | undecided .unknown | undecided .limit | undecided .upToRenaming
   | explain | version | unfinished => true
 
 /-- The outcome a line of the kind gives its command; the command exits with its worst line's (`Exit.max`). -/
@@ -319,6 +356,8 @@ def exit : Kind → Exit
   | generate .reached | generate .unreached | generate .unreachable | generate .unreachableWithinBounds => .ok
   | generate .violated => .violation
   | generate .unsettled => .undecided
+  | explore .reached | explore .unreached | explore .notViolated | explore .covered => .ok
+  | explore .violated => .violation
   | undecided _ => .undecided
   | unfinished => .unfinished
 

@@ -38,7 +38,7 @@ def actual : Field := ⟨"actual", "the line or lines the run or the trace has t
 def target : Field := ⟨"target", "the target: an invariant, an ensures rule, an effect, a timer machine, a pair, a response"⟩
 def assumes : Field := ⟨"assumes", "what the verdict assumes: the stated assumptions and the invariants it took as holding"⟩
 def widened : Field := ⟨"widened", "a pair's own kinds that stand for any handle or site of their type"⟩
-def scope : Field := ⟨"scope", "the model the verdict rests on and the values of it the verdict reads: model, its name; bounds, each bound a step or a run can go past (its type, where its slots come from, how many, and the machines whose instances it holds); steps, the most inputs searched; resourceLimit, the solver's resource limit per question"⟩
+def scope : Field := ⟨"scope", "the model the verdict rests on and the values of it the verdict reads: model, its name; bounds, each bound a step or a run can go past (its type, where its slots come from, how many, and the machines whose instances it holds); steps, the most inputs searched; resourceLimit, the solver's resource limit per question; for explore, depth, the most inputs of every run covered, exhausted, whether every state the inputs reach was seen (then runs of any length are covered), exploreDepth and exploreStates, its caps, and waits, othersAtMost, values and ids, what its inputs try"⟩
 def fromField : Field := ⟨"from", "init: from the initial state; validState: from any state of the right shape"⟩
 def state : Field := ⟨"state", "the state before the step, as wire values"⟩
 def input : Field := ⟨"input", "the input of the step"⟩
@@ -66,6 +66,8 @@ def exit : Field := ⟨"exit", "the exit code a line of the kind gives; a comman
 def backedBy : Field := ⟨"backedBy", "the theorems the line rests on, as lean/Tazuna/Axioms.lean names its roots"⟩
 def fields : Field := ⟨"fields", "each field a line of the kind can carry, with what it holds"⟩
 def version : Field := ⟨"version", "the version"⟩
+def states : Field := ⟨"states", "for explore, the states first reached at each depth, from depth 0"⟩
+def transitions : Field := ⟨"transitions", "for explore, the steps it ran and checked"⟩
 def targets : Field := ⟨"targets", "the targets the run left unfinished, each as `<service>/<target>`, the name `--only` keeps"⟩
 
 end Field
@@ -189,6 +191,15 @@ def GenerateKind.explanation : GenerateKind → Explanation
   | .unsettled => ⟨docOf% GenerateKind.unsettled, [`Tazuna.Smt.noModel_breaks],
     [service, target, scope, assumes]⟩
 
+def ExploreKind.explanation : ExploreKind → Explanation
+  | .reached => ⟨docOf% ExploreKind.reached, [`Tazuna.Cli.generate_reaches, `Tazuna.Ir.targets_cover,
+    `Tazuna.Cli.targetFile_inj], [service, target, written, steps]⟩
+  | .unreached => ⟨docOf% ExploreKind.unreached, [], [service, target, scope, assumes]⟩
+  | .violated => ⟨docOf% ExploreKind.violated, [`Tazuna.Cli.generate_breaks, `Tazuna.Explore.response_trace],
+    [service, target, written, steps, outcome]⟩
+  | .notViolated => ⟨docOf% ExploreKind.notViolated, [], [service, target, scope, assumes]⟩
+  | .covered => ⟨docOf% ExploreKind.covered, [], [service, scope, states, transitions]⟩
+
 def UndecidedKind.explanation : UndecidedKind → Explanation
   | .unknown => ⟨docOf% UndecidedKind.unknown, [], questionFields ++ [depth, why, scope]⟩
   | .timeout => ⟨docOf% UndecidedKind.timeout, [], questionFields ++ [depth, why]⟩
@@ -211,6 +222,7 @@ def explanation : Kind → Explanation
   | traceInvalid => ⟨docOf% Kind.traceInvalid, [`Tazuna.Trace.replay_iff], [trace, line, message]⟩
   | prove k => k.explanation
   | generate k => k.explanation
+  | explore k => k.explanation
   | undecided k => k.explanation
   | explain => ⟨docOf% Kind.explain, [], [Field.name, Field.means, Field.exit, Field.backedBy, Field.fields]⟩
   | version => ⟨docOf% Kind.version, [], [Field.version]⟩

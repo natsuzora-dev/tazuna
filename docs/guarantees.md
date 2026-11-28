@@ -49,7 +49,7 @@ The model gives each service a scope, and the Z3 solver gets a fixed number of s
 - Every collection type gets at least as many slots as the longest list literal in the spec that writes its items: a list type its own, `Bag(a)` that of `List(a)`, and `Table(k, v)` that of `List(#(k, v))`, as `bag.from_list` and `table.from_list` take them. So every value the spec writes fits, and the line names such a type's bound `longest literal`.
 - `steps` limits the inputs of a run that `generate` unrolls.
 - `resource_limit` is Z3's deterministic resource limit per question, so an answer is the same on every machine.
-- `explore_depth`, `explore_states`, `waits` and `values` are for the explicit-state search. `check` validates them, and no command reads them yet.
+- `explore_depth`, `explore_states`, `waits` and `values` are `explore`'s: how deep it searches, how many states it keeps, the clock steps it tries, and the Ints and Strings an input kind's fields take.
 
 A service's `cascade`, the most internal steps one input may take, is part of what the spec means, so it stays in `service`: an input that needs more faults in every command.
 
@@ -208,6 +208,22 @@ A target that every kind's question rules out is settled by `prove` and gets no 
 - `Generate.violated` writes the run's trace, up to the last step's `in` line, to `<dir>/<service>/violated/<target>.jsonl`. `generate_breaks`: the run, in Lean, faults nowhere before its last step and faults there by a fault the target covers, and `verify` replays the trace to such a fault at its last line.
 - `Generate.unsettled`: `noModel_breaks`: no run of at most `steps` inputs within the slots, on valid inputs, whose steps before the last fault nowhere, faults at its last step by a fault the target covers.
 
+## explore
+
+`explore <root> <dir>` searches the states a service reaches from its initial state breadth first, as TLC searches a TLA+ spec, on the inputs the scope generates.
+From each state it tries every command, query, answer to a pending request and subscribed event over the values its types allow, and a clock line after each of `waits`.
+An Int or String field takes the kind's `values`, and a kind with none never takes an input with such a field.
+An id field takes an id the service made that an out line showed and the state still holds, an outside id the state holds, or one new outside id.
+An instant field takes the state's time or that time plus a wait, and a list, bag or table at most `others_at_most` items.
+A state is kept once per key: two states share a key when they are the same once the counters their ids came from and the wire ids of their pending requests are numbered by rank and every instant is read relative to the state's time.
+A step cannot tell such states apart, since no spec writes an instant or a counter and the canonical order compares fresh ids by their counters' order alone.
+A faulted step ends its run.
+The search stops after `explore_depth` inputs or once it keeps `explore_states` states, never by wall time, so its lines are a function of the spec and the model.
+`Explore.covered` gives the states first reached at each depth, and every scoped line names the coverage: `depth`, every run of at most that many inputs, and `exhausted`, every state the inputs reach was seen, so runs of any length are covered.
+
+- `Explore.reached` and `Explore.violated` write the first run found, one of the fewest inputs, with `generate`'s writers and file names, so `generate_reaches` and `generate_breaks` hold of them as of `generate`'s. A response's trace is `response_trace`'s: its clock lines pass no waiting timer and its run violates the response as the semantics defines it.
+- `Explore.unreached` and `Explore.notViolated` speak of every run the line's coverage names.
+
 ## verify
 
 `verify <root> <dir>` replays each `.jsonl` trace in the directory and its subdirectories against the spec, so `verify <root> inputs` reads what `generate <root> inputs` wrote.
@@ -224,12 +240,12 @@ After 100,000 tries it prints `Undecided.limit`.
 
 Three assumptions appear in `assumes`, in these words.
 `Assumption.text` in `Semantics/Valid.lean` defines each text beside its meaning, so the two cannot part.
-`Generate.unsettled` also prints `no step before the last faults`, since its run ends in a fault.
+`Generate.unsettled` and `Explore.notViolated` of a target a fault breaks also print `no step before the last faults`, since its run ends in a fault.
 
 | Text in `assumes` | Lines that print it |
 | --- | --- |
-| `ids the service made are used only after they appeared on an out line` | step lines, pair lines, responses, `Prove.unreachable`, `Prove.unreachableWithinBounds`, `Generate.unreached`, `Generate.unreachable`, `Generate.unreachableWithinBounds`, `Generate.unsettled` |
-| `no step of the run faults` | `Prove.unreachable`, `Prove.unreachableWithinBounds`, `Generate.unreached`, `Generate.unreachable`, `Generate.unreachableWithinBounds` |
+| `ids the service made are used only after they appeared on an out line` | step lines, pair lines, responses, `Prove.unreachable`, `Prove.unreachableWithinBounds`, `Generate.unreached`, `Generate.unreachable`, `Generate.unreachableWithinBounds`, `Generate.unsettled`, `Explore.unreached`, `Explore.notViolated` |
+| `no step of the run faults` | `Prove.unreachable`, `Prove.unreachableWithinBounds`, `Generate.unreached`, `Generate.unreachable`, `Generate.unreachableWithinBounds`, `Explore.unreached`, `Explore.notViolated` of a response |
 | `no clock line moves time past a timer that waits` | responses |
 
 The first leaves ids from outside the service unrestricted.
