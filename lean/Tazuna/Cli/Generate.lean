@@ -227,12 +227,14 @@ def once {α : Type} (f : IO α) : IO (IO α) := do
       pure a
 
 def generate (root dir path : String) (opts : Options) : Cmd Unit := do
+  let start ← IO.monoMsNow
   match ← loadSpec root path with
   | none => pure ()
   | some c =>
     -- At most `jobs` solvers run at once, and at most `jobs` depth builds; a search builds its cubes' scripts while
     -- others' solvers run.
-    let solver := { (← Solver.find) with gate := some (← Std.Semaphore.new opts.jobs) }
+    let gate ← Std.Semaphore.new opts.jobs
+    let solver := { (← Solver.find) with gate := some gate, deadline := opts.timeout.map (start + 1000 * ·) }
     let pool ← Std.Semaphore.new opts.jobs
     -- The engine's own digest names this build in the direct keys of prove's questions, which generate shares.
     let engine ← IO.asTask (prio := .dedicated) do return Sha256.hex (← IO.FS.readBinFile (← IO.appPath))
@@ -297,9 +299,12 @@ def generate (root dir path : String) (opts : Options) : Cmd Unit := do
                 pure (.ok (some ((xs.zip us).filterMap fun ((inp, _), u) => if u then none else some inp.pick).eraseDups))
         -- `generate_sound`: the decoded run's last step shows the target, so "misses the target" is unreachable unless
         -- the goal read z3's values for division by zero or a selector on another constructor (`lastHits`).
+        -- A dead target's line needs its scope, so the job asks for it: a job done has its line's whole content.
         let (j, r) ← Job.of do
-          return (← searchDepths solver cache sv g.text ds live (!mayShow c.P c.T g ·) none
-            (fun sts => .ok (genGoal L c.T rules g sts)) (genTrace c.T v rules g (c.checked v sv.mem))).map .search
+          let res ← searchDepths solver cache sv g.text ds live (!mayShow c.P c.T g ·) none
+            (fun sts => .ok (genGoal L c.T rules g sts)) (genTrace c.T v rules g (c.checked v sv.mem))
+          if res matches .ok .dead then discard deadScope
+          return res.map .search
         searches := searches.push j
         jobs := jobs.push ⟨v.name, g.text, targetFile v.name g, scope, deadScope, r⟩
       for g in bs do
@@ -334,7 +339,9 @@ def generate (root dir path : String) (opts : Options) : Cmd Unit := do
         jobs := jobs.push ⟨v.name, g.text, breakFile v.name g.text, scope, deadScope, r⟩
     -- One pool: the builds first, so a search waits only on a build some worker runs. Its workers mostly wait on
     -- their cubes, so there are enough of them to keep every solver busy.
-    runAll (opts.jobs * cubeChunk) (builds ++ searches)
+    runAll solver (opts.jobs * cubeChunk) (builds ++ searches)
+    let cut ← solver.past
+    let mut unfinished : Array String := #[]
     for job in jobs do
       let file := System.FilePath.mk dir / job.file
       let common := [("service", Json.str job.service), ("target", Json.str job.target)]
@@ -343,7 +350,12 @@ def generate (root dir path : String) (opts : Options) : Cmd Unit := do
         IO.FS.writeFile file (String.join (tr.wires.map (·.text ++ "\n")))
       let unwrite : IO Unit := do if ← file.pathExists then IO.FS.removeFile file
       let res ← match ← job.result.get with
-        | none => return ← internal s!"service {job.service}, {job.target}: its search never ran"
+        | none =>
+          -- A target the run's deadline cut off keeps whatever file it had: no line speaks for it.
+          if cut then
+            unfinished := unfinished.push (job.service ++ "/" ++ job.target)
+            continue
+          return ← internal s!"service {job.service}, {job.target}: its search never ran"
         | some (.error m) => return ← internal m
         | some (.ok res) => pure res
       match res with
@@ -383,5 +395,7 @@ def generate (root dir path : String) (opts : Options) : Cmd Unit := do
         unwrite
         printLine kind (common ++ fields)
       | .settled | .brk .dead => unwrite
+    unless unfinished.isEmpty do
+      printLine .unfinished [("targets", Json.arr (unfinished.map Json.str))]
 
 end Tazuna.Cli

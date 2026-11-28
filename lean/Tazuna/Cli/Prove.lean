@@ -521,15 +521,27 @@ writes. -/
 inductive Placed where
   | ready (r : Report)
   | skipped (service : String) (target : Target)
-  | asked (result : IO.Ref (Option (Except String Report)))
+  /-- The question's service and the text of its target (empty for a bound question), for a run cut off before it
+  was answered. -/
+  | asked (service target : String) (result : IO.Ref (Option (Except String Report)))
+
+def Placed.service : Placed → String
+  | .ready r => r.service
+  | .skipped s _ | .asked s _ _ => s
+
+def Placed.target : Placed → Option String
+  | .ready r => (targetOf r).map (·.text)
+  | .skipped _ g => some g.text
+  | .asked _ g _ => if g.isEmpty then none else some g
 
 -- Every service a report names has a scope, so the empty list is never read.
 set_option linter.tazuna.silentDefault false in
 def prove (root path : String) (opts : Options) : Cmd Unit := do
+  let start ← IO.monoMsNow
   match ← loadSpec root path with
   | none => pure ()
   | some c =>
-    let solver ← Solver.find
+    let solver := { (← Solver.find) with deadline := opts.timeout.map (start + 1000 * ·) }
     -- The engine's own digest names this build in the direct keys; it is read while the questions are built.
     let engine ← IO.asTask (prio := .dedicated) do return Sha256.hex (← IO.FS.readBinFile (← IO.appPath))
     let mut items : List Item := []
@@ -569,15 +581,25 @@ def prove (root path : String) (opts : Options) : Cmd Unit := do
         names := names.insert o.name
         let (j, r) ← Job.of do pure ((← solver.ask cache (directKey inputs o.name) o.ids o.script) >>= o.read)
         questions := questions.push j
-        placed := placed.push (.asked r)
-    runAll opts.jobs questions
+        placed := placed.push (.asked (o.name[1]?.getD "") (o.name[2]?.getD "") r)
+    runAll solver opts.jobs questions
+    -- A line reads every question of its service (the bound questions and which targets are proved), so a service
+    -- with a question the run's deadline cut off prints none, and its targets are listed as unfinished.
+    let cut ← solver.past
+    let mut unfinished : List String := []
+    for p in placed do
+      if let .asked s _ r := p then
+        if (← r.get).isNone && cut && !unfinished.contains s then unfinished := unfinished ++ [s]
+    for (s, _, r) in deads do
+      if (← r.get).isNone && cut && !unfinished.contains s then unfinished := unfinished ++ [s]
     let mut reports : List Report := []
     let mut skipped : List (String × Target) := []
     for p in placed do
+      if unfinished.contains p.service then continue
       match p with
       | .ready r => reports := reports ++ [r]
       | .skipped s g => skipped := skipped ++ [(s, g)]
-      | .asked r =>
+      | .asked _ _ r =>
         match ← r.get with
         | some (.ok r) => reports := reports ++ [r]
         | some (.error m) => return ← internal m
@@ -585,7 +607,7 @@ def prove (root path : String) (opts : Options) : Cmd Unit := do
     let targets := (placed.toList.filterMap fun
       | .ready r => (targetOf r).map (r.service, ·)
       | .skipped s g => some (s, g)
-      | .asked _ => none) ++ reports.filterMap fun r => (targetOf r).map (r.service, ·)
+      | .asked .. => none) ++ reports.filterMap fun r => (targetOf r).map (r.service, ·)
     let skips (s : String) (g : Target) : Bool := skipped.any fun (s', g') => s' == s && g' == g
     let unproved (s : String) : List Target :=
       (targets.filterMap fun (s', g) => if s' == s && (reports.any (blocks s g) || skips s g) then some g else none).foldl
@@ -613,6 +635,7 @@ def prove (root path : String) (opts : Options) : Cmd Unit := do
     -- A dead target is a fact, not a verdict: only where every kind's question is unsat (`unshown_sound` at any depth,
     -- else `unshown_within`); a model or no answer says nothing, and stops its family's questions.
     for (s, g, r) in deads do
+      if unfinished.contains s then continue
       let dead ← match ← r.get with
         | some (.ok dead) => pure dead
         | some (.error m) => return ← internal m
@@ -623,5 +646,10 @@ def prove (root path : String) (opts : Options) : Cmd Unit := do
         match reach s false with
         | none => printLine (.prove .unreachable) fields
         | some bs => printLine (.prove .unreachableWithinBounds) (fields ++ [("bounds", Json.arr bs.toArray)])
+    unless unfinished.isEmpty do
+      let left := unfinished.flatMap fun s =>
+        ((placed.toList.filter (·.service == s)).filterMap (·.target) ++
+          (deads.toList.filter (·.1 == s)).map (·.2.1.text)).eraseDups.map (s ++ "/" ++ ·)
+      printLine .unfinished [("targets", Json.arr (left.map Json.str).toArray)]
 
 end Tazuna.Cli

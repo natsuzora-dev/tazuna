@@ -24,12 +24,32 @@ structure Solver where
   /-- Where set, a solver process runs only while it holds one of the gate's permits, which bound the solvers running
   at once whatever number of threads build scripts. -/
   gate : Option Std.Semaphore := none
+  /-- The run's wall-clock deadline (`IO.monoMsNow`), from `--timeout`: past it no solver process starts, a running
+  one is killed, and the call throws, so the question it served gets no answer rather than a wrong one. -/
+  deadline : Option Nat := none
+  /-- How many solver processes run, so a run cut off waits for every one it killed (`Solver.drain`). -/
+  running : Option (IO.Ref Nat) := none
+
+/-- Whether the run's deadline has passed. -/
+def Solver.past (s : Solver) : IO Bool := do
+  match s.deadline with
+  | some d => return (← IO.monoMsNow) ≥ d
+  | none => return false
+
+/-- Waits until no solver process runs: each one past the deadline kills itself within a few milliseconds. -/
+def Solver.drain (s : Solver) : IO Unit := do
+  if let some r := s.running then
+    while (← r.get) > 0 do
+      IO.sleep 5
+
+/-- What a solver call throws past the run's deadline. -/
+def cutOff : IO.Error := .userError "the run's --timeout passed"
 
 /-- z3 beside the engine's executable, where the launcher puts the z3 it fetched with the engine; else z3 on PATH, as
 for an engine built from lean/ that `TAZUNA_ENGINE` names. -/
 def Solver.find : IO Solver := do
   let beside := (← IO.appDir) / (if System.Platform.isWindows then "z3.exe" else "z3")
-  return { path := if ← beside.pathExists then beside.toString else "z3" }
+  return { path := if ← beside.pathExists then beside.toString else "z3", running := some (← IO.mkRef 0) }
 
 /-- z3 prints a value with `let` aliases, which values in SMT-LIB's model syntax do not have, beyond depth 5 and for a
 part of size 10 or more that occurs twice; both limits are raised so every value prints as a term. -/
@@ -51,20 +71,27 @@ where
     IO.wait (← gate.acquire).result!
     try runProcess path finally gate.release
   runProcess (path : System.FilePath) : IO (Except Answer String) := do
-    let child ← IO.Process.spawn
-      { cmd := s.path, args := #["-smt2", path.toString], stdin := .null, stdout := .piped, stderr := .null }
-    let out ← IO.asTask (prio := .dedicated) child.stdout.readToEnd
-    let deadline := (← IO.monoMsNow) + s.timeoutMs
-    while !(← IO.hasFinished out) && (← IO.monoMsNow) < deadline do
-      IO.sleep 5
-    if !(← IO.hasFinished out) then
-      child.kill
+    -- Counted before the deadline is read, so a process that starts is one `drain` waits for.
+    if let some r := s.running then r.modify (· + 1)
+    try
+      if ← s.past then throw cutOff
+      let child ← IO.Process.spawn
+        { cmd := s.path, args := #["-smt2", path.toString], stdin := .null, stdout := .piped, stderr := .null }
+      let out ← IO.asTask (prio := .dedicated) child.stdout.readToEnd
+      let deadline := (← IO.monoMsNow) + s.timeoutMs
+      while !(← IO.hasFinished out) && (← IO.monoMsNow) < deadline && !(← s.past) do
+        IO.sleep 5
+      if !(← IO.hasFinished out) then
+        child.kill
+        let _ ← child.wait
+        if ← s.past then throw cutOff
+        return .error (.timeout s.timeoutMs)
       let _ ← child.wait
-      return .error (.timeout s.timeoutMs)
-    let _ ← child.wait
-    match out.get with
-    | .ok text => return .ok text
-    | .error e => return .error (.unknown s!"the solver's output did not read: {e}")
+      match out.get with
+      | .ok text => return .ok text
+      | .error e => return .error (.unknown s!"the solver's output did not read: {e}")
+    finally
+      if let some r := s.running then r.modify (· - 1)
 
 /-- What the solver says its version is: the cache keeps each version's answers apart. -/
 def Solver.version (s : Solver) : IO String := do

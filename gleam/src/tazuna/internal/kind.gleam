@@ -131,11 +131,11 @@ pub fn exit_code(kinds: List(Kind)) -> Int {
 /// A line's rank among outcomes, and its exit code.
 fn outcome(kind: Kind) -> #(Int, Int) {
   case kind {
-    Internal(InvalidIr) -> #(4, 4)
-    Internal(Convert) -> #(4, 4)
-    Internal(Engine) -> #(4, 4)
-    Usage(Arguments) -> #(3, 3)
-    Usage(System) -> #(3, 3)
+    Internal(InvalidIr) -> #(5, 4)
+    Internal(Convert) -> #(5, 4)
+    Internal(Engine) -> #(5, 4)
+    Usage(Arguments) -> #(4, 3)
+    Usage(System) -> #(4, 3)
     Restricted(Float) -> #(2, 1)
     Restricted(HighCodePoint) -> #(2, 1)
     Restricted(BitArray) -> #(2, 1)

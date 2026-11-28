@@ -51,6 +51,18 @@ A verdict speaks only of states and inputs that fit the slots.
 `Prove.withinBounds`, `Prove.unreachableWithinBounds`, `Generate.unreached`, `Generate.unreachableWithinBounds` and `Generate.unsettled` list in `bounds` every bound a step of the service can go past.
 That list is the service's static scope, the same in every run.
 
+## Lines do not depend on the schedule
+
+What a line of `prove` or `generate` says depends on the spec, the model, the solver's resource limit and seeds, and the cache only through answers that are the same either way.
+It does not depend on `--jobs`, on the machine's speed, or on `--timeout`.
+`--timeout <seconds>` bounds the run's wall clock and never changes a question.
+When it passes, no solver starts and the running ones are killed.
+The run then prints the lines of every finished target as a run without the flag prints them, and one `Run.unfinished` line that lists the rest, and exits 5.
+Which targets finish in time depends on the machine; what a printed line says does not.
+A `prove` line reads every question of its service (the bound questions, and which invariants are proved for `assumes`), so a service with a question left prints no line, and all of its targets are listed.
+A `generate` line reads only its own target's search, so every finished target prints.
+`generate` leaves the file of an unfinished target as it was.
+
 ## check
 
 `check` loads the IR and evaluates `spec()`.

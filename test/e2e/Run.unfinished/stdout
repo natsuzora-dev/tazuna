@@ -1,0 +1,1 @@
+{"kind":"Run.unfinished","targets":["counter/invariant not negative","counter/response an add shows its own amount","counter/add ensures grows","counter/add accepted","counter/add invalid positive","counter/event Added"]}

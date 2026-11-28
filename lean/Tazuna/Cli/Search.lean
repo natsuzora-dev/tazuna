@@ -163,12 +163,13 @@ def refusedLine (T : List TypeDecl) : Refused → Except String (Kind × List (S
   | .spec l => .ok (.undecided .limit, [("limit", Json.str (l.text T))])
   | .unexpected u => .error s!"the encoding met a case the loaded program's types rule out: {reprStr u}"
 
-/-- The options of `prove` and `generate`: the prefix `--only` keeps lines by, how many solvers run at once, and the
-cache directory. -/
+/-- The options of `prove` and `generate`: the prefix `--only` keeps lines by, how many solvers run at once, the cache
+directory, and the wall-clock limit of the run in seconds, if any. -/
 structure Options where
   only : Option String := none
   jobs : Nat := 4
   cache : System.FilePath
+  timeout : Option Nat := none
 
 /-- Whether `--only` keeps the line named `name`. -/
 def Options.keeps (o : Options) (name : String) : Bool := match o.only with
@@ -177,16 +178,17 @@ def Options.keeps (o : Options) (name : String) : Bool := match o.only with
 
 -- An IR path without a directory part is in the working directory.
 set_option linter.tazuna.silentDefault false in
-/-- The arguments of `prove` and `generate` after their own: `--only <prefix>` and `--jobs <n>` in any order, then
-`--ir <path>`. The cache lives beside the IR, in the user's build directory. -/
+/-- The arguments of `prove` and `generate` after their own: `--only <prefix>`, `--jobs <n>` and `--timeout <seconds>`
+in any order, then `--ir <path>`. The cache lives beside the IR, in the user's build directory. -/
 def optionsOf : List String → Option (Options × String) :=
-  go none 4
+  go none 4 none
 where
-  go (only : Option String) (jobs : Nat) : List String → Option (Options × String)
+  go (only : Option String) (jobs : Nat) (timeout : Option Nat) : List String → Option (Options × String)
     | ["--ir", path] =>
-      some ({ only, jobs, cache := (System.FilePath.mk path).parent.getD "." / "prove-cache" }, path)
-    | "--only" :: p :: rest => go (some p) jobs rest
-    | "--jobs" :: n :: rest => n.toNat?.bind fun j => if j = 0 then none else go only j rest
+      some ({ only, jobs, timeout, cache := (System.FilePath.mk path).parent.getD "." / "prove-cache" }, path)
+    | "--only" :: p :: rest => go (some p) jobs timeout rest
+    | "--jobs" :: n :: rest => n.toNat?.bind fun j => if j = 0 then none else go only j timeout rest
+    | "--timeout" :: n :: rest => n.toNat?.bind fun t => go only jobs (some t) rest
     | _ => none
 
 /-- A job of the solver pool: its argument and its work. A job whose pure work is its point (building a depth) takes
@@ -199,14 +201,27 @@ def Job.of {α : Type} (f : IO α) : IO (Job × IO.Ref (Option α)) := do
   let r ← IO.mkRef none
   pure ((0, fun _ => do r.set (some (← f))), r)
 
-/-- Every job, at most `jobs` at a time, each taken in order by the next free worker. -/
-def runAll (jobs : Nat) (xs : Array Job) : IO Unit := do
+/-- Every job, at most `jobs` at a time, each taken in order by the next free worker. Past the solver's deadline
+(`Solver.deadline`) no worker takes another job, and the call returns at once without waiting for the jobs that run:
+their solvers stop themselves, and a job waiting on one that never ran would never end. A job cut off so never writes
+its result. -/
+def runAll (solver : Solver) (jobs : Nat) (xs : Array Job) : IO Unit := do
   let next ← IO.mkRef 0
   let worker : IO Unit := do
     repeat
+      if ← solver.past then break
       let i ← next.modifyGet fun i => (i, i + 1)
-      if h : i < xs.size then xs[i].2 xs[i].1 else break
+      if h : i < xs.size then
+        try xs[i].2 xs[i].1
+        catch e => if ← solver.past then break else throw e
+      else break
   let tasks ← (List.range (max jobs 1)).mapM fun _ => IO.asTask worker (prio := .dedicated)
+  if solver.deadline.isSome then
+    while !(← tasks.allM fun t => IO.hasFinished t) && !(← solver.past) do
+      IO.sleep 20
+    if ← solver.past then
+      solver.drain
+      return
   for t in tasks do
     match ← IO.wait t with
     | .ok () => pure ()

@@ -156,5 +156,6 @@ A command exits with the code of its worst line:
 | 2 | A line is not settled and none is a violation: undecided, `Prove.unproved` or `Generate.unsettled`. |
 | 3 | The command did not run as asked, for a usage or system error. The spec is not judged. |
 | 4 | tazuna has a bug. No spec reaches it. |
+| 5 | The run's `--timeout` passed first. Its last line, `Run.unfinished`, lists the targets it left; a violation printed before it still stands. Codes 3 and 4 outrank it. |
 
 `explain` prints each kind's exit code.

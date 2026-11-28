@@ -144,6 +144,10 @@ inductive Tazuna.Kind : Type
   | explain
   /-- The engine's version, which is the Gleam package's: `tazuna-engine` with no arguments prints it. -/
   | version
+  /-- The run's `--timeout` passed before every target was done: the lines before this one are the ones a run without
+  the flag prints for the finished targets, and this line lists the targets left, each as `--only` names it. Which
+  targets finish depends on the machine; what a printed line says does not. -/
+  | unfinished
 
 namespace Tazuna
 
@@ -166,22 +170,25 @@ def UsageKind.name : UsageKind → String
 
 /-- What a command's run comes to, by its worst line: the exit code. -/
 inductive Exit : Type
-  | ok | undecided | violation | usage | internal
+  | ok | undecided | violation | unfinished | usage | internal
 
-/-- Undecided ranks below a violation: one violated line decides the run. -/
+/-- Undecided ranks below a violation: one violated line decides the run. An unfinished run ranks above both, as its
+lines leave targets out: a violation it printed still stands, but no line speaks for the targets it left. -/
 def Exit.code : Exit → UInt32
   | .ok => 0
   | .violation => 1
   | .undecided => 2
   | .usage => 3
   | .internal => 4
+  | .unfinished => 5
 
 def Exit.rank : Exit → Nat
   | .ok => 0
   | .undecided => 1
   | .violation => 2
-  | .usage => 3
-  | .internal => 4
+  | .unfinished => 3
+  | .usage => 4
+  | .internal => 5
 
 /-- The worse of two outcomes. -/
 def Exit.max (a b : Exit) : Exit := if a.rank < b.rank then b else a
@@ -269,11 +276,12 @@ def name : Kind → String
   | undecided k => "Undecided." ++ k.name
   | explain => "Explain.kind"
   | version => "Engine.version"
+  | unfinished => "Run.unfinished"
 
 def all : List Kind :=
   InternalKind.all.map internal ++ UsageKind.all.map usage ++ Restricted.all.map restricted ++ Ir.Illegal.all.map illegal ++ [checkPassed] ++ FaultKind.all.map fault ++ TestKind.all.map test ++
     [verifyPassed, verifyDiffers, traceInvalid] ++ ProveKind.all.map prove ++
-    GenerateKind.all.map generate ++ UndecidedKind.all.map undecided ++ [explain, version]
+    GenerateKind.all.map generate ++ UndecidedKind.all.map undecided ++ [explain, version, unfinished]
 
 theorem mem_all (k : Kind) : k ∈ all := by
   cases k with
@@ -295,7 +303,7 @@ def e2e : Kind → Bool
   | restricted _ | internal .convert | internal .engine | undecided .timeout => false
   | internal .invalidIr | usage _ | illegal _ | checkPassed | fault _ | test _ | verifyPassed | verifyDiffers | traceInvalid | prove _
   | generate _ | undecided .unknown | undecided .limit | undecided .upToRenaming
-  | explain | version => true
+  | explain | version | unfinished => true
 
 /-- The outcome a line of the kind gives its command; the command exits with its worst line's (`Exit.max`). -/
 def exit : Kind → Exit
@@ -312,6 +320,7 @@ def exit : Kind → Exit
   | generate .violated => .violation
   | generate .unsettled => .undecided
   | undecided _ => .undecided
+  | unfinished => .unfinished
 
 end Kind
 
