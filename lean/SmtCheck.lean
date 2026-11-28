@@ -560,6 +560,7 @@ without the machine must not pass the comparison. -/
 
 def intDen : (t : Ty) → t.den0 → Option Int
   | .int, x | .point _, x => some x
+  | .adt _ _ [[.point _], []], .inl (x, ()) => some x
   | _, _ => none
 
 def evCtxT : Ty := Ty.machineCtx .int .int recordsT
@@ -1774,18 +1775,26 @@ def startEffectE : Expr [] [] (.fn [invCtxT] (Ty.option (.dsl .effect [.int]))) 
 
 def startM : MachineV recordsT .int := { reactM with name := "start", effect := .closed startEffectE }
 
-/-- A machine whose state is the instant its timer is due: the timer enters the state 1000 ms later, so a clock line
-fires each instance at most once. Its keys are the records' keys, and entering a state requests `send` as `start`
+/-- The state of `due`: the instant its timer is due, none before it has one, since no spec can write an instant. -/
+abbrev dueT : Ty := Ty.option instT
+
+/-- A machine whose state holds the instant its timer is due: the timer enters the state 1000 ms later, so a clock
+line fires each instance at most once. Its keys are the records' keys, and entering a state requests `send` as `start`
 does. -/
-def dueTimerE : Expr [] [] (.fn [Ty.timerCtx .int instT recordsT] (Ty.option (Ty.timer instT))) :=
-  let st : Expr [] [Ty.timerCtx .int instT recordsT] instT := .field (ft := instT) "state" 1 (by simp) (.var .here)
-  .lam (.ctor (vs := [[Ty.timer instT], []]) ⟨0, by decide⟩
-    (.cons (.ctor (vs := [[instT, instT]]) ⟨0, by decide⟩ (.cons st (.cons (addMs st (.int 1000)) .nil))) .nil))
+def dueTimerE : Expr [] [] (.fn [Ty.timerCtx .int dueT recordsT] (Ty.option (Ty.timer dueT))) :=
+  let st : Expr [] [Ty.timerCtx .int dueT recordsT] dueT := .field (ft := dueT) "state" 1 (by simp) (.var .here)
+  let some' : Expr [] [instT, Ty.timerCtx .int dueT recordsT] (Ty.option (Ty.timer dueT)) :=
+    .ctor (vs := [[Ty.timer dueT], []]) ⟨0, by decide⟩
+      (.cons (.ctor (vs := [[instT, dueT]]) ⟨0, by decide⟩ (.cons (.var .here)
+        (.cons (.ctor (vs := [[instT], []]) ⟨0, by decide⟩ (.cons (addMs (.var .here) (.int 1000)) .nil)) .nil))) .nil)
+  .lam (.case st (.cons (.ctor (vs := [[instT], []]) ⟨0, by decide⟩ (.cons .bind .nil)) some'
+    (.cons (.ctor (vs := [[instT], []]) ⟨1, by decide⟩ .nil) (.ctor (vs := [[Ty.timer dueT], []]) ⟨1, by decide⟩ .nil)
+      .nil)) ⟨4, rfl⟩)
 
 def dueM : MachineV recordsT .int :=
-  { name := "due", key := .int, state := instT, instances := reactM.instances, initial := (0 : Int),
-    on := .closed (.lam (.ctor (vs := [[], [instT]]) ⟨0, by decide⟩ .nil)), timer := .closed dueTimerE,
-    effect := .closed (startEffectOf instT), invariants := .closed (.lam (.list .nil)) }
+  { name := "due", key := .int, state := dueT, instances := reactM.instances, initial := .inr (.inl ()),
+    on := .closed (.lam (.ctor (vs := [[], [dueT]]) ⟨0, by decide⟩ .nil)), timer := .closed dueTimerE,
+    effect := .closed (startEffectOf dueT), invariants := .closed (.lam (.list .nil)) }
 
 def startSvc : ServiceV := { querySvc with name := "st", queries := [], machines := [startM] }
 
@@ -1851,14 +1860,15 @@ def fireSvc : ServiceV := { startSvc with name := "fi", machines := [fireM] }
 
 def fireLayout : Layout :=
   Layout.addTys (fun _ => 3) { effects := [sendKey ⟨"m", 9, 9, 0⟩, sendKey ⟨"m", 3, 7, 0⟩] }
-    (reactTys ++ [.tuple [.int], fireM.table, Ty.machineCtx .int instT recordsT, Ty.next instT,
-      Ty.timerCtx .int instT recordsT, Ty.option (Ty.timer instT), Ty.timer instT])
+    (reactTys ++ [.tuple [.int], fireM.table, Ty.machineCtx .int dueT recordsT, Ty.next dueT,
+      Ty.timerCtx .int dueT recordsT, Ty.option (Ty.timer dueT), Ty.timer dueT, dueT])
 
 def fireCheck (solver : Solver) : IO Bool := do
   let L := fireLayout
   let fail (m : String) : IO Bool := do IO.println s!"smt-check: timer round: {m}"; return false
   let some (d, n) := L.find? fireM.table | fail "no table"
-  let some (dt, _) := L.find? (.tuple [Ty.bool, .int, instT]) | fail "no slot"
+  let some (dt, _) := L.find? (.tuple [Ty.bool, .int, dueT]) | fail "no slot"
+  let some (dopt, _) := L.find? dueT | fail "no deadline option"
   let some (dxo, _) := L.find? (Ty.option (.dsl .effect [.int])) | fail "no effect option"
   let some wf := (SymState.vars 0).wf L (v := fireSvc) [] | fail "no wf"
   let some rsrt := L.srt? recordsT | fail "no records sort"
@@ -1874,8 +1884,8 @@ def fireCheck (solver : Solver) : IO Bool := do
     let So := slotsOf d dt n 2 (.var 5)
     let key (j : Nat) := So[j]!.2[0]
     let state (j : Nat) := So[j]!.2[1]
-    let goal := [So[0]!.1, So[1]!.1, .not So[2]!.1, .eq (key 0) (.int 7), .eq (state 0) (.int 90), .eq (key 1) (.int 3),
-      .eq (state 1) (.int 90), .eq (.var 1) (.int 100), .eq (.var 7) (.int 90), .eq (.var 6) o.table]
+    let goal := [So[0]!.1, So[1]!.1, .not So[2]!.1, .eq (key 0) (.int 7), .eq (state 0) (.ctor dopt 0 [.int 90]),
+      .eq (key 1) (.int 3), .eq (state 1) (.ctor dopt 0 [.int 90]), .eq (.var 1) (.int 100), .eq (.var 7) (.int 90), .eq (.var 6) o.table]
     let script : Script :=
       { datatypes := dts, vars := [rsrt, .int, .int, .int, psrt, msrt, msrt, .int], asserts := wf :: cond :: goal,
         shows := List.range 8 }
@@ -2191,7 +2201,7 @@ script must say the bound is exceeded and the step must be the cascade fault. -/
 
 def clockFireSvc (cascade : Int) : ServiceV := { writeSvcOf dueM with name := "k", cascade := cascade }
 
-def dueSites : List AnySite := Tazuna.Ir.Expr.sites .nil (startEffectOf instT)
+def dueSites : List AnySite := Tazuna.Ir.Expr.sites .nil (startEffectOf dueT)
 
 def dueLayout (slots : Nat) : Layout := svcLayout (writeSvcOf dueM) slots
 
@@ -2226,13 +2236,15 @@ def clockFireCheck (solver : Solver) : IO Bool := do
   let some (dr, nr) := L.find? recordsT | fail "no records"
   let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
   let some (dm, nm) := L.find? dueM.table | fail "no instance table"
-  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, instT]) | fail "no instance slot"
+  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, dueT]) | fail "no instance slot"
+  let some (dopt, _) := L.find? dueT | fail "no deadline option"
   let some (d, n) := L.find? (pendingTable (clockShapes 2)) | fail "no pending table"
   let some (dt, _) := L.find? (.tuple [Ty.bool, .dsl .fresh [], pendingEntry (clockShapes 2)]) | fail "no pending slot"
   let Sr := slotsOf dr drt nr 2 (.var 0)
   let Sm := slotsOf dm dmt nm 2 (.var 5)
   let Sp := slotsOf d dt n 2 (.var 4)
-  let waits (j : Nat) (key due : Int) := [Sm[j]!.1, .eq (Sm[j]!.2[0]) (.int key), .eq (Sm[j]!.2[1]) (.int due)]
+  let waits (j : Nat) (key due : Int) :=
+    [Sm[j]!.1, .eq (Sm[j]!.2[0]) (.int key), .eq (Sm[j]!.2[1]) (.ctor dopt 0 [.int due])]
   let goal := [Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1, .eq (Sr[0]!.2[0]) (.int 3), .not Sm[2]!.1,
     .eq (.var 1) (.int 50), .eq (.var 6) (.int 100), .eq (.var 3) (.int 40), Sp[0]!.1, .eq (Sp[0]!.2[0]) (.int 2),
     .not Sp[1]!.1, .not Sp[2]!.1] ++ waits 0 7 80 ++ waits 1 3 100
@@ -3344,7 +3356,7 @@ fires key 7 then key 3, each round queueing its `put` at the round's queue place
 and the step is accepted. The records, table, pending ids, next id and fresh counter read from the model must be the
 step's, and must differ from what the rounds alone leave. -/
 
-def tickCtxT : Ty := Ty.machineCtx .int instT recordsT
+def tickCtxT : Ty := Ty.machineCtx .int dueT recordsT
 
 def tickEffectE : Expr [] [] (.fn [tickCtxT] (Ty.option (.dsl .effect [.int]))) :=
   let ctx : Expr [] [tickCtxT] tickCtxT := .var .here
@@ -3401,13 +3413,15 @@ def tickClockCheck (solver : Solver) : IO Bool := do
   let some (dr, nr) := L.find? recordsT | fail "no records"
   let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
   let some (dm, nm) := L.find? tickM.table | fail "no instance table"
-  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, instT]) | fail "no instance slot"
+  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, dueT]) | fail "no instance slot"
+  let some (dopt, _) := L.find? dueT | fail "no deadline option"
   let some (d, n) := L.find? (pendingTable shs) | fail "no pending table"
   let some (dt, _) := L.find? (.tuple [Ty.bool, .dsl .fresh [], pendingEntry shs]) | fail "no pending slot"
   let Sr := slotsOf dr drt nr 2 (.var 0)
   let Sm := slotsOf dm dmt nm 2 (.var 5)
   let Sp := slotsOf d dt n 2 (.var 4)
-  let waits (j : Nat) (key due : Int) := [Sm[j]!.1, .eq (Sm[j]!.2[0]) (.int key), .eq (Sm[j]!.2[1]) (.int due)]
+  let waits (j : Nat) (key due : Int) :=
+    [Sm[j]!.1, .eq (Sm[j]!.2[0]) (.int key), .eq (Sm[j]!.2[1]) (.ctor dopt 0 [.int due])]
   let goal := [.eq (.var 1) (.int 50), .eq (.var 6) (.int 100), .eq (.var 3) (.int 40), .eq (.var 2) (.int 7)] ++
     ((Sr ++ Sm.drop 2 ++ Sp).map fun sl => Term.not sl.1) ++ waits 0 7 80 ++ waits 1 3 100
   match tickClockTermsOf 2 5 goal with
