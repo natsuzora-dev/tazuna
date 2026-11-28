@@ -148,17 +148,27 @@ def move (n : Node v) (x : Input v) : Move v :=
 
 end
 
+/-- The step counters the node holds: in its state, in its waiting triggers and in its shown ids. -/
+def Node.ctrs (n : Node v) : List Nat :=
+  stateCtrs n.state ++ (n.watch.map fun ws => ws.flatMap fun trs => trs.flatMap fun (ev, _) => ctrsIn v.event ev).toList.flatten ++
+    n.shown.flatMap (ctrsIn .id)
+
+/-- How the node's key renames counters. -/
+def Node.ctrRen (n : Node v) : Nat → Nat := renameBelow (belowOf n.ctrs n.state.fresh) n.state.fresh
+
+/-- How the node's key renames wire ids. -/
+def Node.wireRen (n : Node v) : Nat → Nat :=
+  renameBelow (belowOf (n.state.pending.map (·.id)) n.state.nextId) n.state.nextId
+
 /-- The node as a term, the same for two nodes exactly when they are the same once counters and wire ids are renamed
 (`renameBelow`) and instants read relative to the state's time. -/
 def Node.key (n : Node v) : Erl :=
   let s := n.state
-  let watchCtrs := (n.watch.map fun ws => ws.flatMap fun trs => trs.flatMap fun (ev, _) => ctrsIn v.event ev).toList.flatten
-  let cs := belowOf (stateCtrs s ++ watchCtrs) s.fresh
-  let σ := renameBelow cs s.fresh
-  let ws := belowOf (s.pending.map (·.id)) s.nextId
-  let ω := renameBelow ws s.nextId
+  let σ := n.ctrRen
+  let ω := n.wireRen
   let δ := -s.now
-  .tuple [.int cs.size, .int ws.size, keyBy σ δ v.records s.records,
+  .tuple [.int (belowOf n.ctrs s.fresh).size, .int (belowOf (s.pending.map (·.id)) s.nextId).size,
+    keyBy σ δ v.records s.records,
     .list (s.machines.toSigma.map fun ⟨m, insts⟩ =>
       .list (insts.map fun i => .tuple [keyBy σ δ m.key i.key, keyBy σ δ m.state i.state])),
     .list (s.pending.map (pendingKey σ ω δ)),

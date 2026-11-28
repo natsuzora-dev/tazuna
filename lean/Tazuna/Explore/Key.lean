@@ -101,9 +101,8 @@ def tyKey : Ty → Erl
   | .param k => .tuple [.int 6, .int k]
   | .bag t => .tuple [.int 7, tyKey t]
   | .table k v => .tuple [.int 8, tyKey k, tyKey v]
-  | .point .day => .int 9
-  | .point .ms => .int 10
-  | .id => .int 11
+  | .point u => .tuple [.int 9, .int u.ctorIdx]
+  | .id => .int 10
   | .dsl k a => .tuple [.int 12, .int k.ctorIdx, .list (tysKey a)]
 def tysKey : List Ty → List Erl
   | [] => []
