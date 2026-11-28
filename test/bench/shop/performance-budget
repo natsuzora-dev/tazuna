@@ -1,4 +1,5 @@
-# The shop bench's budgets, fixed before the first measurement (run-log 235). test/bench/budget reads this file.
+# The shop bench's performance budget, fixed before the first measurement (run-log 235). test/bench/performance-budget
+# reads this file. It never cuts work: "check" lines judge counts that do not depend on the machine.
 # A "check" line fails the run when the value is over; a "report" line is printed against its budget only, since wall
 # time depends on the machine (these were set for an Apple M2 laptop, z3 on PATH, --jobs 4, an empty cache).
 #
