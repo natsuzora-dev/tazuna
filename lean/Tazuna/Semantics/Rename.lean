@@ -773,6 +773,12 @@ structure MachineV.Self (m : MachineV r e) : Prop where
 /-- The values a reaction's function captured. -/
 def ReactionV.Self (x : ReactionV r e) : Prop := Ty.rel0 R (.tuple x.react.Γ) x.react.env x.react.env
 
+/-- A response's functions. -/
+structure ResponseV.Self (x : ResponseV r e) : Prop where
+  after : Fun.Rel R x.after x.after
+  then_ : Fun.Rel R x.then_ x.then_
+  deadline : Fun.Rel R x.deadline x.deadline
+
 def DeclaredV.Self : DeclaredV → Prop
   | .command _ _ _ x => x.Self R
   | .query _ _ x => x.Self R
@@ -786,6 +792,7 @@ structure ServiceV.Self (v : ServiceV) : Prop where
   queries : ∀ x ∈ v.queries, x.Self R
   machines : ∀ m ∈ v.machines, m.Self R
   reactions : ∀ x ∈ v.reactions, x.Self R
+  responses : ∀ x ∈ v.responses, x.Self R
   invariants : Fun.Rel R v.invariants v.invariants
 
 end Self
@@ -817,6 +824,7 @@ def Dsl.relV (R : PBij) : (k : Dsl) → (a : List Ty) → (Dsl.val k a).1 → (D
   | .query, [_, _, _, _], x, y => x.1.name = y.1.name ∧ (x = y → x.1.Self R)
   | .machine, [_, _], x, y => x.name = y.name ∧ (x = y → x.Self R)
   | .reaction, [_, _], x, y => x.name = y.name ∧ (x = y → ReactionV.Self R x)
+  | .response, [_, _], x, y => x = y → x.Self R
   | .externalCommand, [_, _, _], x, y => x = y
   | .externalQuery, [_, _], x, y => x.1 = y.1 ∧ Fun.Rel R x.2 y.2
   | .source, [_], x, y => x = y

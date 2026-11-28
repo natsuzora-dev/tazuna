@@ -496,7 +496,8 @@ theorem Prim.den_rel (p : Prim) (args : List Ty) (h : p.ok args = true) :
     intro v hv
     obtain ⟨w, hw, rfl⟩ := List.mem_map.1 hv
     have hs := Self.of_stripped hvs hm w hw
-    refine ⟨hs.init, hs.apply, fun s hs' => ?_, hs.commands, hs.queries, hs.machines, hs.reactions, hs.invariants⟩
+    refine ⟨hs.init, hs.apply, fun s hs' => ?_, hs.commands, hs.queries, hs.machines, hs.reactions, hs.responses,
+      hs.invariants⟩
     obtain ⟨s0, hs0, rfl⟩ := List.mem_map.1 hs'
     exact hs.subscribes s0 hs0
   | model =>
@@ -507,13 +508,14 @@ theorem Prim.den_rel (p : Prim) (args : List Ty) (h : p.ok args = true) :
   | service =>
     rintro ⟨n, ini, app, subs, ds, ms, xs, inv, rsp, bnd, scs, ⟨⟩⟩
       ⟨n', ini', app', subs', ds', ms', xs', inv', rsp', bnd', scs', ⟨⟩⟩
-      ⟨-, hini, happ, hsubs, hds, hms, hxs, hinv, -⟩ h
+      ⟨-, hini, happ, hsubs, hds, hms, hxs, hinv, hrsp, -⟩ h
     simp only [ServiceV.stripped, ServiceV.mk.injEq] at h
-    obtain ⟨-, -, -, -, hini', rfl, hsubs', rfl, -, -, -, rfl, rfl, rfl, -⟩ := h
+    obtain ⟨-, -, -, -, hini', rfl, hsubs', rfl, -, -, -, rfl, rfl, rfl, rfl, -⟩ := h
     have hi := Ty.rel0_down (Ty.isData_inst (Prim.dataOf h rfl) (.param 0) rfl) hini
     exact ⟨(congrArg (Ty.rel0 R _ _) (eq_of_heq hini')).mpr hi, happ, self_of_map hsubs (eq_of_heq hsubs'),
       Self.commands_of (forall2_self hds), Self.queries_of (forall2_self hds),
-      fun m hm => (forall2_self hms m hm).2 rfl, fun x hx => (forall2_self hxs x hx).2 rfl, hinv⟩
+      fun m hm => (forall2_self hms m hm).2 rfl, fun x hx => (forall2_self hxs x hx).2 rfl,
+      fun x hx => forall2_self hrsp x hx rfl, hinv⟩
   | subscribe =>
     rintro ⟨n, w, ⟨⟩⟩ ⟨n', w', ⟨⟩⟩ ⟨-, hw, -⟩ h
     simp only [Prim.den, SubscriptionV.stripped] at h
@@ -555,7 +557,13 @@ theorem Prim.den_rel (p : Prim) (args : List Ty) (h : p.ok args = true) :
     show Sender.Rel R (.reaction x.name) (.reaction x'.name)
     rw [hx]
     exact .reaction _
-  | external | scope | values | create | response | scenario | stepCommand | stepQuery | stepWait
+  | response =>
+    rintro ⟨n, aft, thn, w, dl, ⟨⟩⟩ ⟨n', aft', thn', w', dl', ⟨⟩⟩ ⟨-, haft, hthn, -, hdl, -⟩ h
+    simp only [Prim.den] at h
+    obtain ⟨-, haft', hthn', -, hdl'⟩ := ResponseV.mk.inj h
+    cases haft'; cases hthn'; cases hdl'
+    exact ⟨haft, hthn, hdl⟩
+  | external | scope | values | create | scenario | stepCommand | stepQuery | stepWait
   | stepAnswerCommand | stepAnswerQuery | stepEvent | stepCommandThen => intro _ _ _; trivial
 
 /-! The fundamental lemma. -/
