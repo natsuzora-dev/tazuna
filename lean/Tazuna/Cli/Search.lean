@@ -104,9 +104,9 @@ def _root_.Tazuna.Smt.Limit.text (T : List TypeDecl) : Limit → String
   | .tableKey t => s!"a value of {tyText T t} holds a table whose key is no plain value"
 
 /-- Every bound of the service's layout among the types `keep` holds: each table, bag and list type, and the pending
-requests where the service has a request shape, with the bound its slots come from (`stepBound`; a list's, its type's
-longest literal), its slots as `Layout.count` gives them, the function every slot-fit premise (`StepFits`, `RunIn`,
-`RespFits`, `inputVals`) reads, and the machines whose table of instances has the type. -/
+requests where the service has a request shape, with the bound its slots come from (`stepBound`), its slots as
+`Layout.count` gives them, the function every slot-fit premise (`StepFits`, `RunIn`, `RespFits`, `inputVals`) reads,
+and the machines whose table of instances has the type. -/
 def boundsOf (T : List TypeDecl) (L : Layout) (v : ServiceV) (keep : Ty → Bool) : List Json :=
   L.types.filterMap fun (t, _) =>
     let machines := (v.machines.filter fun m => (Ty.same m.table t).isSome).map (Json.str ·.name)
@@ -115,9 +115,9 @@ def boundsOf (T : List TypeDecl) (L : Layout) (v : ServiceV) (keep : Ty → Bool
         if machines.isEmpty then [] else [("machines", Json.arr machines.toArray)]))
     if !keep t then none
     else if (Ty.same t (pendingTable (shapes v))).isSome then
-      if (shapes v).isEmpty then none else line "pending requests" (stepBound v t)
+      if (shapes v).isEmpty then none else line "pending requests" (stepBound v (L.count t) t)
     else match t with
-      | .table .. | .bag _ => line (tyText T t) (stepBound v t)
+      | .table .. | .bag _ => line (tyText T t) (stepBound v (L.count t) t)
       | .list _ => line (tyText T t) "longest literal"
       | _ => none
 

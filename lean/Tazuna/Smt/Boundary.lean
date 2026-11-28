@@ -319,7 +319,7 @@ end Layout
 found. -/
 theorem datatypes_ofParts (p : ProgramParts) (v : ServiceV) : ∃ dts, (Layout.ofParts p v).datatypes? = some dts := by
   obtain ⟨hK, hO⟩ := kindsOf_fields p v
-  have h := Layout.addTys_dts (listSlots (stepSlots v) p.lits) (Layout.kindsOf p v) rfl (fun e fs hfs t ht => by
+  have h := Layout.addTys_dts (listSlots (stepSlots v p.lits) p.lits) (Layout.kindsOf p v) rfl (fun e fs hfs t ht => by
       simp only [Layout.effectFields, Layout.effectsOf, Layout.ownsOf, List.mem_append, List.mem_map,
         List.mem_filter] at hfs
       have hdata : ∀ {fs : List Ty}, Ty.sorteds fs = true ∧ (Ty.tuple fs).isData = true → t ∈ fs →

@@ -6,10 +6,10 @@ import Tazuna.Smt.Bounds
 by hand. Its kinds of effect are the request shapes the pending table already uses (`requestShapes`, so the two
 cannot drift) and, for own commands and queries, each send's handle with its `on_answer` site; its datatypes are
 those of every expression type of the program and of the step's own types; a table type gets the slots its creates
-bound (`boundSlots`), a bag `items`, a list its longest literal (`listSlots`). The collection
-follows whole-program type collection as in monomorphization; the order puts each datatype after the ones its fields
-use, as SMT-LIB's declarations need. `ofService_has` proves every one of those types has its datatypes, so the step
-environment is found (`stepEnv_ofService`). -/
+bound (`boundSlots`), a bag `items`, and every collection at least the longest literal that writes its items
+(`listSlots`). The collection follows whole-program type collection as in monomorphization; the order puts each
+datatype after the ones its fields use, as SMT-LIB's declarations need. `ofService_has` proves every one of those
+types has its datatypes, so the step environment is found (`stepEnv_ofService`). -/
 
 namespace Tazuna.Smt
 
@@ -114,24 +114,29 @@ def useTys (v : ServiceV) (K : Layout) : List Ty :=
       | .command _ _ _ _ j a => [Ty.nil, Ty.result Ty.nil j, .tuple a.Γ]
       | .query _ _ _ _ _ a => [.tuple a.Γ]
 
-/-- The slots of a type: its bound's, and at least `items` for a machine's instance table, which holds an instance
-per key of its instances bag; a records table of the same type shares its datatype. -/
-def stepSlots (v : ServiceV) (t : Ty) : Nat :=
-  if v.machines.any (fun m => (Ty.same m.table t).isSome) then max (boundSlots v.bounds t) v.bounds.itemsNat
-  else boundSlots v.bounds t
+/-- The slots of a type before `listSlots` adds its literals': its bound's, and for a machine's instance table at
+least its instances bag's (`items`, or a longer literal of the keys), as it holds an instance per key of the bag; a
+records table of the same type shares its datatype. -/
+def stepSlots (v : ServiceV) (lits : List (Ty × Nat)) : Ty → Nat
+  | .table k w => if v.machines.any (fun m => (Ty.same m.table (.table k w)).isSome) then
+      max (boundSlots v.bounds (.table k w)) (max v.bounds.itemsNat (longestLit lits (.bag k)))
+    else boundSlots v.bounds (.table k w)
+  | t => boundSlots v.bounds t
 
-/-- The bound of the spec `stepSlots` takes a type's slots from, as a line names it: `creates` where a create bounds
-the table and gives the slots, else `others_at_most`. -/
-def stepBound (v : ServiceV) (t : Ty) : String :=
+/-- The bound of the spec a type's `count` slots come from, as a line names it: `longest literal` where the bounds
+alone give fewer, `creates` where a create bounds the table and gives the slots, else `others_at_most`. -/
+def stepBound (v : ServiceV) (count : Nat) (t : Ty) : String :=
+  let instances := v.machines.any (fun m => (Ty.same m.table t).isSome)
+  let bounded := if instances then max (boundSlots v.bounds t) v.bounds.itemsNat else boundSlots v.bounds t
   let created := match t with
     | .table k w => v.bounds.creates.any (·.bounds (.table k w))
     | _ => false
-  let instances := v.machines.any (fun m => (Ty.same m.table t).isSome) && boundSlots v.bounds t < v.bounds.itemsNat
-  if created && !instances then "creates" else "others_at_most"
+  if bounded < count then "longest literal"
+  else if created && !(instances && boundSlots v.bounds t < v.bounds.itemsNat) then "creates" else "others_at_most"
 
 /-- The layout of the service's scripts, from the program it came from: the datatypes of the types with sorts. -/
 def Layout.ofParts (p : ProgramParts) (v : ServiceV) : Layout :=
-  Layout.addTys (listSlots (stepSlots v) p.lits) (Layout.kindsOf p v)
+  Layout.addTys (listSlots (stepSlots v p.lits) p.lits) (Layout.kindsOf p v)
     ((stepTys v ++ p.tys ++ useTys v (Layout.kindsOf p v)).filter Ty.sortable)
 
 /-- The layout of the service's scripts, from the program `defs` it came from. -/
@@ -254,31 +259,30 @@ theorem count_of_slotted {S : Ty → Nat} {K L : Layout} (h : Slotted S K L) {t 
   subst hu
   exact h.1 _ (List.fst_mem_of_mem_zipIdx (List.mem_of_find?_eq_some hfind))
 
-theorem stepSlots_plain (v : ServiceV) {t : Ty} (ht : ∀ k w, t ≠ .table k w) : stepSlots v t = boundSlots v.bounds t := by
-  have : v.machines.any (fun m => (Ty.same m.table t).isSome) = false := by
-    rw [List.any_eq_false]
-    intro m _ h
-    cases t with
-    | table k w => exact ht k w rfl
-    | _ => simp [MachineV.table, Ty.same] at h
-  simp [stepSlots, this]
+theorem stepSlots_plain (v : ServiceV) (lits : List (Ty × Nat)) {t : Ty} (ht : ∀ k w, t ≠ .table k w) :
+    stepSlots v lits t = boundSlots v.bounds t := by
+  cases t with
+  | table k w => exact absurd rfl (ht k w)
+  | _ => rfl
 
-/-- A collection type the service's layout holds gets the slots of `stepSlots` (a list, its longest literal's). -/
+/-- A collection type the service's layout holds gets the slots of `listSlots`: its bound's (`stepSlots`), and at
+least its longest literal's. -/
 theorem ofService_count {G : List Ty} (defs : Defs G) (v : ServiceV) {t : Ty}
     (hf : ((Layout.ofService defs v).find? t).isSome = true) :
     (Layout.ofService defs v).count t =
-      Layout.effectSlots (listSlots (stepSlots v) defs.lits) (Layout.kindsOf defs.parts v) t := by
-  have hS : NoSlots (Layout.effectSlots (listSlots (stepSlots v) defs.lits) (Layout.kindsOf defs.parts v)) := by
+      Layout.effectSlots (listSlots (stepSlots v defs.lits) defs.lits) (Layout.kindsOf defs.parts v) t := by
+  have hS : NoSlots (Layout.effectSlots (listSlots (stepSlots v defs.lits) defs.lits) (Layout.kindsOf defs.parts v)) := by
     intro t hb hl ht
     cases t with
     | bag u => exact absurd rfl (hb u)
     | list u => exact absurd rfl (hl u)
     | table k w => exact absurd rfl (ht k w)
-    | _ => simp [Layout.effectSlots, listSlots, stepSlots_plain v ht, boundSlots]
+    | _ => simp [Layout.effectSlots, listSlots, longestLit, Ty.itemList, stepSlots_plain v defs.lits ht, boundSlots]
   exact count_of_slotted (slotted_addTys hS (And.intro (fun p hp => nomatch hp) ⟨rfl, rfl⟩) _) hf
 
-theorem stepSlots_table_ge (v : ServiceV) (k w : Ty) : boundSlots v.bounds (.table k w) ≤ stepSlots v (.table k w) := by
-  unfold stepSlots; split <;> omega
+theorem stepSlots_table_ge (v : ServiceV) (lits : List (Ty × Nat)) (k w : Ty) :
+    boundSlots v.bounds (.table k w) ≤ stepSlots v lits (.table k w) := by
+  simp only [stepSlots]; split <;> omega
 
 /-- Every create's bound fits the slots of its table type in the service's layout, so asserting the creates of a
 state loses no state within them. -/
@@ -286,6 +290,7 @@ theorem atMost_le_count {G : List Ty} (defs : Defs G) (v : ServiceV) {c : Create
     (hf : ((Layout.ofService defs v).find? (.table c.key c.value)).isSome = true) :
     c.atMostNat ≤ (Layout.ofService defs v).count (.table c.key c.value) := by
   rw [ofService_count defs v hf]
-  exact Nat.le_trans (atMost_le_slots v.bounds c hc) (stepSlots_table_ge v _ _)
+  exact Nat.le_trans (atMost_le_slots v.bounds c hc)
+    (Nat.le_trans (stepSlots_table_ge v _ _ _) (Nat.le_max_left _ _))
 
 end Tazuna.Smt

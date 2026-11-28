@@ -267,15 +267,15 @@ def overflows : List (String × (t : Ty) × E t) :=
   [ ("bag insert past the slots", ⟨.int, .call (.prim .bagSize [.int] rfl)
       (.cons (.call (.prim .bagInsert [.int] rfl) (.cons b3 (.cons (.int 7) .nil))) .nil)⟩),
     ("table insert past the slots", ⟨.int, tableSize (.call (.prim .tableInsert [.int, .str] rfl)
-      (.cons t2 (.cons (.int 3) (.cons (.str (str! "d")) .nil))))⟩) ]
+      (.cons (tableOf [(1, str! "a")]) (.cons (.int 3) (.cons (.str (str! "d")) .nil))))⟩) ]
 
 def dt : Script :=
   { datatypes := [Datatype.mk [[.int, .str], []], Datatype.mk [[.dt 0]]], vars := [.dt 1, .dt 0],
     asserts := [.eq (.var 0) (.ctor 1 0 [.ctor 0 0 [.int (-3), .str "x"]]), .eq (.var 1) (.ctor 0 1 [])],
     shows := [0, 1] }
 
-/-- The script asking for a variable equal to the expression under its condition. Lists get their longest literal's
-slots. -/
+/-- The script asking for a variable equal to the expression under its condition. Every collection gets at least its
+longest literal's slots. -/
 def scriptOf (slots : Ty → Nat) {t : Ty} (e : E t) : Except String (Layout × Script) := do
   let L := Layout.addTys (listSlots slots (Tazuna.Smt.Expr.lits e)) {} (Tazuna.Smt.Expr.tys e)
   match encode L (G := []) () e (), L.srt? t, L.datatypes? with

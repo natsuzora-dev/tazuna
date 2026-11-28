@@ -21,7 +21,7 @@ variable {r : Ty}
 def _root_.Tazuna.Ir.CreateV.bounds (c : CreateV r) (t : Ty) : Bool := (Ty.same (.table c.key c.value) t).isSome
 
 /-- The slots of each bag and table type: a table type the largest `at_most` among its creates, and a bag, or a table
-no create bounds, `items`. Lists get theirs from their literals (`listSlots`). -/
+no create bounds, `items`. Literals can give a collection more (`listSlots`). -/
 def boundSlots (b : BoundsV r) : Ty → Nat
   | .table k v => match b.creates.filter (·.bounds (.table k v)) with
     | [] => b.itemsNat

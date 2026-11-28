@@ -923,7 +923,7 @@ theorem avail_stepTy {t : Ty} (ht : t ∈ stepTys v) : Avail (Layout.ofService c
 theorem got_of_avail {L : Layout} {t : Ty} (h : Avail L t) (hs : t.sorted = true) : Got L t := ⟨h hs, hs⟩
 
 theorem count_ofService {t : Ty} {x : Nat × Nat} (h : (Layout.ofService c.program.defs v).find? t = some x) :
-    x.2 = Layout.effectSlots (listSlots (stepSlots v) c.program.defs.lits) (Layout.kindsOf c.program.defs.parts v) t := by
+    x.2 = Layout.effectSlots (listSlots (stepSlots v c.program.defs.lits) c.program.defs.lits) (Layout.kindsOf c.program.defs.parts v) t := by
   have := ofService_count c.program.defs v (t := t) (by simp [h])
   simpa [Layout.count, h] using this
 
@@ -973,11 +973,13 @@ theorem machineGot_ofService {m : MachineV v.records v.event} (hm : m ∈ v.mach
   rw [count_ofService c v hx, count_ofService c v hy]
   have hany : v.machines.any (fun m' => (Ty.same m'.table m.table).isSome) = true :=
     List.any_eq_true.2 ⟨m, hm, Ty_same_self _⟩
-  have hge : v.bounds.itemsNat ≤ stepSlots v m.table := by
-    unfold stepSlots; simp only [hany, ↓reduceIte]; exact Nat.le_max_right _ _
-  change stepSlots v (.bag m.key) ≤ stepSlots v m.table
-  rw [stepSlots_plain v (by simp)]
-  exact hge
+  have hge : max v.bounds.itemsNat (longestLit c.program.defs.lits (.bag m.key)) ≤
+      stepSlots v c.program.defs.lits (.table m.key m.state) := by
+    have hany' : v.machines.any (fun m' => (Ty.same m'.table (.table m.key m.state)).isSome) = true := hany
+    simp only [stepSlots, hany', ↓reduceIte]; exact Nat.le_max_right _ _
+  simp only [Layout.effectSlots, listSlots, MachineV.table, stepSlots_plain v c.program.defs.lits (t := .bag m.key)
+    (by simp), boundSlots]
+  exact Nat.le_trans hge (Nat.le_max_left _ _)
 
 end
 

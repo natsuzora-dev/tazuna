@@ -41,7 +41,7 @@ A response's, a pair's and a timer machine's line has no fault to search for, so
 
 - `creates` gives the slots of each table field of the records.
 - `others_at_most` gives the slots of every other bag and table: bags anywhere, tables inside values, each machine's table of instances, and the pending requests.
-- A list type gets as many slots as its longest literal in the spec.
+- Every collection type gets at least as many slots as the longest list literal in the spec that writes its items: a list type its own, `Bag(a)` that of `List(a)`, and `Table(k, v)` that of `List(#(k, v))`, as `bag.from_list` and `table.from_list` take them. So every value the spec writes fits, and `bounds` names such a type's bound `longest literal`.
 - `cascade` limits the internal steps of one input.
 - `steps` limits the inputs of a run that `generate` unrolls.
 

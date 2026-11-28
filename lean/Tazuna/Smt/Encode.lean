@@ -1288,9 +1288,24 @@ end
 
 end
 
-/-- The slot count of each type: a list's longest literal among `lits`, and `base` for bags and tables. -/
+/-- The list type whose literals write a collection's items: a list's own, a bag's of its items and a table's of its
+pairs, as `bag.from_list` and `table.from_list` take them. -/
+def Ty.itemList : Ty → Option Ty
+  | .list a => some (.list a)
+  | .bag a => some (.list a)
+  | .table k v => some (.list (.tuple [k, v]))
+  | _ => none
+
+/-- The longest literal among `lits` of the list type that writes the type's items (`Ty.itemList`), 0 for a type
+with none. -/
+def longestLit (lits : List (Ty × Nat)) (t : Ty) : Nat := match Ty.itemList t with
+  | some l => lits.foldl (fun m (u, k) => if (Ty.same u l).isSome then max m k else m) 0
+  | none => 0
+
+/-- The slot count of each type: every collection at least the longest literal that writes its items, so a value the
+spec writes fits, and a bag or table at least `base`, its bound. A list has no bound. -/
 def listSlots (base : Ty → Nat) (lits : List (Ty × Nat)) : Ty → Nat
-  | .list t => lits.foldl (fun m (u, k) => if (Ty.same u (.list t)).isSome then max m k else m) 0
-  | t => base t
+  | .list t => longestLit lits (.list t)
+  | t => max (base t) (longestLit lits t)
 
 end Tazuna.Smt

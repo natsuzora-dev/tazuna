@@ -1771,7 +1771,7 @@ theorem kindsOf_fields (p : ProgramParts) (v : ServiceV) :
 theorem allSorted_ofParts (p : ProgramParts) (v : ServiceV) : Layout.AllSorted (Layout.kindsOf p v) (Layout.ofParts p v) :=
   by
   obtain ⟨hK, hO⟩ := kindsOf_fields p v
-  exact Layout.allSorted_addTys (listSlots (stepSlots v) p.lits) (Layout.kindsOf p v)
+  exact Layout.allSorted_addTys (listSlots (stepSlots v p.lits) p.lits) (Layout.kindsOf p v)
     ⟨(fun _ h => nomatch h), rfl, rfl⟩ (fun e fs hfs => by
       simp only [Layout.effectFields, Layout.effectsOf, Layout.ownsOf, List.mem_append, List.mem_map,
         List.mem_filter] at hfs
