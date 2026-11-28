@@ -287,7 +287,7 @@ theorem same_of_parts {a0 A C : Step.Acc v} (h0 : Step.Acc.Rel ⟨PBij.refl, PBi
       ∀ o ∈ a0.out ++ xs.map Step.Pending.line, o.id < A.state.nextId := fun hx o hq =>
     (List.mem_append.1 hq).elim (fun h => Nat.lt_of_lt_of_le (ho o h) hiA)
       fun h => by obtain ⟨q, hq', rfl⟩ := List.mem_map.1 h; exact hx q hq'
-  refine .base ⟨⟨PBij.refl, PBij.refl⟩, ⟨⟨hr, hm, ?_, hnA.trans hnC.symm, ?_, ?_⟩, ?_, ?_, ?_, ?_, ?_⟩, hf, hi, hiA,
+  refine .base ⟨⟨PBij.refl, PBij.refl⟩, rfl, ⟨⟨hr, hm, ?_, hnA.trans hnC.symm, ?_, ?_⟩, ?_, ?_, ?_, ?_, ?_⟩, hf, hi, hiA,
     fun _ _ => rfl, fun _ _ => rfl⟩
   · rw [hpA, hpC]; exact hp.append hnew
   · rw [hpA]; exact hbelow fun q hq => (hPn q hq).2
@@ -481,7 +481,7 @@ theorem pair_commutes {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
       have hiC2 := writes_ids hwC2
       rw [hW2 psA2 hwA2, hW4 psC1 hwC1]
       simp only at hfa hfb hiA2 hiC1 hP1 hP2 ⊢
-      have h0 := (hsa PBij.refl fun _ _ => rfl).1
+      have h0 := (hsa PBij.refl ⟨rfl, fun _ _ => rfl⟩).1
       have hob := h0.2.2.2.1
       have hpb := hinv.below
       have hfix : ∀ {m k i : Nat}, i < a0.state.nextId → wireSwap a0.state.nextId m k i = i := fun h => by

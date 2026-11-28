@@ -35,7 +35,7 @@ def PBij.swap (f : Nat) : PBij where
     intro a a' b h h'
     rw [← swapFn_swapFn f a, ← swapFn_swapFn f a', ← h, ← h']
 
-theorem PBij.swap_fixes (f : Nat) : (PBij.swap f).Fixes f := fun _ hc => (swapFn_of_lt hc).symm
+theorem PBij.swap_fixes (f : Nat) : (PBij.swap f).Fixes f := ⟨rfl, fun _ hc => (swapFn_of_lt hc).symm⟩
 
 theorem PBij.swap_above {f n : Nat} (h : f + 2 ≤ n) : (PBij.swap f).rel n n := (swapFn_of_ge h).symm
 
@@ -59,6 +59,7 @@ def PBij.post (P : PBij) (σ : Nat → Nat) (hσ : ∀ {i j}, σ i = σ j → i 
   rel a b := ∃ c, P.rel a c ∧ b = σ c
   func := by rintro _ _ _ ⟨c, hc, rfl⟩ ⟨c', hc', rfl⟩; rw [P.func hc hc']
   inj := by rintro _ _ _ ⟨c, hc, rfl⟩ ⟨c', hc', h⟩; exact P.inj hc (hσ h ▸ hc')
+  shift := P.shift
 
 namespace Step
 
@@ -143,8 +144,10 @@ theorem actual_canon (hv : v.Equivariant) {a0 : Acc v} (ha : Below Acc.Self a0.s
     · rw [h3, h4]
       have hfd : d.state.fresh = f + 2 := by rw [runOwn_fresh T h3, hfr1]
       simp only [Acc.withFresh] at hn hn' hl1 hl2 hw1 hw2
-      refine .inl (.base ⟨_, (hd.withFresh d.state.fresh (f + 2)).mapWire wireSwap_inj fun _ => wireSwap_lt,
+      refine .inl (.base ⟨_, ?_, (hd.withFresh d.state.fresh (f + 2)).mapWire wireSwap_inj fun _ => wireSwap_lt,
         ?_, ?_, ?_, fun n hn2 => ?_, fun i hi => ?_⟩)
+      · show R''.ctr.shift = Option.none
+        rw [hc', hc]; rfl
       · show d.state.fresh = f + 2; exact hfd
       · show d.state.nextId = d'.state.nextId
         omega
@@ -153,7 +156,7 @@ theorem actual_canon (hv : v.Equivariant) {a0 : Acc v} (ha : Below Acc.Self a0.s
       · show R''.ctr.rel n n
         rw [hc', hc]
         rcases hn2 with hn2 | hn2
-        · exact PBij.swap_fixes f n hn2
+        · exact (PBij.swap_fixes f).2 n hn2
         · exact PBij.swap_above (show f + 2 ≤ n by rw [← hfd]; exact hn2)
       · refine ⟨i, hw2 (by omega) (by omega) (hw1 hi (by omega) rfl), ?_⟩
         show i = wireSwap a0.state.nextId c'.state.nextId d'.state.nextId i
@@ -236,7 +239,7 @@ theorem pick_two (a : Acc v) {i j : Nat} (hi : i < a.own.length) (hj : j < a.own
 theorem runOwn_nextId (hv : v.Equivariant) {a : Acc v} (ha : Supp a) {i : Nat}
     (hi : i < a.own.length) {b : Acc v} (hb : runOwn T { a with own := a.own.eraseIdx i } a.own[i] = .ok b) :
     a.state.nextId ≤ b.state.nextId := by
-  have hA := ha PBij.refl fun _ _ => rfl
+  have hA := ha PBij.refl ⟨rfl, fun _ _ => rfl⟩
   have hl := runOwn_rel T hv (hA.sub_own (xs := a.own.eraseIdx i) fun x hx => List.mem_of_mem_eraseIdx hx).1 rfl
     (hA.2.2 _ (List.getElem_mem hi))
   rw [hb] at hl

@@ -45,9 +45,9 @@ def State.Self (P : PBij) (s : State v) : Prop :=
 /-- A state whose names are below its counter. -/
 abbrev StateSupp (s : State v) : Prop := Below State.Self s.fresh s
 
-theorem State.Self.acc {P : PBij} {s : State v} (h : State.Self P s) (hb : ∀ p ∈ s.pending, p.id < s.nextId) :
-    Acc.Self P ({ state := s } : Acc v) :=
-  ⟨⟨⟨h.1, h.2.1, Multi.of_forall2 (forall2_refl_of h.2.2), rfl, hb, hb⟩, Multi.nil, Multi.nil, nofun, nofun, Multi.nil⟩,
+theorem State.Self.acc {P : PBij} (h0 : P.shift = Option.none) {s : State v} (h : State.Self P s)
+    (hb : ∀ p ∈ s.pending, p.id < s.nextId) : Acc.Self P ({ state := s } : Acc v) :=
+  ⟨⟨⟨h.1, h.2.1, Multi.of_forall2 (forall2_refl_of h.2.2), PBij.point_of_eq h0 rfl, hb, hb⟩, Multi.nil, Multi.nil, nofun, nofun, Multi.nil⟩,
     h.2.2, nofun⟩
 
 theorem Acc.Self.state {P : PBij} {a : Acc v} (h : Acc.Self P a) : State.Self P a.state :=
@@ -80,13 +80,13 @@ theorem command_begin (hv : v.Equivariant) {s : State v} (hs : StateSupp s) (hb 
     {x : CommandV v.records v.event v.caller} (hx : x ∈ v.commands) {c : (Ty.origin v.caller).den0} {i : x.input.den0}
     (hc : ∀ P : PBij, P.Fixes s.fresh → Ty.rel0 P (Ty.origin v.caller) c c) (hi : ∀ P : PBij, P.Fixes s.fresh → Ty.rel0 P x.input i i)
     {a : Acc v} (h : execCommand T { state := s } x c i = .ok (.accepted a)) : Supp a := by
-  have ha0 : Below Acc.Self s.fresh ({ state := s } : Acc v) := fun P hP => (hs P hP).acc hb
+  have ha0 : Below Acc.Self s.fresh ({ state := s } : Acc v) := fun P hP => (hs P hP).acc hP.1 hb
   have hdec : ∀ P : PBij, P.Fixes (s.fresh + 1) →
       Ty.rel0 P (Ty.result (.list v.event) x.rejection) (x.decide.fn (ctx s s.records c i, ()))
         (x.decide.fn (ctx s s.records c i, ())) := fun P hP => by
     have hA := ha0 P (hP.mono (Nat.le_succ _))
     exact ((hv.self P).commands x hx).decide _ _
-      ⟨⟨hA.1.1.1, hi P (hP.mono (Nat.le_succ _)), hc P (hP.mono (Nat.le_succ _)), rfl, hP _ (Nat.lt_succ_self _),
+      ⟨⟨hA.1.1.1, hi P (hP.mono (Nat.le_succ _)), hc P (hP.mono (Nat.le_succ _)), PBij.point_of_eq hP.1 rfl, hP.2 _ (Nat.lt_succ_self _),
         trivial⟩, trivial⟩
   have ha1 : Below Acc.Self (s.fresh + 1) ({ state := { s with fresh := s.fresh + 1 } } : Acc v) :=
     below_fresh (ha0.mono (Nat.le_succ _))
@@ -126,7 +126,7 @@ theorem answer_begin (hv : v.Equivariant) {s : State v} (hs : StateSupp s) (hb :
   let s' : State v := { s with pending := s.pending.filter (·.id != to) }
   have hs' : StateSupp s' := hs.sub rfl rfl (fun q hq => (List.mem_filter.1 hq).1) (Nat.le_refl _)
   have ha0 : Below Acc.Self s.fresh ({ state := s' } : Acc v) := fun P hP =>
-    (hs' P hP).acc fun q hq => hb q (List.mem_filter.1 hq).1
+    (hs' P hP).acc hP.1 fun q hq => hb q (List.mem_filter.1 hq).1
   have hevs : ∀ ev ∈ (show List v.event.den0 from p.request.onAnswer.fn (value, ())), ∀ P : PBij, P.Fixes s.fresh →
       Ty.rel0 P v.event ev ev := fun ev hev P hP =>
     forall2_self (RequestV.Rel.onAnswer_self ((hs P hP).2.2 p hp).2.2.2 (value, ()) (value, ()) ⟨hval P hP, trivial⟩)
@@ -140,7 +140,7 @@ theorem event_begin (hv : v.Equivariant) {s : State v} (hs : StateSupp s) (hb : 
     (hval : ∀ P : PBij, P.Fixes s.fresh → Ty.rel0 P (v.subscribes.get i).event value value) {a : Acc v}
     (happ : applyEvents T { state := s } [(v.subscribes.get i).wrap.fn (value, ())] = .ok a) :
     Supp a := by
-  have ha0 : Below Acc.Self s.fresh ({ state := s } : Acc v) := fun P hP => (hs P hP).acc hb
+  have ha0 : Below Acc.Self s.fresh ({ state := s } : Acc v) := fun P hP => (hs P hP).acc hP.1 hb
   have hevs : ∀ ev ∈ [(v.subscribes.get i).wrap.fn (value, ())], ∀ P : PBij, P.Fixes s.fresh →
       Ty.rel0 P v.event ev ev := fun ev hev P hP => by
     rw [List.mem_singleton] at hev; subst hev
@@ -178,8 +178,8 @@ theorem fired_self {m : MachineV r e} (hm : m.Equi) {records : r.den0}
       simp only [timerOf] at ht
       rw [ht] at h
       exact (Option.rel_some_some.1 h).2
-    exact ⟨fun P hP => (enter_rel hm (hrec P hP) now (hi P hP).1 (htg P hP)).1,
-      fun x hx P hP => forall2_self (enter_rel hm (hrec P hP) now (hi P hP).1 (htg P hP)).2 x hx⟩
+    exact ⟨fun P hP => (enter_rel hm (hrec P hP) (PBij.point_of_eq hP.1 (rfl : now = now)) (hi P hP).1 (htg P hP)).1,
+      fun x hx P hP => forall2_self (enter_rel hm (hrec P hP) (PBij.point_of_eq hP.1 (rfl : now = now)) (hi P hP).1 (htg P hP)).2 x hx⟩
   · exact ⟨hi, fun _ hx => nomatch hx⟩
 
 theorem fireFirst_self {m : MachineV r e} (hm : m.Equi) {records : r.den0}
@@ -276,7 +276,7 @@ theorem clock_begin (hv : v.Equivariant) {s : State v}
   rw [Supp, hfa]
   intro P hP
   rw [hfr] at hP
-  refine start_self (State.Self.acc ⟨by rw [hr]; exact (hs P hP).1, hm' P (hfr ▸ hP), fun p hp' => (hs P hP).2.2 p
+  refine start_self (State.Self.acc hP.1 ⟨by rw [hr]; exact (hs P hP).1, hm' P (hfr ▸ hP), fun p hp' => (hs P hP).2.2 p
     (by rw [hp] at hp'; exact hp')⟩ fun p hp' => by rw [hn]; exact hb p (by rw [hp] at hp'; exact hp'))
     (fun x hx => he x hx P hP) h
 

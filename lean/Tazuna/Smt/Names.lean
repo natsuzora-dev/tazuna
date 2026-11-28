@@ -110,10 +110,14 @@ mutual
 below `N`, that is, when every fresh id and counter it holds is below `N`. -/
 theorem names_iff (hn : n.denote M = .int (N : Int)) : (t : Ty) → t.comparable = true → (x c : Term) →
     namesT L n t x = some c → {v : t.den} → RelV L t v (x.denote M) → (Holds M c ↔ Ty.relV (PBij.below N) t v v)
-  | .int, _, _, c, h, _, _ | .str, _, _, c, h, _, _ | .point _, _, _, c, h, _, _ => by
+  | .int, _, _, c, h, _, _ | .str, _, _, c, h, _, _ => by
     simp only [namesT, Option.some.injEq] at h
     subst h
     exact iff_of_true holds_tt rfl
+  | .point _, _, _, c, h, _, _ => by
+    simp only [namesT, Option.some.injEq] at h
+    subst h
+    exact iff_of_true holds_tt (PBij.point_of_eq rfl rfl)
   | .adt 0 _ vs, _, _, c, h, v, ⟨hvs, _⟩ => by
     simp only [namesT, Option.some.injEq] at h
     subst h hvs

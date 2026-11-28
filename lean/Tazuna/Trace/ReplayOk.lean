@@ -1267,7 +1267,7 @@ theorem inLine_reads (chk : Smt.Checked P E T v) {w : Run v} {s : State v} (hg :
       exact ids_iff he hse j
   | clock t =>
     simp only [Run.input] at hw
-    exact ⟨.clock t, .clock t, none, w, rfl, rfl, by simp [Input.ids, Names.bind], hw, rfl, rfl, .clock t,
+    exact ⟨.clock t, .clock t, none, w, rfl, rfl, by simp [Input.ids, Names.bind], hw, rfl, rfl, .clock (t := t) rfl,
       fun _ => noAnswer w.state _ (fun _ _ _ h => nomatch h) (fun _ _ _ h => nomatch h), fun i => Iff.rfl⟩
 
 end InLineReads

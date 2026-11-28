@@ -7,8 +7,8 @@ nominal techniques, Pitts 2013). -/
 
 namespace Tazuna.Ir
 
-/-- `P` keeps every counter below `n`. -/
-def PBij.Fixes (P : PBij) (n : Nat) : Prop := ∀ c < n, P.rel c c
+/-- `P` keeps every instant and every counter below `n`. -/
+def PBij.Fixes (P : PBij) (n : Nat) : Prop := P.shift = Option.none ∧ ∀ c < n, P.rel c c
 
 /-- Each counter below `n` to itself, and nothing else. -/
 def PBij.below (n : Nat) : PBij where
@@ -16,10 +16,10 @@ def PBij.below (n : Nat) : PBij where
   func := by rintro _ _ _ ⟨rfl, _⟩ ⟨rfl, _⟩; rfl
   inj := by rintro _ _ _ ⟨rfl, _⟩ ⟨rfl, _⟩; rfl
 
-theorem PBij.below_fixes (n : Nat) : (PBij.below n).Fixes n := fun _ h => ⟨rfl, h⟩
+theorem PBij.below_fixes (n : Nat) : (PBij.below n).Fixes n := ⟨rfl, fun _ h => ⟨rfl, h⟩⟩
 
 theorem PBij.Fixes.mono {P : PBij} {n m : Nat} (h : P.Fixes m) (hnm : n ≤ m) : P.Fixes n :=
-  fun c hc => h c (Nat.lt_of_lt_of_le hc hnm)
+  ⟨h.1, fun c hc => h.2 c (Nat.lt_of_lt_of_le hc hnm)⟩
 
 /-- `x` holds names only below `n`: every renaming that keeps the counters below `n` relates it to itself, as `self`
 reads that for its kind of value. -/
@@ -35,7 +35,7 @@ variable {n : Nat} {P : PBij}
 theorem IdV.self_of_below {a b : IdV} (h : IdV.Rel (PBij.below n) a b) (hP : P.Fixes n) : IdV.Rel P a a := by
   rcases h with ⟨s, rfl, rfl⟩ | ⟨c, c', i, ⟨rfl, hc⟩, rfl, rfl⟩
   · exact .inl ⟨s, rfl, rfl⟩
-  · exact .inr ⟨c, c, i, hP c hc, rfl, rfl⟩
+  · exact .inr ⟨c, c, i, hP.2 c hc, rfl, rfl⟩
 
 theorem Multi.self_of {α β : Type} {r : α → β → Prop} {s : α → α → Prop} (h : ∀ a b, r a b → s a a)
     {xs : List α} {ys : List β} : Multi r xs ys → Multi s xs xs
@@ -46,7 +46,8 @@ mutual
 every renaming that keeps them. -/
 theorem Ty.self_of_below (hP : P.Fixes n) : (t : Ty) → t.comparable = true → {x y : t.den0} →
     Ty.rel0 (PBij.below n) t x y → Ty.rel0 P t x x
-  | .int, _, _, _, _ | .str, _, _, _, _ | .point _, _, _, _, _ => rfl
+  | .int, _, _, _, _ | .str, _, _, _, _ => rfl
+  | .point _, _, _, _, _ => PBij.point_of_eq hP.1 rfl
   | .param _, _, _, _, _ => trivial
   | .list t, hw, _, _, h => forall2_self_of (fun _ _ => Ty.self_of_below hP t hw) h
   | .bag t, hw, _, _, h => Multi.self_of (fun _ _ => Ty.self_of_below hP t hw) h
@@ -60,7 +61,7 @@ theorem Ty.self_of_below (hP : P.Fixes n) : (t : Ty) → t.comparable = true →
     simp only [Ty.comparable, beq_iff_eq] at hw
     subst hw
     obtain ⟨rfl, hc⟩ := h
-    exact hP _ hc
+    exact hP.2 _ hc
   | .fn .., hw, _, _, _ => by simp [Ty.comparable] at hw
 theorem Ty.selfs_of_below (hP : P.Fixes n) : (ts : List Ty) → Ty.comparables ts = true →
     {x y : (Ty.semsWith Dsl.base ts).1} →
@@ -166,7 +167,7 @@ theorem machineStep_self {m : MachineV r e} (hm : m.Equi) {records : r.den0}
     (hm.self _).instances _ _ ⟨hrec _ (PBij.below_fixes n), trivial⟩
   obtain ⟨k', -, hkk⟩ := hb.mem_left hk0
   have hks : Ty.rel0 P m.key k k := Ty.self_of_below hP m.key hm.key hkk
-  exact forall2_self (reactKey_rel hm (hl P hP) (hrec P hP) now (hev P hP) hks).2 x hx
+  exact forall2_self (reactKey_rel hm (hl P hP) (hrec P hP) (PBij.point_of_eq hP.1 rfl) (hev P hP) hks).2 x hx
 
 theorem reactMachines_self {records : r.den0} (hrec : ∀ P : PBij, P.Fixes n → Ty.rel0 P r records records) (now : Int)
     {ev : e.den0} (hev : ∀ P : PBij, P.Fixes n → Ty.rel0 P e ev ev) : {ms : List (MachineV r e)} →
@@ -192,7 +193,7 @@ theorem react_self (hv : v.Equivariant) {s : State v}
     {ev : v.event.den0} (hev : ∀ P : PBij, P.Fixes n → Ty.rel0 P v.event ev ev) :
     ∀ x ∈ (react T s ev).2, ∀ P : PBij, P.Fixes n → Started.Rel P x x := by
   have hrec : ∀ P : PBij, P.Fixes n → Ty.rel0 P v.records (v.apply.fn (.inl (s.records, s.now, ()), ev, ())) (v.apply.fn (.inl (s.records, s.now, ()), ev, ())) :=
-    fun P hP => (hv.self P).apply _ _ ⟨⟨(hs P hP).1, rfl, trivial⟩, hev P hP, trivial⟩
+    fun P hP => (hv.self P).apply _ _ ⟨⟨(hs P hP).1, PBij.point_of_eq hP.1 rfl, trivial⟩, hev P hP, trivial⟩
   intro x hx P hP
   simp only [react, List.mem_append] at hx
   rcases hx with hx | hx
@@ -202,7 +203,7 @@ theorem react_self (hv : v.Equivariant) {s : State v}
     obtain ⟨y, hy, eff, he, rfl⟩ := hx
     have hl := EffectFun.apply_rel y.react ((hv.self P).reactions y hy)
       (xs := (.inl (v.apply.fn (.inl (s.records, s.now, ()), ev, ()), s.now, ()), ev, ()))
-      (ys := (.inl (v.apply.fn (.inl (s.records, s.now, ()), ev, ()), s.now, ()), ev, ())) ⟨⟨hrec P hP, rfl, trivial⟩, hev P hP, trivial⟩
+      (ys := (.inl (v.apply.fn (.inl (s.records, s.now, ()), ev, ()), s.now, ()), ev, ())) ⟨⟨hrec P hP, PBij.point_of_eq hP.1 rfl, trivial⟩, hev P hP, trivial⟩
     exact ⟨.reaction _, forall2_self hl eff he⟩
 
 theorem applyEvents_self (hv : v.Equivariant) (n : Nat) :
@@ -255,7 +256,7 @@ theorem runCommand_self (hv : v.Equivariant) {a : Acc v}
         (x.decide.fn (ctx a.state a.state.records c i, ())) := fun P hP => by
     have hA := ha P hP
     exact ((hv.self P).commands x hx).decide _ _
-      ⟨⟨hA.1.1.1, hi P hP, hc P hP, rfl, hP _ (Nat.lt_succ_self _), trivial⟩, trivial⟩
+      ⟨⟨hA.1.1.1, hi P hP, hc P hP, PBij.point_of_eq hP.1 rfl, hP.2 _ (Nat.lt_succ_self _), trivial⟩, trivial⟩
   have ha1 : Below Acc.Self (a.state.fresh + 1) { a with state := { a.state with fresh := a.state.fresh + 1 } } :=
     below_fresh ha
   unfold runCommand execCommand at h
@@ -313,7 +314,7 @@ theorem runQuery_self (hv : v.Equivariant) {a : Acc v}
       have hA := ha P hP
       exact forall2_self (hf P hP (x.resolve.fn (queryCtx a.state a.state.records c i, ()), ())
         (x.resolve.fn (queryCtx a.state a.state.records c i, ()), ()) ⟨((hv.self P).queries x hx).resolve _ _
-        ⟨⟨hA.1.1.1, hi P hP, hc P hP, rfl, trivial⟩, trivial⟩, trivial⟩) ev hev
+        ⟨⟨hA.1.1.1, hi P hP, hc P hP, PBij.point_of_eq hP.1 rfl, trivial⟩, trivial⟩, trivial⟩) ev hev
     exact applyEvents_self T hv _ _ { a with state := { a.state with fresh := a.state.fresh + 1 } } (below_fresh ha) hans
       b h
 

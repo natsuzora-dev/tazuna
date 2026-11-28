@@ -240,6 +240,8 @@ The semantics itself assumes more, and no line prints it:
 - Time moves and timers fire only on clock lines (`{"in":"clock"}`). A trace that wants a timer to fire writes a clock line.
 - State is durable. The inputs are requests, answers, events, and clock lines, with no restart. To specify a restart that loses state, write the loss as an event from a declared external.
 
+Moving every instant of a state and of an input by one amount moves every instant of the step's result by the same amount and changes nothing else, so no outcome depends on where time starts (`step_shift`, `Semantics/StepSame.lean`).
+
 ## Trusted base
 
 You trust these programs and documents.

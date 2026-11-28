@@ -53,11 +53,16 @@ mutual
 /-- Two values as a step holds them with one code relate with every id renamed to itself: they are the same value,
 bags and tables read as multisets. A type that is not data has no code, so no value of it relates to one. -/
 theorem relD_same : (t : Ty) → {x y : t.den0} → {z : Val} → RelD L t x z → RelD L t y z → Ty.rel0 PBij.refl t x y
-  | .int, _, _, _, hx, hy | .point _, _, _, _, hx, hy => by
+  | .int, _, _, _, hx, hy => by
     simp only [RelD] at hx hy
     rw [hx] at hy
     cases hy
     rfl
+  | .point _, _, _, _, hx, hy => by
+    simp only [RelD] at hx hy
+    rw [hx] at hy
+    cases hy
+    exact PBij.point_of_eq rfl rfl
   | .str, ⟨_, _⟩, ⟨_, _⟩, _, hx, hy => by
     simp only [RelD] at hx hy
     rw [hx] at hy

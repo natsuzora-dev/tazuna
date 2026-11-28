@@ -14,15 +14,76 @@ allocated blocks; renaming every name uniformly is nominal techniques' equivaria
 
 namespace Tazuna.Ir
 
-/-- A partial bijection on numbers: each number relates to at most one, and at most one relates to each. -/
+/-- A partial bijection on numbers: each number relates to at most one, and at most one relates to each. As the
+renaming of step counters a relation on values reads (`Ty.relWith`), it may also move every instant by `shift`
+milliseconds; none keeps them. No spec can write an instant, so no step can tell a shifted state from its original
+(Lamport, "Real-Time Model Checking is Really Simple", 2005). -/
 structure PBij where
   rel : Nat → Nat → Prop
   func : ∀ {a b b'}, rel a b → rel a b' → b = b'
   inj : ∀ {a a' b}, rel a b → rel a' b → a = a'
+  shift : Option Int := none
 
-def PBij.inv (p : PBij) : PBij := ⟨fun a b => p.rel b a, fun h h' => p.inj h h', fun h h' => p.func h h'⟩
+def PBij.inv (p : PBij) : PBij :=
+  ⟨fun a b => p.rel b a, fun h h' => p.inj h h', fun h h' => p.func h h', p.shift.map (- ·)⟩
 
-/-- Each number to itself. -/
+/-- Points in time related by `R`: a day to itself, an instant to itself moved by `R.shift`. -/
+def PBij.point (R : PBij) : TimeUnit → Int → Int → Prop
+  | .ms, a, b => match R.shift with
+    | some d => b = a + d
+    | none => a = b
+  | .day, a, b => a = b
+
+theorem PBij.point_inv {R : PBij} {u : TimeUnit} {a b : Int} : R.point u a b ↔ R.inv.point u b a := by
+  cases u with
+  | day => exact eq_comm
+  | ms =>
+    simp only [PBij.point, PBij.inv]
+    cases R.shift with
+    | none => exact eq_comm
+    | some d => simp only [Option.map_some]; omega
+
+/-- How far `R` moves an instant: its shift, or 0 where it keeps instants. -/
+def PBij.shiftMs (R : PBij) : Int := match R.shift with
+  | some d => d
+  | none => 0
+
+/-- An instant related by `R` is moved by `R.shiftMs`. -/
+theorem PBij.point_ms_eq {R : PBij} {a b : Int} (h : R.point .ms a b) : b = a + R.shiftMs := by
+  unfold PBij.point at h
+  unfold PBij.shiftMs
+  generalize R.shift = o at h ⊢
+  cases o <;> (simp only at h ⊢) <;> omega
+
+theorem PBij.point_ms_of {R : PBij} {a b : Int} (h : b = a + R.shiftMs) : R.point .ms a b := by
+  unfold PBij.point
+  unfold PBij.shiftMs at h
+  generalize R.shift = o at h ⊢
+  cases o <;> (simp only at h ⊢) <;> omega
+
+theorem PBij.point_of_eq {R : PBij} (hs : R.shift = Option.none) {u : TimeUnit} {a b : Int} (h : a = b) :
+    R.point u a b := by
+  cases u with
+  | day => exact h
+  | ms => simpa only [PBij.point, hs] using h
+
+theorem PBij.point_eq {R : PBij} (hs : R.shift = Option.none) {u : TimeUnit} {a b : Int} (h : R.point u a b) :
+    a = b := by
+  cases u with
+  | day => exact h
+  | ms => simpa only [PBij.point, hs] using h
+
+theorem PBij.point_beq {R : PBij} {u : TimeUnit} {a b a' b' : Int} (h : R.point u a b) (h' : R.point u a' b') :
+    (a == a') = (b == b') := by
+  cases u with
+  | day => rw [show a = b from h, show a' = b' from h']
+  | ms =>
+    simp only [PBij.point] at h h'
+    rw [Bool.eq_iff_iff, beq_iff_eq, beq_iff_eq]
+    generalize R.shift = o at h h'
+    cases o <;> (simp only at h h') <;> omega
+
+/-- Each number to itself, and every instant kept. -/
 def PBij.refl : PBij where
   rel a b := a = b
   func := by rintro _ _ _ rfl rfl; rfl
@@ -229,7 +290,7 @@ def Ty.relWith : (t : Ty) → (Ty.semWith D t).1 → (Ty.semWith D t).1 → Prop
   | .param _, _, _ => True
   | .bag t, a, b => Multi (Ty.relWith t) a b
   | .table k v, a, b => Multi (fun e e' => Ty.relWith k e.1 e'.1 ∧ Ty.relWith v e.2 e'.2) a.1 b.1
-  | .point _, a, b => a = b
+  | .point u, a, b => R.point u a b
   | .id, a, b => IdV.Rel R a b
   | .dsl k args, a, b => RD k args a b
 def Ty.relsWith : (ts : List Ty) → (Ty.semsWith D ts).1 → (Ty.semsWith D ts).1 → Prop
@@ -269,7 +330,8 @@ mutual
 /-- The inverse renaming relates the other way round. -/
 theorem Ty.relWith_inv (hRD : ∀ k a x y, RD k a x y ↔ RD' k a y x) : (t : Ty) → (x y : (Ty.semWith D t).1) →
     (Ty.relWith D RD R t x y ↔ Ty.relWith D RD' R.inv t y x)
-  | .int, _, _ | .str, _, _ | .point _, _, _ => eq_comm
+  | .int, _, _ | .str, _, _ => eq_comm
+  | .point _, _, _ => PBij.point_inv
   | .list t, _, _ => forall2_swap_iff (Ty.relWith_inv hRD t)
   | .tuple ts, x, y => Ty.relsWith_inv hRD ts x y
   | .fn ps r, f, g => by
@@ -425,20 +487,23 @@ theorem Multi.sort_map {α β γ : Type} [Ord γ] [Std.TransOrd γ] [Std.LawfulE
 mutual
 /-- Related data values are one term once each side's counters are renamed so that related counters meet:
 `Ty.canonBy` reads exactly what `Ty.rel0` compares by equality, and reads functions as nothing. -/
-theorem Ty.canonBy_rel {R : PBij} {σ σ' : Nat → Nat} (hσ : ∀ {c c'}, R.rel c c' → σ' c = σ c') :
+theorem Ty.canonBy_rel {R : PBij} {σ σ' : Nat → Nat} (hσ : ∀ {c c'}, R.rel c c' → σ' c = σ c') (hshift : R.shift = Option.none) :
     (t : Ty) → (x y : t.den0) → Ty.rel0 R t x y → Ty.canonBy σ' t x = Ty.canonBy σ t y
-  | .int, _, _, h | .str, _, _, h | .point _, _, _, h => by
+  | .int, _, _, h | .str, _, _, h => by
     show Ty.canonBy σ' _ _ = Ty.canonBy σ _ _
     cases h; rfl
-  | .list t, _, _, h => congrArg Erl.list (forall2_map_eq _ _ (Ty.canonBy_rel hσ t) h)
-  | .bag t, _, _, h => congrArg Erl.list (Multi.sort_map (Ty.canonBy_rel hσ t) h)
+  | .point _, _, _, h => by
+    show Erl.int _ = Erl.int _
+    rw [PBij.point_eq hshift h]
+  | .list t, _, _, h => congrArg Erl.list (forall2_map_eq _ _ (Ty.canonBy_rel hσ hshift t) h)
+  | .bag t, _, _, h => congrArg Erl.list (Multi.sort_map (Ty.canonBy_rel hσ hshift t) h)
   | .table k v, x, y, h => by
     have e := Multi.sort_map (f := fun e => (Ty.canonBy σ' k e.1, Ty.canonBy σ' v e.2))
       (g := fun e => (Ty.canonBy σ k e.1, Ty.canonBy σ v e.2))
-      (fun a b hab => by rw [Ty.canonBy_rel hσ k _ _ hab.1, Ty.canonBy_rel hσ v _ _ hab.2]) h
+      (fun a b hab => by rw [Ty.canonBy_rel hσ hshift k _ _ hab.1, Ty.canonBy_rel hσ hshift v _ _ hab.2]) h
     simp only [Ty.canonBy, e]
-  | .tuple ts, x, y, h => congrArg Erl.tuple (Ty.canonsBy_rel hσ ts x y h)
-  | .adt _ _ vs, x, y, h => Ty.canonAltsBy_rel hσ 0 vs x y h
+  | .tuple ts, x, y, h => congrArg Erl.tuple (Ty.canonsBy_rel hσ hshift ts x y h)
+  | .adt _ _ vs, x, y, h => Ty.canonAltsBy_rel hσ hshift 0 vs x y h
   | .fn .., _, _, _ | .param _, _, _, _ => rfl
   | .id, x, y, h => by
     rcases h with ⟨s, rfl, rfl⟩ | ⟨c, c', i, hc, rfl, rfl⟩
@@ -446,18 +511,18 @@ theorem Ty.canonBy_rel {R : PBij} {σ σ' : Nat → Nat} (hσ : ∀ {c c'}, R.re
     · simp only [Ty.canonBy, hσ hc]
   | .dsl k _, x, y, h => by
     cases k <;> first | rfl | exact congrArg (fun n : Nat => Erl.int n) (hσ h)
-theorem Ty.canonsBy_rel {R : PBij} {σ σ' : Nat → Nat} (hσ : ∀ {c c'}, R.rel c c' → σ' c = σ c') :
+theorem Ty.canonsBy_rel {R : PBij} {σ σ' : Nat → Nat} (hσ : ∀ {c c'}, R.rel c c' → σ' c = σ c') (hshift : R.shift = Option.none) :
     (ts : List Ty) → (x y : (Ty.semsWith Dsl.base ts).1) → Ty.relsWith Dsl.base (Dsl.rel0 R) R ts x y →
     Ty.canonsBy σ' ts x = Ty.canonsBy σ ts y
   | [], (), (), _ => rfl
   | t :: ts, (x, xs), (y, ys), ⟨h, hs⟩ => by
-    simp only [Ty.canonsBy, Ty.canonBy_rel hσ t x y h, Ty.canonsBy_rel hσ ts xs ys hs]
-theorem Ty.canonAltsBy_rel {R : PBij} {σ σ' : Nat → Nat} (hσ : ∀ {c c'}, R.rel c c' → σ' c = σ c') (k : Nat) :
+    simp only [Ty.canonsBy, Ty.canonBy_rel hσ hshift t x y h, Ty.canonsBy_rel hσ hshift ts xs ys hs]
+theorem Ty.canonAltsBy_rel {R : PBij} {σ σ' : Nat → Nat} (hσ : ∀ {c c'}, R.rel c c' → σ' c = σ c') (hshift : R.shift = Option.none) (k : Nat) :
     (vs : List (List Ty)) → (x y : (Ty.semAltsWith Dsl.base vs).1) →
     Ty.relAltsWith Dsl.base (Dsl.rel0 R) R vs x y → Ty.canonAltsBy σ' k vs x = Ty.canonAltsBy σ k vs y
   | [], x, _, _ => nomatch x
-  | fs :: _, .inl x, .inl y, h => by simp only [Ty.canonAltsBy, Ty.canonsBy_rel hσ fs x y h]
-  | _ :: vs, .inr x, .inr y, h => Ty.canonAltsBy_rel hσ (k + 1) vs x y h
+  | fs :: _, .inl x, .inl y, h => by simp only [Ty.canonAltsBy, Ty.canonsBy_rel hσ hshift fs x y h]
+  | _ :: vs, .inr x, .inr y, h => Ty.canonAltsBy_rel hσ hshift (k + 1) vs x y h
   | _ :: _, .inl _, .inr _, h | _ :: _, .inr _, .inl _, h => h.elim
 end
 
@@ -575,9 +640,10 @@ mutual
 /-- `==` on related values of a comparable type gives the same answer. -/
 theorem Ty.rel0_deq {R : PBij} : (t : Ty) → t.comparable = true → {x y x' y' : t.den0} → Ty.rel0 R t x y →
     Ty.rel0 R t x' y' → t.deq0 x x' = t.deq0 y y'
-  | .int, _, _, _, _, _, h, h' | .str, _, _, _, _, _, h, h' | .point _, _, _, _, _, _, h, h' => by
+  | .int, _, _, _, _, _, h, h' | .str, _, _, _, _, _, h, h' => by
     show (_ == _) = (_ == _)
     rw [show _ = _ from h, show _ = _ from h']
+  | .point _, _, _, _, _, _, h, h' => PBij.point_beq h h'
   | .param _, _, _, _, _, _, _, _ => rfl
   | .id, _, _, _, _, _, h, h' => decide_eq_decide.2 (IdV.rel_eq h h')
   | .list t, hc, x, y, x', y', h, h' =>

@@ -178,26 +178,29 @@ def DataCovered (f n0 : Nat) (a b : Acc v) : Prop :=
   ∀ σ τ, CtrRen f σ → WireRen n0 (wireIds b) τ →
     ∃ σ' τ', CtrRen f σ' ∧ WireRen n0 (wireIds a) τ' ∧ dataTerm σ τ b = dataTerm σ' τ' a
 
-theorem instTerm_rel {R : PBij} {σ σ' : Nat → Nat} (hσ : ∀ {c c'}, R.rel c c' → σ' c = σ c') {r e : Ty}
-    {m : MachineV r e} {i j : Instance m} (h : Instance.Rel R i j) : instTerm σ' i = instTerm σ j := by
+theorem instTerm_rel {R : PBij} {σ σ' : Nat → Nat} (hσ : ∀ {c c'}, R.rel c c' → σ' c = σ c')
+    (h0 : R.shift = Option.none) {r e : Ty} {m : MachineV r e} {i j : Instance m} (h : Instance.Rel R i j) :
+    instTerm σ' i = instTerm σ j := by
   obtain ⟨hk, hs⟩ := h
-  simp only [instTerm, Ty.canonBy_rel hσ _ _ _ hk, Ty.canonBy_rel hσ _ _ _ hs]
+  simp only [instTerm, Ty.canonBy_rel hσ h0 _ _ _ hk, Ty.canonBy_rel hσ h0 _ _ _ hs]
 
-theorem machinesTerm_rel {R : PBij} {σ σ' : Nat → Nat} (hσ : ∀ {c c'}, R.rel c c' → σ' c = σ c') {r e : Ty} :
+theorem machinesTerm_rel {R : PBij} {σ σ' : Nat → Nat} (hσ : ∀ {c c'}, R.rel c c' → σ' c = σ c')
+    (h0 : R.shift = Option.none) {r e : Ty} :
     {ms : List (MachineV r e)} → (x y : Machines ms) → Machines.Rel R x y → machinesTerm σ' x = machinesTerm σ y
   | [], .nil, .nil, _ => rfl
   | _ :: _, .cons _ _, .cons _ _, h => by
     have h' : Insts.Rel R _ _ ∧ Machines.Rel R _ _ := h
-    simp only [machinesTerm, Multi.sort_map (fun _ _ hij => instTerm_rel hσ hij) h'.1.1, machinesTerm_rel hσ _ _ h'.2]
+    simp only [machinesTerm, Multi.sort_map (fun _ _ hij => instTerm_rel hσ h0 hij) h'.1.1,
+      machinesTerm_rel hσ h0 _ _ h'.2]
 
-theorem wireTerm_rel {R : PBij} {σ σ' : Nat → Nat} (hσ : ∀ {c c'}, R.rel c c' → σ' c = σ c') {x y : WireVal}
-    (h : WireVal.Rel R x y) : wireTerm σ' x = wireTerm σ y := by
-  cases h with | mk h => exact Ty.canonBy_rel hσ _ _ _ h
+theorem wireTerm_rel {R : PBij} {σ σ' : Nat → Nat} (hσ : ∀ {c c'}, R.rel c c' → σ' c = σ c')
+    (h0 : R.shift = Option.none) {x y : WireVal} (h : WireVal.Rel R x y) : wireTerm σ' x = wireTerm σ y := by
+  cases h with | mk h => exact Ty.canonBy_rel hσ h0 _ _ _ h
 
 /-- Steps in progress related by `R` with the same counter and next wire id are one data term once each side's names
 are renamed so that the names `R` relates meet. -/
 theorem dataTerm_rel {R : Ren} {σ σ' τ τ' : Nat → Nat} (hσ : ∀ {c c'}, R.ctr.rel c c' → σ' c = σ c')
-    (hτ : ∀ {i j}, R.wire.rel i j → τ' i = τ j) {a b : Acc v} (h : Acc.Rel R a b)
+    (hτ : ∀ {i j}, R.wire.rel i j → τ' i = τ j) (h0 : R.ctr.shift = Option.none) {a b : Acc v} (h : Acc.Rel R a b)
     (hf : a.state.fresh = b.state.fresh) (hn : a.state.nextId = b.state.nextId) :
     dataTerm σ' τ' a = dataTerm σ τ b := by
   obtain ⟨⟨hrec, hmach, hpend, hnow, -, -⟩, hev, hout, -, -, hown⟩ := h
@@ -208,24 +211,24 @@ theorem dataTerm_rel {R : Ren} {σ σ' τ τ' : Nat → Nat} (hσ : ∀ {c c'}, 
     (fun ⟨_, ps, _, pr⟩ ⟨_, qs, _, qr⟩ ⟨hi, hs, hx, hr⟩ => by
       have hs' : senderTerm σ' ps = senderTerm σ qs := by
         cases hs with
-        | machine n hk => simp only [senderTerm, wireTerm_rel hσ hk]
+        | machine n hk => simp only [senderTerm, wireTerm_rel hσ h0 hk]
         | reaction n => rfl
       have hr' : requestTerm σ' (fun _ => .atom "") pr = requestTerm σ (fun _ => .atom "") qr := by
         cases hr with
         | mk n i o j hv he _ =>
-          cases he <;> simp only [requestTerm, Ty.canonBy_rel hσ _ _ _ hv, Option.toList, List.map]
+          cases he <;> simp only [requestTerm, Ty.canonBy_rel hσ h0 _ _ _ hv, Option.toList, List.map]
       rw [hτ hi, hs', hx, hr']) hpend
   have ho := Multi.sort_map
     (f := fun o : OutLine => Erl.tuple [.int (τ' o.id), .bin o.external, .bin o.name, wireTerm σ' o.input])
     (g := fun o : OutLine => Erl.tuple [.int (τ o.id), .bin o.external, .bin o.name, wireTerm σ o.input])
-    (fun o o' ⟨hi, hx, hm, hw⟩ => by rw [hτ hi, hx, hm, wireTerm_rel hσ hw]) hout
+    (fun o o' ⟨hi, hx, hm, hw⟩ => by rw [hτ hi, hx, hm, wireTerm_rel hσ h0 hw]) hout
   have hq := Multi.sort_map (f := ownTerm σ' (fun _ => .atom "")) (g := ownTerm σ (fun _ => .atom ""))
     (fun x y hxy => by
       cases hxy with
-      | command n c i j hv _ => simp only [ownTerm, Ty.canonBy_rel hσ _ _ _ hv]
-      | query n c i o hv _ => simp only [ownTerm, Ty.canonBy_rel hσ _ _ _ hv]) hown
-  simp only [dataTerm, accTerm, Ty.canonBy_rel hσ _ _ _ hrec, machinesTerm_rel hσ _ _ hmach, hp, hnow, hf, hn,
-    Multi.sort_map (fun x y => Ty.canonBy_rel hσ v.event x y) hev, ho, hq]
+      | command n c i j hv _ => simp only [ownTerm, Ty.canonBy_rel hσ h0 _ _ _ hv]
+      | query n c i o hv _ => simp only [ownTerm, Ty.canonBy_rel hσ h0 _ _ _ hv]) hown
+  simp only [dataTerm, accTerm, Ty.canonBy_rel hσ h0 _ _ _ hrec, machinesTerm_rel hσ h0 _ _ hmach, hp,
+    PBij.point_eq h0 hnow, hf, hn, Multi.sort_map (fun x y => Ty.canonBy_rel hσ h0 v.event x y) hev, ho, hq]
 
 /-- A counter renaming that fixes every counter but `f` and `f + 1` agrees with keeping or swapping the two. -/
 theorem ctr_choice {R : PBij} (hfix : ∀ n, (n < f ∨ f + 2 ≤ n) → R.rel n n) :
@@ -277,7 +280,7 @@ theorem wireIds_partner {R : Ren} {a b : Acc v} (h : Acc.Rel R a b) :
 
 theorem covered_of_renamed {a b : Acc v} (h : RenamedFrom f n0 a b) (hf : a.state.fresh = f + 2) :
     DataCovered f n0 a b := by
-  obtain ⟨R, hr, hfr, hn, -, hfix, hw⟩ := h
+  obtain ⟨R, h0, hr, hfr, hn, -, hfix, hw⟩ := h
   obtain ⟨ρ, hρ, hρR⟩ := ctr_choice (R := R.ctr) (f := f) fun n hn' => hfix n (hf ▸ hn')
   classical
   let ρw : Nat → Nat := fun i => if h : ∃ j, R.wire.rel i j then h.choose else i
@@ -308,14 +311,14 @@ theorem covered_of_renamed {a b : Acc v} (h : RenamedFrom f n0 a b) (hf : a.stat
     subst this
     exact R.wire.inj hij hij'
   · exact (dataTerm_rel (fun {c c'} h => by simp only [Function.comp, hρR h]) (fun {i j} h => by
-      simp only [Function.comp, hρw h]) hr hfr hn).symm
+      simp only [Function.comp, hρw h]) h0 hr hfr hn).symm
 
 /-- `Same` keeps the counter, and from the counter a pair ends at, each side covers the other. -/
 theorem covered_of_same {a b : Acc v} (h : Same f n0 a b) :
     a.state.fresh = b.state.fresh ∧ (a.state.fresh = f + 2 → DataCovered f n0 a b ∧ DataCovered f n0 b a) := by
   induction h with
   | @base a b h =>
-    have hfr : a.state.fresh = b.state.fresh := by obtain ⟨_, _, e, _⟩ := h; exact e
+    have hfr : a.state.fresh = b.state.fresh := by obtain ⟨_, _, _, e, _⟩ := h; exact e
     exact ⟨hfr, fun hf => ⟨covered_of_renamed h hf, covered_of_renamed h.symm (hfr ▸ hf)⟩⟩
   | refl a => exact ⟨rfl, fun _ => ⟨fun σ τ hσ hτ => ⟨σ, τ, hσ, hτ, rfl⟩, fun σ τ hσ hτ => ⟨σ, τ, hσ, hτ, rfl⟩⟩⟩
   | symm _ ih => exact ⟨ih.1.symm, fun hf => (ih.2 (ih.1 ▸ hf)).symm⟩

@@ -11,6 +11,7 @@ namespace Tazuna.Ir
 
 theorem PBij.refl_inv : PBij.refl.inv = PBij.refl := by
   simp only [PBij.inv, PBij.refl, PBij.mk.injEq]
+  refine ⟨?_, rfl⟩
   funext a b; exact propext eq_comm
 
 theorem Ty.same_symm {t : Ty} {x y : t.den0} (h : Ty.Same t x y) : Ty.Same t y x := by
@@ -201,8 +202,10 @@ mutual
 /-- Values the same up to the order of their bags and tables have the same trees up to that order. -/
 theorem valTree_same : (t : Ty) → (x y : t.den0) → Ty.Same t x y → (te : Tree Key) → valTree T t x = some te →
     ∃ te', valTree T t y = some te' ∧ Tree.Same te te'
-  | .int, x, y, h, te, hx | .str, x, y, h, te, hx | .point _, x, y, h, te, hx => by
+  | .int, x, y, h, te, hx | .str, x, y, h, te, hx => by
     have h : x = y := h; subst h; exact ⟨te, hx, rfl⟩
+  | .point _, x, y, h, te, hx => by
+    have h : x = y := PBij.point_eq rfl h; subst h; exact ⟨te, hx, rfl⟩
   | .id, x, y, h, te, hx => by
     have h : IdV.Rel PBij.refl x y := h
     rcases h with ⟨s, rfl, rfl⟩ | ⟨c, c', i, hc, rfl, rfl⟩

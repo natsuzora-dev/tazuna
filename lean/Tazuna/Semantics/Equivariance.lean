@@ -398,17 +398,29 @@ theorem Prim.den_rel (p : Prim) (args : List Ty) (h : p.ok args = true) :
     rfl
   | instantAdd =>
     rintro ⟨d, n, ⟨⟩⟩ ⟨d', n', ⟨⟩⟩ ⟨hd, hn, -⟩
-    show @HAdd.hAdd Int Int Int _ d n = @HAdd.hAdd Int Int Int _ d' n'
-    rw [show d = d' from hd, show n = n' from hn]
+    have e := PBij.point_ms_eq (a := d) (b := d') hd
+    obtain rfl : n = n' := hn
+    exact PBij.point_ms_of (show @HAdd.hAdd Int Int Int _ d' n = @HAdd.hAdd Int Int Int _ d n + R.shiftMs by omega)
   | instantDiff =>
     rintro ⟨a, b, ⟨⟩⟩ ⟨a', b', ⟨⟩⟩ ⟨ha, hb, -⟩
+    have ea := PBij.point_ms_eq (a := a) (b := a') ha
+    have eb := PBij.point_ms_eq (a := b) (b := b') hb
     show @HSub.hSub Int Int Int _ b a = @HSub.hSub Int Int Int _ b' a'
-    rw [show a = a' from ha, show b = b' from hb]
-  | instantIsBefore | instantIsAfter =>
+    omega
+  | instantIsBefore =>
     rintro ⟨a, b, ⟨⟩⟩ ⟨a', b', ⟨⟩⟩ ⟨ha, hb, -⟩
-    obtain rfl : a = a' := ha
-    obtain rfl : b = b' := hb
-    exact Ty.relV_ofBool_eq rfl
+    have ea := PBij.point_ms_eq (a := a) (b := a') ha
+    have eb := PBij.point_ms_eq (a := b) (b := b') hb
+    refine Ty.relV_ofBool_eq (decide_eq_decide.2 ?_)
+    dsimp only
+    omega
+  | instantIsAfter =>
+    rintro ⟨a, b, ⟨⟩⟩ ⟨a', b', ⟨⟩⟩ ⟨ha, hb, -⟩
+    have ea := PBij.point_ms_eq (a := a) (b := a') ha
+    have eb := PBij.point_ms_eq (a := b) (b := b') hb
+    refine Ty.relV_ofBool_eq (decide_eq_decide.2 ?_)
+    dsimp only
+    omega
   | require =>
     rintro ⟨c, j, f, ⟨⟩⟩ ⟨c', j', g, ⟨⟩⟩ ⟨hc, hj, hf, -⟩
     show Ty.relV R _ (if Ty.toBool c then f () else Ty.error j) (if Ty.toBool c' then g () else Ty.error j')
