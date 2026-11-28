@@ -424,9 +424,30 @@ pub fn scope() -> tazuna.Scope {
     ],
     others_at_most: 2,
     steps: 4,
-    explore_depth: 0,
-    explore_states: 1,
+    explore_depth: 6,
+    explore_states: 3000,
     waits: [],
-    values: [],
+    values: [
+      // A restock is 1 to 1000 units and stock is low below 5; stock is never
+      // negative, so an order's lines try -1, 0 and 1 units.
+      tazuna.values(
+        of: tazuna.declare_command(restock()),
+        ints: [0, 1, 4, 5, 1000, 1001],
+        strings: ["MUG-01"],
+      ),
+      tazuna.values(of: tazuna.declare_query(stock_level()), ints: [], strings: [
+        "MUG-01",
+      ]),
+      tazuna.values(
+        of: tazuna.declare_source(shared.order_placed()),
+        ints: [-1, 0, 1],
+        strings: ["MUG-01"],
+      ),
+      tazuna.values(
+        of: tazuna.declare_source(shared.order_cancelled()),
+        ints: [],
+        strings: ["cancelled by customer"],
+      ),
+    ],
   )
 }

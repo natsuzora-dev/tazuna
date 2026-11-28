@@ -460,9 +460,37 @@ pub fn scope() -> tazuna.Scope {
     ],
     others_at_most: 2,
     steps: 4,
-    explore_depth: 0,
-    explore_states: 1,
+    explore_depth: 6,
+    explore_states: 10_000,
     waits: [],
-    values: [],
+    values: [
+      // Prices are positive and a sale takes 1 to 90 percent off: the values on
+      // both sides of each. "" is a SKU too short and a missing name, and two
+      // SKUs let two sales end together.
+      tazuna.values(
+        of: tazuna.declare_command(add_product()),
+        ints: [0, 1],
+        strings: ["", "MUG-01", "TEA-02"],
+      ),
+      tazuna.values(
+        of: tazuna.declare_command(change_price()),
+        ints: [0, 1],
+        strings: ["MUG-01", "TEA-02"],
+      ),
+      tazuna.values(
+        of: tazuna.declare_command(retire_product()),
+        ints: [],
+        strings: ["MUG-01", "TEA-02"],
+      ),
+      tazuna.values(
+        of: tazuna.declare_command(start_sale()),
+        ints: [0, 1, 90, 91],
+        strings: ["MUG-01", "TEA-02"],
+      ),
+      tazuna.values(of: tazuna.declare_query(price_of()), ints: [], strings: [
+        "MUG-01",
+        "TEA-02",
+      ]),
+    ],
   )
 }

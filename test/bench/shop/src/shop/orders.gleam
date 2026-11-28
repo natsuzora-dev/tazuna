@@ -569,9 +569,37 @@ pub fn scope() -> tazuna.Scope {
     ],
     others_at_most: 2,
     steps: 4,
-    explore_depth: 0,
-    explore_states: 1,
+    explore_depth: 6,
+    explore_states: 1000,
     waits: [],
-    values: [],
+    values: [
+      // Units are 1 to 10 and prices positive: 0 and 1 for every Int, as a bag of
+      // two lines multiplies them (10 and 11 would make 16 times the orders).
+      // One string serves as SKU, customer, email and address, and "" as the
+      // missing email.
+      tazuna.values(
+        of: tazuna.declare_command(place_order()),
+        ints: [0, 1],
+        strings: ["", "MUG-01"],
+      ),
+      tazuna.values(of: tazuna.declare_query(open_orders()), ints: [], strings: [
+        "MUG-01",
+      ]),
+      tazuna.values(
+        of: tazuna.declare_source(shared.price_changes()),
+        ints: [0, 1],
+        strings: ["MUG-01"],
+      ),
+      tazuna.values(
+        of: tazuna.declare_source(shared.reservations()),
+        ints: [],
+        strings: ["MUG-01"],
+      ),
+      tazuna.values(
+        of: tazuna.declare_source(shared.payment_outcomes()),
+        ints: [1],
+        strings: ["declined"],
+      ),
+    ],
   )
 }

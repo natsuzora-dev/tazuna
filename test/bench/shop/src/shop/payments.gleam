@@ -549,9 +549,42 @@ pub fn scope() -> tazuna.Scope {
     ],
     others_at_most: 2,
     steps: 4,
-    explore_depth: 0,
-    explore_states: 1,
+    explore_depth: 6,
+    explore_states: 10_000,
     waits: [],
-    values: [],
+    values: [
+      // Every amount is positive, a score up to 80 lets the charge go ahead, and
+      // the gateway scores 0 to 100.
+      tazuna.values(
+        of: tazuna.declare_source(shared.order_placed()),
+        ints: [0, 1],
+        strings: ["MUG-01"],
+      ),
+      tazuna.values(
+        of: tazuna.declare_source(shared.reservations()),
+        ints: [],
+        strings: ["MUG-01"],
+      ),
+      tazuna.values(
+        of: tazuna.declare_source(shared.order_cancelled()),
+        ints: [],
+        strings: ["cancelled by customer"],
+      ),
+      tazuna.values(
+        of: tazuna.declare_external_query(shared.risk_score()),
+        ints: [0, 80, 81, 100],
+        strings: [],
+      ),
+      tazuna.values(
+        of: tazuna.declare_external_command(shared.charge()),
+        ints: [],
+        strings: ["TX-1"],
+      ),
+      tazuna.values(
+        of: tazuna.declare_external_command(shared.refund()),
+        ints: [],
+        strings: ["declined"],
+      ),
+    ],
   )
 }

@@ -34,6 +34,12 @@ pub fn spec() -> tazuna.Spec {
   )
 }
 
+/// The model a commit is checked in. explore looks 6 inputs deep, one past the
+/// longest life of a record here (a parcel: ordered, paid, labelled, scanned,
+/// then late). Its value sets are the values on both sides of each bound the
+/// spec writes, and each service's state cap is about 1.2 million transitions
+/// over the inputs a state tries with those values, so explore's share of the
+/// run is about 6 million transitions.
 pub fn model() -> tazuna.Model {
   tazuna.model(spec: spec(), resource_limit: 50_000_000, scopes: [
     catalog.scope(),
