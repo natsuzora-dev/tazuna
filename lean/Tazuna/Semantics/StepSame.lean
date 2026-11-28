@@ -54,7 +54,8 @@ def StateShift (d : Option Int) (s s' : State v) : Prop :=
 /-- States the same up to the order their bags and tables are stored in. -/
 abbrev StateSame (s s' : State v) : Prop := StateShift none s s'
 
-/-- Outcomes the same up to order and a time shift: a fault on both sides, or the same outcome with related values. -/
+/-- Outcomes the same up to order and a time shift: the same fault on both sides, or the same outcome with related
+  values. -/
 abbrev Outcome.Shift (d : Option Int) : Outcome → Outcome → Prop := Outcome.Ren (Ren.shifted d)
 
 /-- Outcomes the same up to order. -/

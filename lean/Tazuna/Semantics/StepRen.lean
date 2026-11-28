@@ -152,9 +152,9 @@ def AccRen (R : Ren) (a a' : Acc v) : Prop :=
   StateRen R a.state a'.state ∧ Forall2 (Ty.rel0 R.ctr v.event) a.events a'.events ∧
     Forall2 (OutLine.Rel R) a.out a'.out ∧ Forall2 (OwnEffectV.Rel R.ctr) a.own a'.own
 
-/-- What runs from such steps end in: a fault on both sides, or such steps. -/
+/-- What runs from such steps end in: the same fault on both sides, or such steps. -/
 def ExRen (R : Ren) : Except Fault (Acc v) → Except Fault (Acc v) → Prop
-  | .error _, .error _ => True
+  | .error f, .error f' => f = f'
   | .ok a, .ok a' => AccRen R a a'
   | _, _ => False
 
@@ -213,7 +213,7 @@ theorem start_ren : {effs effs' : List (Sender × EffectV v.event)} →
       dsimp only
       rw [← RequestV.ownerIn_rel hrr v.declared]
       cases r.ownerIn v.declared with
-      | none => trivial
+      | none => cases hrr; rfl
       | some x =>
         obtain ⟨⟨hrec, hmach, hpend, hnow, hf, hn⟩, hev, hout, hown⟩ := ha
         have hline : OutLine.Rel R ⟨a.state.nextId, x, r.name, ⟨r.input, r.value⟩⟩
@@ -247,7 +247,7 @@ theorem applyEvents_ren (ho : Ordered T v) (hmo : R.ctr.Mono) : {evs evs' : List
 
 /-- What a command's runs from such steps end in. -/
 def RanRen (R : Ren) {j : Ty} : Except Fault (Ran v j) → Except Fault (Ran v j) → Prop
-  | .error _, .error _ => True
+  | .error f, .error f' => f = f'
   | .ok (.invalid rs), .ok (.invalid rs') => rs = rs'
   | .ok (.rejected a x), .ok (.rejected a' x') => AccRen R a a' ∧ Ty.rel0 R.ctr j x x'
   | .ok (.accepted a), .ok (.accepted a') => AccRen R a a'
@@ -285,13 +285,13 @@ theorem execCommand_ren (ho : Ordered T v) (hmo : R.ctr.Mono) {a a' : Acc v} (ha
       generalize applyEvents T _ evs' = y'
       intro he
       match y, y', he with
-      | .error _, .error _, _ => trivial
+      | .error _, .error _, h => exact h
       | .ok b, .ok b', hb =>
         show RanRen R (match broken _ with | _ :: _ => _ | [] => _) (match broken _ with | _ :: _ => _ | [] => _)
         rw [broken_rel (hens (ctx a.state a.state.records c i, b.state.records, ())
           (ctx a'.state a'.state.records c' i', b'.state.records, ()) ⟨hcx, hb.1.1, trivial⟩)]
         cases broken (x.ensures.fn (ctx a'.state a'.state.records c' i', b'.state.records, ())) with
-        | cons n ns => trivial
+        | cons n ns => rfl
         | nil => exact hb
     | .inr (.inl (j, ())), .inr (.inl (j', ())), ⟨hj, _⟩ => exact ⟨ha1, hj⟩
 
@@ -308,8 +308,8 @@ theorem runCommand_ren (ho : Ordered T v) (hmo : R.ctr.Mono) {a a' : Acc v} (ha 
   generalize execCommand T a' x c' i' = y'
   intro he
   match y, y', he with
-  | .error _, .error _, _ => trivial
-  | .ok (.invalid _), .ok (.invalid _), _ => trivial
+  | .error _, .error _, h => exact h
+  | .ok (.invalid _), .ok (.invalid _), h => subst h; rfl
   | .ok (.accepted b), .ok (.accepted b'), hb =>
     exact applyEvents_ren ho hmo (hf (okNil, ()) (okNil, ()) ⟨okNil_rel, trivial⟩) hb
   | .ok (.rejected b j), .ok (.rejected b' j'), ⟨hb, hj⟩ =>
@@ -344,7 +344,7 @@ theorem runQuery_ren (ho : Ordered T v) (hmo : R.ctr.Mono) {a a' : Acc v} (ha : 
   intro he
   obtain ⟨⟨hrec, hmach, hpend, hnow, hfr, hn⟩, hevs0, hout, hown⟩ := ha
   match y, y', he with
-  | .error _, .error _, _ => trivial
+  | .error _, .error _, h => subst h; rfl
   | .ok o, .ok o', ho' =>
     exact applyEvents_ren ho hmo (hf (o, ()) (o', ()) ⟨ho', trivial⟩)
       ⟨⟨hrec, hmach, hpend, hnow, from_succ hfr, hn⟩, hevs0, hout, hown⟩
@@ -424,13 +424,13 @@ theorem invariants_ren (ho : Ordered T v) {s s' : State v} (hs : StateRen R s s'
   rw [machineInvariants_ren hrec hnow ho.equi.machines hmach]
   exact congrArg (· ++ _) (broken_rel ((ho.equi.self R.ctr).invariants _ _ ⟨hrec, trivial⟩))
 
-/-- Outcomes related by `R`: a fault on both sides, or the same outcome with related values. -/
+/-- Outcomes related by `R`: the same fault on both sides, or the same outcome with related values. -/
 def Outcome.Ren (R : Ren) : Outcome → Outcome → Prop
   | .accepted, .accepted => True
   | .answered w, .answered w' => WireVal.Rel R.ctr w w'
   | .rejected w, .rejected w' => WireVal.Rel R.ctr w w'
   | .invalid rs, .invalid rs' => rs = rs'
-  | .fault _, .fault _ => True
+  | .fault f, .fault f' => f = f'
   | _, _ => False
 
 /-- Results related by `R`, item by item. -/
@@ -448,12 +448,12 @@ theorem finish_ren (ho : Ordered T v) (hmo : R.ctr.Mono) {s0 s0' : State v} (hs0
   generalize a' >>= settle T v.cascadeNat = y'
   intro h
   match y, y', h with
-  | .error _, .error _, _ => exact ⟨hs0, trivial, trivial, trivial⟩
+  | .error _, .error _, h => exact ⟨hs0, h, trivial, trivial⟩
   | .ok b, .ok b', hb =>
     dsimp only
     rw [invariants_ren ho hb.1]
     cases invariants b'.state with
-    | cons n ns => exact ⟨hs0, trivial, trivial, trivial⟩
+    | cons n ns => exact ⟨hs0, rfl, trivial, trivial⟩
     | nil => exact ⟨hb.1, hoo, hb.2.1, hb.2.2.1⟩
 
 section Fire
@@ -634,7 +634,7 @@ theorem answer_ren (ho : Ordered T v) (hmo : R.ctr.Mono) {s s' : State v} (hs : 
   generalize s'.pending.find? _ = b
   intro hf
   cases hf with
-  | none => exact ⟨hs, trivial, trivial, trivial⟩
+  | none => exact ⟨hs, rfl, trivial, trivial⟩
   | @some p p' hp =>
     obtain ⟨pid, psnd, pext, preq⟩ := p
     obtain ⟨pid', psnd', pext', preq'⟩ := p'
@@ -643,7 +643,7 @@ theorem answer_ren (ho : Ordered T v) (hmo : R.ctr.Mono) {s s' : State v} (hs : 
     | @mk name input output rejection value value' holds holds' onAnswer onAnswer' hval hholds hon =>
       dsimp only
       cases Ty.same t (answerTy output rejection) with
-      | none => exact ⟨hs, trivial, trivial, trivial⟩
+      | none => exact ⟨hs, rfl, trivial, trivial⟩
       | some e =>
         obtain ⟨e⟩ := e
         subst e
@@ -685,7 +685,7 @@ theorem step_ren (ho : Ordered T v) (hmo : R.ctr.Mono) {s s' : State v} (hs : St
     generalize execCommand T _ _ _ _ = y'
     intro he
     match y, y', he with
-    | .error _, .error _, _ => exact ⟨hs1, trivial, trivial, trivial⟩
+    | .error _, .error _, h => exact ⟨hs1, h, trivial, trivial⟩
     | .ok (.invalid _), .ok (.invalid _), h => exact ⟨hs1, h, trivial, trivial⟩
     | .ok (.rejected _ _), .ok (.rejected _ _), ⟨_, hj⟩ => exact ⟨hs1, .mk hj, trivial, trivial⟩
     | .ok (.accepted _), .ok (.accepted _), hb => exact finish_ren ho hmo hs1 (a := .ok _) (a' := .ok _) hb trivial
@@ -725,7 +725,7 @@ theorem step_ren (ho : Ordered T v) (hmo : R.ctr.Mono) {s s' : State v} (hs : St
       generalize fire _ _ = q
       intro hf
       cases hf with
-      | none => exact ⟨hs, trivial, trivial, trivial⟩
+      | none => exact ⟨hs, rfl, trivial, trivial⟩
       | some h =>
         exact finish_ren ho hmo hs (start_ren h.2 (AccRen.ofState h.1)) trivial
 
